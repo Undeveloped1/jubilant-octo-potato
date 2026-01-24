@@ -2,20 +2,21 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Zombies - File System 9.1 (Audio + AI Fix)</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Zombies - Build 9.2 (Mobile Controls)</title>
     <style>
-        body { margin: 0; padding: 0; background-color: #000000; overflow: hidden; }
+        body { margin: 0; padding: 0; background-color: #000000; overflow: hidden; touch-action: none; }
         canvas { display: block; margin: 0 auto; }
         #instructions {
             position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
             color: #444; font-family: sans-serif; pointer-events: none; opacity: 0.5;
+            width: 100%; text-align: center; font-size: 12px;
         }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
 </head>
 <body>
-<div id="instructions">WASD: Move | Mouse: Aim/Fire | TAB: Inventory | N: Night Vision | F: Interact | Q: Switch Weapon</div>
+<div id="instructions">PC: WASD Move | Mouse Aim | F Interact | Q Switch | N NVG | TAB Inv<br>MOBILE: Use On-Screen Controls</div>
 <script>
 
 // --- CONSTANTS ---
@@ -32,56 +33,38 @@ const DEFAULT_STATS = {
     }
 };
 
-// --- AUDIO MANAGER (PROCEDURAL SOUNDS) ---
+// --- AUDIO MANAGER ---
 class SoundManager {
     constructor() {
         this.ctx = new (window.AudioContext || window.webkitAudioContext)();
         this.masterGain = this.ctx.createGain();
-        this.masterGain.gain.value = 0.3; // Global volume
+        this.masterGain.gain.value = 0.3; 
         this.masterGain.connect(this.ctx.destination);
     }
-
-    // Call this on first user interaction
     resume() { if (this.ctx.state === 'suspended') this.ctx.resume(); }
-
     playTone(freq, type, duration, vol = 1) {
         const osc = this.ctx.createOscillator();
         const gain = this.ctx.createGain();
-        osc.type = type;
-        osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+        osc.type = type; osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
         gain.gain.setValueAtTime(vol, this.ctx.currentTime);
         gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
-        osc.connect(gain);
-        gain.connect(this.masterGain);
-        osc.start();
-        osc.stop(this.ctx.currentTime + duration);
+        osc.connect(gain); gain.connect(this.masterGain);
+        osc.start(); osc.stop(this.ctx.currentTime + duration);
     }
-
     playNoise(duration, vol = 1) {
         const bufferSize = this.ctx.sampleRate * duration;
         const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
         const data = buffer.getChannelData(0);
         for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
-
         const noise = this.ctx.createBufferSource();
         noise.buffer = buffer;
         const gain = this.ctx.createGain();
         gain.gain.setValueAtTime(vol, this.ctx.currentTime);
         gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
-        noise.connect(gain);
-        gain.connect(this.masterGain);
-        noise.start();
+        noise.connect(gain); gain.connect(this.masterGain); noise.start();
     }
-
-    // SFX PRESETS
-    shootPistol() { 
-        this.playTone(600, 'sawtooth', 0.1, 0.5); 
-        this.playNoise(0.1, 0.3);
-    }
-    shootShotgun() { 
-        this.playTone(200, 'square', 0.3, 0.6); 
-        this.playNoise(0.3, 0.6);
-    }
+    shootPistol() { this.playTone(600, 'sawtooth', 0.1, 0.5); this.playNoise(0.1, 0.3); }
+    shootShotgun() { this.playTone(200, 'square', 0.3, 0.6); this.playNoise(0.3, 0.6); }
     enemyHit() { this.playTone(100, 'sawtooth', 0.1, 0.5); }
     playerHurt() { this.playTone(50, 'sawtooth', 0.3, 0.8); }
     click() { this.playTone(800, 'sine', 0.05, 0.3); }
@@ -89,61 +72,45 @@ class SoundManager {
     toggleNVG() { this.playTone(2000, 'sine', 0.2, 0.1); }
     reload() { this.playTone(400, 'triangle', 0.2, 0.4); }
 }
-
 const sfx = new SoundManager();
 
 // --- 1. MAIN MENU SCENE ---
 class MainMenuScene extends Phaser.Scene {
     constructor() { super('MainMenuScene'); }
     create() {
-        // Ensure audio starts on first click
         this.input.on('pointerdown', () => sfx.resume());
-
         this.add.rectangle(400, 300, 800, 600, 0x111111);
         this.add.grid(400, 300, 800, 600, 64, 64, 0x222222).setAlpha(0.2);
         this.add.text(400, 100, "ZOMBIE EXTRACTION", { fontSize: '64px', fill: '#00ff00', fontStyle: 'bold' }).setOrigin(0.5);
-        this.add.text(400, 160, "BUILD 9.1 (AUDIO UPDATE)", { fontSize: '24px', fill: '#555' }).setOrigin(0.5);
+        this.add.text(400, 160, "BUILD 9.2 (MOBILE CONTROLS)", { fontSize: '24px', fill: '#555' }).setOrigin(0.5);
 
-        // 1. NEW RUN
         this.createButton(400, 250, "NEW RUN", 0x880000, () => {
-            if(confirm("Start a new run? This overwrites current auto-save.")) {
+            if(confirm("Start a new run?")) {
                 localStorage.removeItem(SAVE_KEY);
                 this.scene.start('GameScene', { level: 1, stats: JSON.parse(JSON.stringify(DEFAULT_STATS)) });
             }
         });
 
-        // 2. CONTINUE
         this.createButton(400, 320, "CONTINUE", 0x004488, () => {
             let saved = localStorage.getItem(SAVE_KEY);
             if (saved) {
-                let stats = JSON.parse(saved);
-                this.scene.start('HideoutScene', { stats: stats });
-            } else {
-                alert("No save found!");
-            }
+                this.scene.start('HideoutScene', { stats: JSON.parse(saved) });
+            } else { alert("No save found!"); }
         });
 
-        // 3. EXPORT SAVE
-        this.createButton(400, 420, "EXPORT SAVE TO FILE", 0x444444, () => {
+        this.createButton(400, 420, "EXPORT SAVE", 0x444444, () => {
             let saved = localStorage.getItem(SAVE_KEY);
-            if (!saved) { alert("No save data to export."); return; }
-            
+            if (!saved) return;
             const blob = new Blob([saved], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
-            a.href = url;
-            a.download = `zombie_save_${new Date().toISOString().slice(0,10)}.json`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
+            a.href = url; a.download = `zombie_save.json`;
+            document.body.appendChild(a); a.click(); document.body.removeChild(a);
         });
 
-        // 4. IMPORT SAVE
-        this.createButton(400, 490, "IMPORT SAVE FROM FILE", 0x444444, () => {
+        this.createButton(400, 490, "IMPORT SAVE", 0x444444, () => {
             const input = document.createElement('input');
-            input.type = 'file';
-            input.accept = '.json';
+            input.type = 'file'; input.accept = '.json';
             input.onchange = (e) => {
                 const file = e.target.files[0];
                 if (!file) return;
@@ -151,60 +118,36 @@ class MainMenuScene extends Phaser.Scene {
                 reader.onload = (event) => {
                     try {
                         const json = JSON.parse(event.target.result);
-                        if (json.hp !== undefined && json.hideout !== undefined) {
+                        if (json.hp !== undefined) {
                             localStorage.setItem(SAVE_KEY, JSON.stringify(json));
-                            alert("Save imported successfully!");
-                        } else {
-                            alert("Invalid save file format.");
+                            alert("Imported!");
                         }
-                    } catch (err) {
-                        alert("Error reading file.");
-                    }
+                    } catch (err) {}
                 };
                 reader.readAsText(file);
             };
             input.click();
         });
-
-        // CHEAT CODE
-        const cheatBtn = this.add.text(10, 570, "[ CHEAT CODE ]", { fontSize: '16px', fill: '#444' }).setInteractive();
-        cheatBtn.on('pointerdown', () => {
+        
+        // Cheat
+        this.add.text(10, 570, "[ CHEAT CODE ]", { fontSize: '16px', fill: '#444' }).setInteractive().on('pointerdown', () => {
             sfx.click();
-            const code = prompt("ENTER CHEAT CODE:");
-            if (code === 'god mode') this.activateGodMode();
+            if (prompt("CODE:") === 'god mode') {
+                const god = JSON.parse(JSON.stringify(DEFAULT_STATS));
+                god.hp=20; god.maxHp=20; god.ammo=999; god.scrap=999; god.hasShotgun=true; god.hasFlashlight=true; god.hideout.armory.hasNVG=true;
+                localStorage.setItem(SAVE_KEY, JSON.stringify(god));
+                this.scene.start('HideoutScene', { stats: god });
+            }
         });
     }
-
     createButton(x, y, text, color, callback) {
         let btn = this.add.rectangle(x, y, 350, 50, color).setInteractive();
         this.add.text(x, y, text, { fontSize: '24px', fill: '#fff' }).setOrigin(0.5);
         btn.on('pointerdown', () => { sfx.click(); callback(); });
-        btn.on('pointerover', () => btn.setAlpha(0.8));
-        btn.on('pointerout', () => btn.setAlpha(1));
-    }
-
-    activateGodMode() {
-        const godStats = {
-            hp: 20, maxHp: 20, stamina: 100, maxStamina: 100, ammo: 999, scrap: 999,
-            hasFlashlight: true, hasShotgun: true, currentWeapon: 'shotgun',
-            armor: {
-                head: { name: 'GOD HELM', durability: 100, maxDurability: 100 },
-                body: { name: 'GOD VEST', durability: 100, maxDurability: 100 },
-                arms: { name: 'GOD ARMS', durability: 100, maxDurability: 100 },
-                feet: { name: 'GOD BOOTS', durability: 100, maxDurability: 100 }
-            },
-            hideout: {
-                restAreaLvl: 2, generatorLvl: 1, hasSparkPlug: true,
-                armory: { crafting: null, hasNVG: true }
-            }
-        };
-        localStorage.setItem(SAVE_KEY, JSON.stringify(godStats));
-        alert("GOD MODE ACTIVATED");
-        this.scene.start('HideoutScene', { stats: godStats });
     }
 }
 
-// --- 2. BULLET CLASS ---
+// --- 2. GAME CLASSES ---
 class Bullet extends Phaser.Physics.Arcade.Sprite {
     constructor(scene, x, y) { super(scene, x, y, 'bullet'); }
     fire(x, y, targetX, targetY, spreadAngle = 0, isEnemy = false) {
@@ -212,15 +155,7 @@ class Bullet extends Phaser.Physics.Arcade.Sprite {
         this.setActive(true); this.setVisible(true);
         this.hasHit = false; this.isEnemyBullet = isEnemy; 
         this.setTint(isEnemy ? 0xff0000 : 0xffff00);
-        
-        // AUDIO: Play shot sound based on owner
-        if (!isEnemy) {
-            // Check scene for weapon type, simplified here
-            // We'll let the GameScene handle player shot sound to distinguish shotgun/pistol
-        } else {
-             sfx.shootPistol(); // Bandits use pistols
-        }
-
+        if(!isEnemy) { /* Player sound handled by input */ } else { sfx.shootPistol(); }
         let baseAngle = Phaser.Math.Angle.Between(x, y, targetX, targetY);
         let finalAngle = baseAngle + Phaser.Math.DegToRad(spreadAngle);
         this.scene.physics.velocityFromRotation(finalAngle, 500, this.body.velocity);
@@ -232,45 +167,23 @@ class Bullet extends Phaser.Physics.Arcade.Sprite {
     }
 }
 
-// --- 3. ENEMY CLASSES ---
 class Enemy extends Phaser.Physics.Arcade.Sprite {
     constructor(scene, x, y, target, type) {
-        let texture = type === 'leaper' ? 'leaper' : (type === 'bandit' ? 'bandit' : 'zombie');
-        super(scene, x, y, texture);
+        super(scene, x, y, type === 'leaper' ? 'leaper' : (type === 'bandit' ? 'bandit' : 'zombie'));
         scene.add.existing(this); scene.physics.add.existing(this);
-        this.target = target;
-        this.enemyType = type; 
-        this.canTakeDamage = true;
+        this.target = target; this.enemyType = type; this.canTakeDamage = true; this.lastFired = 0;
         this.healthBar = scene.add.graphics().setDepth(100).setVisible(false);
-        
-        // ** FIX: Initialize lastFired so math works for Bandits **
-        this.lastFired = 0; 
-
-        if (this.enemyType === 'boss') {
-            this.setScale(3); this.setTint(0xff0000);
-            this.hp = 5; this.maxHp = 5; this.speed = 85; this.damage = 10;
-        } else if (this.enemyType === 'leaper') {
-            this.hp = 1; this.maxHp = 1; this.speed = 110; this.damage = 2;
-            this.state = 'CHASE'; this.leapTimer = 0;
-        } else if (this.enemyType === 'bandit') {
-            this.hp = 3; this.maxHp = 3; this.speed = 90; this.damage = 1; 
-            this.ammo = 10; this.state = 'CHASE';
-        } else { 
-            this.hp = 2; this.maxHp = 2; this.speed = 60; this.damage = 2;
-        }
+        if (type === 'boss') { this.setScale(3); this.setTint(0xff0000); this.hp=5; this.maxHp=5; this.speed=85; this.damage=10; }
+        else if (type === 'leaper') { this.hp=1; this.maxHp=1; this.speed=110; this.damage=2; this.state='CHASE'; this.leapTimer=0; }
+        else if (type === 'bandit') { this.hp=3; this.maxHp=3; this.speed=90; this.damage=1; this.ammo=10; this.state='CHASE'; }
+        else { this.hp=2; this.maxHp=2; this.speed=60; this.damage=2; }
     }
     takeDamage(amount) {
         if (!this.active || !this.canTakeDamage) return;
-        this.hp -= amount;
-        sfx.enemyHit(); // AUDIO
-        this.setTint(0xffffff);
+        this.hp -= amount; sfx.enemyHit(); this.setTint(0xffffff);
         this.scene.time.delayedCall(50, () => { if (this.active) this.clearTint(); });
         this.updateHealthBar();
-        if (this.enemyType === 'boss') {
-            this.scene.updateBossBar(this.hp, this.maxHp);
-            this.canTakeDamage = false; 
-            this.scene.time.delayedCall(500, () => { if(this.active) this.canTakeDamage = true; });
-        }
+        if (this.enemyType === 'boss') { this.scene.updateBossBar(this.hp, this.maxHp); this.canTakeDamage = false; this.scene.time.delayedCall(500, ()=>{if(this.active)this.canTakeDamage=true;}); }
         if (this.hp <= 0) {
             if (this.enemyType === 'boss') this.scene.spawnSwitch(this.x, this.y);
             this.scene.spawnLootSkull(this.x, this.y, this.enemyType);
@@ -280,278 +193,180 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
     updateHealthBar() {
         if (this.hp <= 0) { this.healthBar.setVisible(false); return; }
         this.healthBar.setVisible(true); this.healthBar.clear();
-        const w = 40, h = 6, x = -w / 2, y = -40;
-        this.healthBar.fillStyle(0xff0000); this.healthBar.fillRect(x, y, w, h);
-        this.healthBar.fillStyle(0x00ff00); this.healthBar.fillRect(x, y, w * (this.hp / this.maxHp), h);
+        this.healthBar.fillStyle(0xff0000); this.healthBar.fillRect(this.x-20, this.y-40, 40, 6);
+        this.healthBar.fillStyle(0x00ff00); this.healthBar.fillRect(this.x-20, this.y-40, 40 * (this.hp / this.maxHp), 6);
     }
     knockBack() {
-        const speed = (this.enemyType === 'leaper') ? 250 : 100;
-        if(this.enemyType === 'leaper') { this.state = 'COOLDOWN'; this.leapTimer = 2000; }
+        if(this.enemyType==='leaper'){this.state='COOLDOWN'; this.leapTimer=2000;}
         const angle = Phaser.Math.Angle.Between(this.target.x, this.target.y, this.x, this.y);
-        this.scene.physics.velocityFromRotation(angle, speed, this.body.velocity);
+        this.scene.physics.velocityFromRotation(angle, this.enemyType==='leaper'?250:100, this.body.velocity);
     }
     update(time, delta) {
-        if (!this.active || !this.body) return;
-        if (this.healthBar) this.healthBar.setPosition(this.x, this.y);
-
+        if (!this.active) return;
+        if (this.healthBar) this.healthBar.setPosition(0,0); // Handled in draw
+        
         if (this.enemyType === 'bandit') {
             const dist = Phaser.Math.Distance.Between(this.x, this.y, this.target.x, this.target.y);
             if (this.ammo > 0) {
                 if (dist < 350) {
-                    this.setVelocity(0); 
-                    // ** FIX: This check now works because lastFired is initialized **
-                    if (time - this.lastFired > 2000) { 
+                    this.setVelocity(0);
+                    if (time - this.lastFired > 2000) {
                         const b = this.scene.bullets.get(this.x, this.y);
-                        if (b) {
-                            b.fire(this.x, this.y, this.target.x, this.target.y, Phaser.Math.Between(-5, 5), true);
-                            this.ammo--; this.lastFired = time;
-                        }
+                        if(b) { b.fire(this.x, this.y, this.target.x, this.target.y, Phaser.Math.Between(-5,5), true); this.ammo--; this.lastFired=time; }
                     }
                 } else { this.scene.physics.moveToObject(this, this.target, this.speed); }
             } else { this.scene.physics.moveToObject(this, this.target, 120); }
             return;
         }
-
-        if (this.enemyType === 'boss') this.scene.physics.moveToObject(this, this.target, this.speed);
-        else if (this.enemyType === 'walker') {
-            if (Phaser.Math.Distance.Between(this.x, this.y, this.target.x, this.target.y) < 300) 
-                this.scene.physics.moveToObject(this, this.target, this.speed);
-        } else if (this.enemyType === 'leaper') {
+        if (this.enemyType === 'leaper') {
             const dist = Phaser.Math.Distance.Between(this.x, this.y, this.target.x, this.target.y);
-            switch (this.state) {
-                case 'CHASE': this.scene.physics.moveToObject(this, this.target, 110);
-                    if (dist < 180) { this.state = 'PREPARE'; this.setVelocity(0); this.setTint(0xffaa00); this.leapTimer = 500; } break;
-                case 'PREPARE': this.leapTimer -= delta;
-                    if (this.leapTimer <= 0) { this.state = 'LEAP'; this.clearTint(); this.scene.physics.moveToObject(this, this.target, 450); this.leapTimer = 600; } break;
-                case 'LEAP': this.leapTimer -= delta;
-                    if (this.leapTimer <= 0) { this.state = 'COOLDOWN'; this.setVelocity(0); this.leapTimer = 1500; } break;
-                case 'COOLDOWN': this.leapTimer -= delta; if (this.leapTimer <= 0) this.state = 'CHASE'; break;
-            }
+            if(this.state==='CHASE'){ this.scene.physics.moveToObject(this, this.target, 110); if(dist<180){this.state='PREPARE'; this.setVelocity(0); this.setTint(0xffaa00); this.leapTimer=500;} }
+            else if(this.state==='PREPARE'){ this.leapTimer-=delta; if(this.leapTimer<=0){this.state='LEAP'; this.clearTint(); this.scene.physics.moveToObject(this, this.target, 450); this.leapTimer=600;} }
+            else if(this.state==='LEAP'){ this.leapTimer-=delta; if(this.leapTimer<=0){this.state='COOLDOWN'; this.setVelocity(0); this.leapTimer=1500;} }
+            else if(this.state==='COOLDOWN'){ this.leapTimer-=delta; if(this.leapTimer<=0) this.state='CHASE'; }
+            return;
         }
+        this.scene.physics.moveToObject(this, this.target, this.speed);
     }
     destroy(fromScene) { if (this.healthBar) this.healthBar.destroy(); super.destroy(fromScene); }
 }
 
-// --- 4. HIDEOUT SCENE ---
+// --- 3. HIDEOUT SCENE ---
 class HideoutScene extends Phaser.Scene {
     constructor() { super('HideoutScene'); }
     create(data) {
         this.stats = data.stats;
         localStorage.setItem(SAVE_KEY, JSON.stringify(this.stats));
-
         this.add.rectangle(400, 300, 800, 600, 0x1a1a1a);
         this.add.grid(400, 300, 800, 600, 32, 32, 0x222222).setAlpha(0.5);
         this.add.text(40, 40, "THE HIDEOUT", { fontSize: '48px', fill: '#00ff00', fontStyle: 'bold' });
-        
-        this.statText = this.add.text(40, 100, "", { fontSize: '18px', fill: '#cccccc', lineSpacing: 10 });
+        this.statText = this.add.text(40, 100, "", { fontSize: '18px', fill: '#cccccc' });
         this.updateStatText();
+        
+        // Cards
+        this.createUpgradeCard(40, 200, "REST AREA", () => `LVL: ${this.stats.hideout.restAreaLvl}`, () => {
+            if(this.stats.scrap >= (this.stats.hideout.restAreaLvl+1)*5) {
+                this.stats.scrap -= (this.stats.hideout.restAreaLvl+1)*5; this.stats.hideout.restAreaLvl++;
+                if(this.stats.hideout.restAreaLvl>0) this.stats.hp=this.stats.maxHp;
+                if(this.stats.hideout.restAreaLvl>1) this.stats.maxHp+=2;
+                this.updateStatText(); return true;
+            } return false;
+        }, () => `UPGRADE (${(this.stats.hideout.restAreaLvl+1)*5} S)`);
 
-        this.createUpgradeCard(40, 200, "REST AREA", 
-            () => `LVL: ${this.stats.hideout.restAreaLvl}\nEffect: ${this.getRestEffect()}`,
-            () => {
-                const cost = (this.stats.hideout.restAreaLvl + 1) * 5;
-                if (this.stats.scrap >= cost) {
-                    this.stats.scrap -= cost; this.stats.hideout.restAreaLvl++;
-                    if(this.stats.hideout.restAreaLvl > 0) this.stats.hp = this.stats.maxHp; 
-                    if(this.stats.hideout.restAreaLvl > 1) this.stats.maxHp += 2;
-                    this.updateStatText(); localStorage.setItem(SAVE_KEY, JSON.stringify(this.stats)); return true;
-                } return false;
-            }, () => `UPGRADE (${(this.stats.hideout.restAreaLvl + 1) * 5} SCRAP)`
-        );
+        this.createUpgradeCard(270, 200, "GENERATOR", () => this.stats.hideout.generatorLvl===0?"Offline":"Online", () => {
+            if(this.stats.hideout.generatorLvl===0 && this.stats.scrap>=10 && this.stats.hideout.hasSparkPlug) {
+                this.stats.scrap-=10; this.stats.hideout.generatorLvl=1; this.stats.hideout.hasSparkPlug=false; this.stats.hasFlashlight=true;
+                this.updateStatText(); return true;
+            } return false;
+        }, () => this.stats.hideout.generatorLvl===0?"BUILD (10 S + PLUG)":"MAX");
 
-        this.createUpgradeCard(270, 200, "GENERATOR", 
-            () => {
-                if (this.stats.hideout.generatorLvl === 0) return "LVL: 0 (Offline)\nNeed: Spark Plug + Scrap";
-                return "LVL: 1 (Online)\nEffect: Auto-Flashlight";
-            },
-            () => {
-                if (this.stats.hideout.generatorLvl === 0) {
-                    if (this.stats.scrap >= 10 && this.stats.hideout.hasSparkPlug) {
-                        this.stats.scrap -= 10; this.stats.hideout.generatorLvl = 1;
-                        this.stats.hideout.hasSparkPlug = false; this.stats.hasFlashlight = true;
-                        this.updateStatText(); localStorage.setItem(SAVE_KEY, JSON.stringify(this.stats)); return true;
-                    }
-                } return false;
-            }, () => this.stats.hideout.generatorLvl === 0 ? "BUILD (10 SCRAP + PLUG)" : "MAX LEVEL"
-        );
-
-        this.createArmoryCard(500, 200);
-
-        const deployBtn = this.add.rectangle(650, 500, 200, 60, 0x008800).setInteractive();
-        this.add.text(650, 500, "DEPLOY", { fontSize: '24px', fill: '#fff' }).setOrigin(0.5);
-        deployBtn.on('pointerdown', () => {
-            sfx.click();
-            if (this.stats.hideout.restAreaLvl > 0) {
-                const heal = this.stats.hideout.restAreaLvl >= 2 ? this.stats.maxHp : Math.floor(this.stats.maxHp / 2);
-                this.stats.hp = Math.min(this.stats.hp + heal, this.stats.maxHp);
-            }
-            if (this.stats.hideout.generatorLvl > 0) this.stats.hasFlashlight = true;
-            this.cameras.main.fade(500, 0, 0, 0);
-            this.time.delayedCall(500, () => { this.scene.start('GameScene', { level: 1, stats: this.stats }); });
-        });
-
-        const menuBtn = this.add.rectangle(100, 550, 150, 40, 0x444444).setInteractive();
-        this.add.text(100, 550, "MAIN MENU", { fontSize: '16px', fill: '#fff' }).setOrigin(0.5);
-        menuBtn.on('pointerdown', () => { sfx.click(); this.scene.start('MainMenuScene'); });
-    }
-
-    update(time, delta) {
-        if (this.armoryTimerText && this.stats.hideout.armory.crafting) {
-            let remaining = this.stats.hideout.armory.crafting.finishTime - Date.now();
-            if (remaining > 0) {
-                let seconds = Math.floor(remaining / 1000);
-                this.armoryTimerText.setText(`CRAFTING: ${Math.floor(seconds/60)}:${(seconds%60).toString().padStart(2,'0')}`);
-                this.armoryBtnText.setText("WAIT...");
-            } else {
-                this.armoryTimerText.setText("COMPLETE!");
-                this.armoryBtnText.setText("CLAIM NVG");
-                this.armoryBtn.setInteractive();
-            }
-        }
-    }
-
-    createArmoryCard(x, y) {
-        const bg = this.add.rectangle(x + 100, y + 75, 220, 160, 0x333333).setStrokeStyle(2, 0x555555);
-        this.add.text(x + 10, y + 10, "ARMORY", { fontSize: '20px', fill: '#ff00ff' });
-        this.armoryDesc = this.add.text(x + 10, y + 40, "", { fontSize: '14px', fill: '#aaa' });
-        this.armoryTimerText = this.add.text(x + 10, y + 80, "", { fontSize: '14px', fill: '#00ff00' });
-        this.armoryBtn = this.add.rectangle(x + 100, y + 130, 200, 30, 0x555555).setInteractive();
-        this.armoryBtnText = this.add.text(x + 100, y + 130, "", { fontSize: '14px', fill: '#fff' }).setOrigin(0.5);
-        const ammoBtn = this.add.rectangle(x + 100, y + 165, 200, 20, 0x444444).setInteractive();
-        this.add.text(x + 100, y + 165, "AMMO PRESS (1 SCRAP -> 4 AMMO)", { fontSize: '10px', fill: '#fff' }).setOrigin(0.5);
-
+        // Armory Logic
+        const ax = 500, ay = 200;
+        this.add.rectangle(ax+100, ay+75, 220, 160, 0x333333).setStrokeStyle(2, 0x555555);
+        this.add.text(ax+10, ay+10, "ARMORY", {fontSize:'20px', fill:'#ff00ff'});
+        this.armoryDesc = this.add.text(ax+10, ay+40, "", {fontSize:'14px', fill:'#aaa'});
+        this.armoryBtn = this.add.rectangle(ax+100, ay+130, 200, 30, 0x555555).setInteractive();
+        this.armoryBtnText = this.add.text(ax+100, ay+130, "", {fontSize:'14px', fill:'#fff'}).setOrigin(0.5);
         this.updateArmoryUI();
-
+        
         this.armoryBtn.on('pointerdown', () => {
             sfx.click();
-            let armory = this.stats.hideout.armory;
-            if (armory.hasNVG) return;
-            if (armory.crafting && Date.now() >= armory.crafting.finishTime) {
-                armory.hasNVG = true; armory.crafting = null;
-                this.updateArmoryUI(); localStorage.setItem(SAVE_KEY, JSON.stringify(this.stats)); return;
+            if(this.stats.hideout.armory.hasNVG) return;
+            if(this.stats.hideout.armory.crafting && Date.now() >= this.stats.hideout.armory.crafting.finishTime) {
+                this.stats.hideout.armory.hasNVG=true; this.stats.hideout.armory.crafting=null; this.updateArmoryUI();
+            } else if(!this.stats.hideout.armory.crafting && this.stats.scrap >= 3) {
+                this.stats.scrap-=3; this.stats.hideout.armory.crafting={finishTime: Date.now()+90000}; this.updateStatText(); this.updateArmoryUI();
             }
-            if (armory.crafting) return;
-            if (this.stats.scrap >= 3) {
-                this.stats.scrap -= 3;
-                armory.crafting = { item: 'nvg', finishTime: Date.now() + 90000 };
-                this.updateStatText(); this.updateArmoryUI(); localStorage.setItem(SAVE_KEY, JSON.stringify(this.stats));
-            } else { this.cameras.main.shake(100, 0.005); }
         });
 
-        ammoBtn.on('pointerdown', () => {
-            if (this.stats.scrap >= 1) {
-                sfx.reload();
-                this.stats.scrap -= 1; this.stats.ammo += 4;
-                this.updateStatText(); localStorage.setItem(SAVE_KEY, JSON.stringify(this.stats));
-                this.cameras.main.flash(100, 0, 255, 0);
-            }
+        // Deploy
+        this.add.rectangle(650, 500, 200, 60, 0x008800).setInteractive().on('pointerdown', () => {
+            sfx.click();
+            if(this.stats.hideout.restAreaLvl>0) this.stats.hp = Math.min(this.stats.hp + (this.stats.hideout.restAreaLvl>=2?this.stats.maxHp:5), this.stats.maxHp);
+            this.scene.start('GameScene', {level:1, stats:this.stats});
+        });
+        
+        // Menu
+        this.add.rectangle(100, 550, 150, 40, 0x444444).setInteractive().on('pointerdown', () => {
+            sfx.click(); this.scene.start('MainMenuScene');
         });
     }
-
-    updateArmoryUI() {
-        let armory = this.stats.hideout.armory;
-        if (armory.hasNVG) {
-            this.armoryDesc.setText("NVG UNLOCKED\nPress [N] in game.");
-            this.armoryBtnText.setText("EQUIPPED"); this.armoryTimerText.setText("");
-            this.armoryBtn.disableInteractive(); this.armoryBtn.setFillStyle(0x222222);
-        } else if (armory.crafting) {
-            this.armoryDesc.setText("Fabricating NVG..."); this.armoryBtn.disableInteractive();
-        } else {
-            this.armoryDesc.setText("Craft Night Vision\nCost: 3 Scrap\nTime: 1m 30s");
-            this.armoryBtnText.setText("CRAFT (3 SCRAP)"); this.armoryTimerText.setText(""); this.armoryBtn.setInteractive();
+    update() {
+        if(this.stats.hideout.armory.crafting && !this.stats.hideout.armory.hasNVG) {
+            let rem = this.stats.hideout.armory.crafting.finishTime - Date.now();
+            if(rem <= 0) { this.armoryDesc.setText("FINISHED!"); this.armoryBtnText.setText("CLAIM NVG"); }
+            else { this.armoryDesc.setText(`Crafting... ${Math.ceil(rem/1000)}s`); this.armoryBtnText.setText("WAIT"); }
         }
     }
-
-    getRestEffect() {
-        if (this.stats.hideout.restAreaLvl === 0) return "Sleep on floor (No Heal)";
-        if (this.stats.hideout.restAreaLvl === 1) return "Mattress (+50% HP)";
-        return "Med Bay (+100% HP, +Max HP)";
+    updateArmoryUI() {
+        if(this.stats.hideout.armory.hasNVG) { this.armoryDesc.setText("NVG UNLOCKED"); this.armoryBtnText.setText("EQUIPPED"); }
+        else if(!this.stats.hideout.armory.crafting) { this.armoryDesc.setText("Craft NVG (3 Scrap)"); this.armoryBtnText.setText("CRAFT"); }
     }
-
-    updateStatText() {
-        let plugStatus = this.stats.hideout.hasSparkPlug ? "YES" : "NO";
-        this.statText.setText(
-            `HP: ${this.stats.hp}/${this.stats.maxHp}\n` +
-            `AMMO: ${this.stats.ammo}\n` +
-            `SCRAP: ${this.stats.scrap}\n` +
-            `SPARK PLUG: ${plugStatus}`
-        );
-    }
-
+    updateStatText() { this.statText.setText(`HP:${this.stats.hp}/${this.stats.maxHp} AMMO:${this.stats.ammo} SCRAP:${this.stats.scrap}`); }
     createUpgradeCard(x, y, title, descFn, actionFn, costFn) {
-        const bg = this.add.rectangle(x + 100, y + 75, 220, 160, 0x333333).setStrokeStyle(2, 0x555555);
-        this.add.text(x + 10, y + 10, title, { fontSize: '20px', fill: '#ffff00' });
-        const descText = this.add.text(x + 10, y + 40, descFn(), { fontSize: '14px', fill: '#aaa' });
-        const btn = this.add.rectangle(x + 100, y + 130, 200, 30, 0x555555).setInteractive();
-        const btnText = this.add.text(x + 100, y + 130, costFn(), { fontSize: '14px', fill: '#fff' }).setOrigin(0.5);
-        btn.on('pointerdown', () => {
-            if (actionFn()) {
-                sfx.click();
-                descText.setText(descFn()); btnText.setText(costFn()); this.cameras.main.shake(100, 0.005);
-            } else {
-                this.cameras.main.shake(100, 0.005); btn.setTint(0xff0000); this.time.delayedCall(200, () => btn.clearTint());
-            }
-        });
+        this.add.rectangle(x+100, y+75, 220, 160, 0x333333).setStrokeStyle(2, 0x555555);
+        this.add.text(x+10, y+10, title, {fontSize:'20px', fill:'#ffff00'});
+        let d = this.add.text(x+10, y+40, descFn(), {fontSize:'14px', fill:'#aaa'});
+        let b = this.add.rectangle(x+100, y+130, 200, 30, 0x555555).setInteractive();
+        let bt = this.add.text(x+100, y+130, costFn(), {fontSize:'14px', fill:'#fff'}).setOrigin(0.5);
+        b.on('pointerdown', () => { if(actionFn()) { sfx.click(); d.setText(descFn()); bt.setText(costFn()); } });
     }
 }
 
-// --- 5. GAME SCENE ---
+// --- 4. GAME SCENE (WITH MOBILE CONTROLS) ---
 class GameScene extends Phaser.Scene {
     constructor() { super('GameScene'); }
     preload() {
-        const graphics = this.make.graphics({ x: 0, y: 0, add: false });
-        // Textures
-        graphics.fillStyle(0x00ff00, 1); graphics.fillRect(0,0,32,32); graphics.generateTexture('player', 32,32);
-        graphics.fillStyle(0x8B4513, 1); graphics.fillRect(0,0,32,32); graphics.generateTexture('crate', 32,32);
-        graphics.fillStyle(0x663399, 1); graphics.fillRect(0,0,32,32); graphics.generateTexture('zombie', 32,32);
-        graphics.fillStyle(0xFF4500, 1); graphics.fillRect(0,0,32,32); graphics.generateTexture('leaper', 32,32);
-        graphics.fillStyle(0x0000FF, 1); graphics.fillRect(0,0,32,32); graphics.generateTexture('bandit', 32,32); 
-        graphics.fillStyle(0xffff00, 1); graphics.fillRect(0,0,8,8); graphics.generateTexture('bullet', 8,8);
-        graphics.fillStyle(0xFFD700, 1); graphics.fillRect(0,0,40,60); graphics.generateTexture('door', 40,60);
-        graphics.fillStyle(0x555555, 1); graphics.fillRect(0,0,32,32); graphics.generateTexture('wall', 32,32);
-        graphics.fillStyle(0xffffff, 1); graphics.fillRect(0,0,40,40); graphics.generateTexture('slash', 40,40);
-        graphics.fillStyle(0x2d5a27, 1); graphics.fillRect(0,0,32,32); graphics.generateTexture('floor_grass', 32,32);
-        graphics.fillStyle(0x444444, 1); graphics.fillRect(0,0,32,32); graphics.generateTexture('floor_apt', 32,32);
-        graphics.fillStyle(0x1a1a2e, 1); graphics.fillRect(0,0,32,32); graphics.generateTexture('floor_roof', 32,32);
-        graphics.fillStyle(0xff0000, 1); graphics.fillRect(0,0,20,20); graphics.generateTexture('pickup_hp', 20,20);
-        graphics.fillStyle(0x0088ff, 1); graphics.fillRect(0,0,20,20); graphics.generateTexture('pickup_stamina', 20,20);
-        graphics.fillStyle(0x333333, 1); graphics.fillRect(0,0,60,60); graphics.generateTexture('debris', 60,60); 
-        graphics.fillStyle(0x00ff00, 1); graphics.fillRect(0,0,30,30); graphics.generateTexture('switch', 30,30);
+        const g = this.make.graphics({x:0, y:0, add:false});
+        const gen = (c, w, h, k) => { g.clear(); g.fillStyle(c,1); g.fillRect(0,0,w,h); g.generateTexture(k,w,h); };
+        gen(0x00ff00,32,32,'player'); gen(0x8B4513,32,32,'crate'); gen(0x663399,32,32,'zombie');
+        gen(0xFF4500,32,32,'leaper'); gen(0x0000FF,32,32,'bandit'); gen(0xffff00,8,8,'bullet');
+        gen(0xFFD700,40,60,'door'); gen(0x555555,32,32,'wall'); gen(0x333333,60,60,'debris'); gen(0x00ff00,30,30,'switch');
         
-        // --- SKULL ART GENERATION ---
-        graphics.clear();
-        graphics.lineStyle(2, 0x000000, 1); // Outline
-        graphics.fillStyle(0xEAEAEA, 1); // Bone Color
-        graphics.fillCircle(16, 14, 11); graphics.strokeCircle(16, 14, 11); // Cranium
-        graphics.fillRect(10, 20, 12, 8); graphics.strokeRect(10, 20, 12, 8); // Jaw
-        graphics.fillStyle(0x000000, 1); graphics.fillCircle(12, 14, 3.5); graphics.fillCircle(20, 14, 3.5); // Eyes
-        graphics.beginPath(); graphics.moveTo(16, 18); graphics.lineTo(14, 21); graphics.lineTo(18, 21); graphics.closePath(); graphics.fill(); // Nose
-        graphics.lineStyle(1, 0x000000); graphics.beginPath(); graphics.moveTo(13, 20); graphics.lineTo(13, 28); graphics.moveTo(16, 20); graphics.lineTo(16, 28); graphics.moveTo(19, 20); graphics.lineTo(19, 28); graphics.strokePath(); // Teeth
-        graphics.generateTexture('skull', 32, 32);
+        g.clear(); g.fillStyle(0xEAEAEA, 1); g.fillCircle(16,14,11); g.fillRect(10,20,12,8); g.fillStyle(0,1); g.fillCircle(12,14,3.5); g.fillCircle(20,14,3.5); g.generateTexture('skull',32,32);
+        
+        this.input.addPointer(2); // Enable Multi-Touch
     }
-    create(data = {}) {
+    create(data) {
         this.currentLevel = data.level || 1;
-        this.playerStats = data.stats ? JSON.parse(JSON.stringify(data.stats)) : JSON.parse(JSON.stringify(DEFAULT_STATS));
+        this.playerStats = data.stats || JSON.parse(JSON.stringify(DEFAULT_STATS));
         this.checkpointStats = JSON.parse(JSON.stringify(this.playerStats));
+        this.hasKey = false; this.hasMolotov = false; this.isPaused = false; this.isInventoryOpen = false; this.nvgOn = false;
+        this.extractionTimer = 15; this.extractionActive = false; this.mobileInput = { x: 0, y: 0 };
 
-        this.hasKey = false; this.hasMolotov = false; this.isOpening = false; this.isPaused = false;
-        this.isPinned = false; this.isMeleeAttacking = false; this.debrisBurning = false;
-        this.lastFired = 0; this.switchDropped = false; this.extractionTimer = 15; this.extractionActive = false;
-        this.isInventoryOpen = false; this.nvgOn = false;
-
+        // Groups
         this.bullets = this.physics.add.group({ classType: Bullet, runChildUpdate: true });
-        this.enemies = this.add.group(); 
+        this.enemies = this.add.group();
         this.pickups = this.physics.add.staticGroup();
         this.crates = this.physics.add.staticGroup();
-        this.skulls = this.physics.add.staticGroup(); 
         this.walls = this.physics.add.staticGroup();
         this.debris = this.physics.add.staticGroup();
+        this.skulls = this.physics.add.staticGroup();
         this.switches = this.physics.add.staticGroup();
 
-        this.setupMapForLevel(this.currentLevel);
-        this.player = this.physics.add.sprite(400, 550, 'player').setCollideWorldBounds(true).setDepth(10);
-        this.spawnLevelEntities(this.currentLevel);
+        // Level Setup
+        this.add.tileSprite(400, 300, 800, 600, this.currentLevel===1?'floor_grass':(this.currentLevel===2?'floor_apt':'floor_roof')); // Placeholder texture handling
+        if(this.currentLevel===1) {
+            this.door = this.physics.add.staticSprite(400, 50, 'door');
+            this.walls.create(200, 200, 'wall').setScale(1, 4).refreshBody();
+            this.walls.create(600, 200, 'wall').setScale(1, 4).refreshBody();
+            this.spawnEnemy('walker', 100, 300); this.spawnEnemy('bandit', 700, 300); this.spawnEnemy('leaper', 200, 200);
+            this.spawnCrates(['key','flashlight','shotgun','ammo','scrap']);
+        } else if(this.currentLevel===2) {
+            this.door = this.physics.add.staticSprite(400, 50, 'door').setTint(0x0000ff);
+            this.debrisBlock = this.debris.create(400, 100, 'debris');
+            this.walls.create(250, 300, 'wall').setScale(1, 15).refreshBody();
+            this.walls.create(550, 300, 'wall').setScale(1, 15).refreshBody();
+            this.spawnEnemy('bandit', 100, 100); this.spawnEnemy('bandit', 700, 100); this.spawnEnemy('leaper', 400, 450);
+            this.spawnCrates(['molotov','ammo','meds','scrap','plug']);
+        } else {
+            this.spawnEnemy('boss', 400, 100); this.spawnEnemy('bandit', 100, 500); this.spawnEnemy('bandit', 700, 500);
+            this.spawnCrates(['ammo','meds','scrap']);
+        }
 
+        this.player = this.physics.add.sprite(400, 550, 'player').setCollideWorldBounds(true).setDepth(10);
+        
+        // Collisions
         this.physics.add.collider(this.player, this.walls);
         this.physics.add.collider(this.player, this.crates);
         this.physics.add.collider(this.player, this.debris);
@@ -559,402 +374,196 @@ class GameScene extends Phaser.Scene {
         this.physics.add.collider(this.enemies, this.crates);
         this.physics.add.collider(this.bullets, this.walls, (b) => b.destroy());
         this.physics.add.collider(this.bullets, this.crates, (b) => b.destroy());
-        this.physics.add.collider(this.bullets, this.debris, (b) => b.destroy());
-
-        this.physics.add.overlap(this.bullets, this.enemies, (obj1, obj2) => {
-            const bullet = (obj1.texture.key === 'bullet') ? obj1 : obj2;
-            const enemy = (obj1.texture.key === 'bullet') ? obj2 : obj1;
-            if (bullet.active && enemy.active && !bullet.hasHit) {
-                if (bullet.isEnemyBullet) return; 
-                bullet.hasHit = true; bullet.disableBody(true, true); bullet.destroy(); 
-                if (typeof enemy.takeDamage === 'function') enemy.takeDamage(1);
-            }
+        this.physics.add.overlap(this.bullets, this.enemies, (b, e) => {
+            if(b.active && e.active && !b.isEnemyBullet) { b.destroy(); e.takeDamage(1); }
+        });
+        this.physics.add.overlap(this.bullets, this.player, (p, b) => {
+            if(b.active && b.isEnemyBullet) { b.destroy(); this.hitPlayer(1); }
+        });
+        this.physics.add.overlap(this.player, this.enemies, (p, e) => {
+            if(!e.active) return;
+            if(e.enemyType==='leaper' && e.state==='LEAP') this.triggerKnockdown(e);
+            else if(e.enemyType!=='bandit') this.hitPlayer(e.damage);
         });
         
-        this.physics.add.overlap(this.bullets, this.player, (player, bullet) => {
-            if (bullet.active && !bullet.hasHit) {
-                if (!bullet.isEnemyBullet) return; 
-                bullet.hasHit = true; bullet.disableBody(true, true); bullet.destroy();
-                this.hitPlayer(1);
-            }
-        });
-
-        this.physics.add.overlap(this.player, this.enemies, (p, e) => {
-            if (!e.active) return;
-            if (e.enemyType === 'leaper' && e.state === 'LEAP') this.triggerKnockdown(e);
-            else if (e.enemyType === 'bandit' && e.ammo > 0) return; 
-            else this.hitPlayer(e.damage);
-        });
-
-        this.physics.add.overlap(this.player, this.pickups, (p, item) => { this.applyLoot(item.getData('type')); item.destroy(); });
-
+        // Input
         this.cursors = this.input.keyboard.createCursorKeys();
-        this.wasd = this.input.keyboard.addKeys({ up:87, down:83, left:65, right:68, shift:16 });
-        this.keys = this.input.keyboard.addKeys({ interact:70, space:32, esc:27, melee:69, switch:81, inv: 73, tab: 9, nvg: 78 }); 
-        this.input.on('pointerdown', (p) => this.fireBullet(p));
-
-        this.uiGraphics = this.add.graphics().setDepth(100);
-        this.uiText = this.add.text(10, 65, '', { font: '16px Arial', fill: '#fff' }).setDepth(100);
-        this.levelText = this.add.text(400, 300, `LEVEL ${this.currentLevel}`, { fontSize: '64px', fill: '#fff' }).setOrigin(0.5).setDepth(200);
-        this.tweens.add({ targets: this.levelText, alpha: 0, duration: 2000, delay: 1000 });
-        this.bossBar = this.add.graphics().setDepth(150).setVisible(false);
-        this.bossText = this.add.text(400, 25, "BOSS", { fontSize: '20px', fill: '#fff' }).setOrigin(0.5).setDepth(200).setVisible(false);
-
-        this.createInventoryUI();
-        this.pauseText = this.add.text(400, 300, 'PAUSED', { fontSize: '48px', fill: '#fff' }).setOrigin(0.5).setDepth(200).setVisible(false);
-
-        // LIGHTING & NVG LAYERS
+        this.keys = this.input.keyboard.addKeys({ interact:70, space:32, esc:27, switch:81, inv: 73, tab: 9, nvg: 78 });
+        
+        // Lighting
         this.lightShape = this.make.graphics({ x: 0, y: 0, add: false });
-        const mask = this.lightShape.createGeometryMask(); mask.setInvertAlpha(true);
         this.darkness = this.add.rectangle(400, 300, 800, 600, 0x000000, 0.95).setDepth(90);
-        this.darkness.setMask(mask);
+        this.darkness.setMask(this.lightShape.createGeometryMask().setInvertAlpha(true));
         this.nvgLayer = this.add.rectangle(400, 300, 800, 600, 0x00ff00, 0.2).setDepth(95).setVisible(false);
+        
+        // UI
+        this.createMobileControls();
+        this.createInventoryUI();
+        this.uiText = this.add.text(10, 10, '', { font: '16px Arial', fill: '#fff' }).setDepth(100);
+        this.levelText = this.add.text(400, 300, `LEVEL ${this.currentLevel}`, {fontSize:'64px', fill:'#fff'}).setOrigin(0.5).setDepth(100).setAlpha(0);
+        this.tweens.add({targets:this.levelText, alpha:1, yoyo:true, duration:2000});
+        this.bossBar = this.add.graphics().setDepth(100);
     }
-    
-    spawnLootSkull(x, y, enemyType) {
-        let lootList = [];
-        if (enemyType === 'bandit') {
-            lootList = ['ammo', 'ammo', 'scrap', 'meds', 'helmet', 'vest'];
-        } else {
-            lootList = ['ammo', 'scrap', 'meds', 'ammo'];
-        }
-        const item = Phaser.Utils.Array.GetRandom(lootList);
-        let s = this.skulls.create(x, y, 'skull').setScale(0.8);
-        s.setData('lootID', item);
-        this.showFloatingText(x, y, "LOOT", 0xaaaaaa);
+
+    createMobileControls() {
+        const w = 800, h = 600;
+        // Joystick (Left)
+        this.joyBase = this.add.circle(100, 500, 60, 0x333333).setAlpha(0.5).setDepth(200).setInteractive();
+        this.joyStick = this.add.circle(100, 500, 30, 0x888888).setAlpha(0.8).setDepth(200);
+        this.input.setDraggable(this.joyBase);
+        this.input.on('drag', (pointer, obj, dragX, dragY) => {
+            if(obj !== this.joyBase) return;
+            const dist = Phaser.Math.Distance.Between(100, 500, dragX, dragY);
+            const angle = Phaser.Math.Angle.Between(100, 500, dragX, dragY);
+            const clampDist = Math.min(dist, 60);
+            this.joyStick.x = 100 + Math.cos(angle) * clampDist;
+            this.joyStick.y = 500 + Math.sin(angle) * clampDist;
+            this.mobileInput.x = (this.joyStick.x - 100) / 60;
+            this.mobileInput.y = (this.joyStick.y - 500) / 60;
+        });
+        this.input.on('dragend', (pointer, obj) => {
+            if(obj === this.joyBase) { this.joyStick.setPosition(100, 500); this.mobileInput = {x:0, y:0}; }
+        });
+
+        // Buttons (Right)
+        const makeBtn = (x, y, txt, col, fn) => {
+            let b = this.add.circle(x, y, 30, col).setAlpha(0.6).setDepth(200).setInteractive();
+            this.add.text(x, y, txt, {fontSize:'16px'}).setOrigin(0.5).setDepth(201);
+            b.on('pointerdown', () => { sfx.click(); fn(); });
+        };
+        
+        makeBtn(720, 520, "FIRE", 0xff0000, () => this.fireBullet(this.input.activePointer)); // Fire Center
+        makeBtn(650, 520, "INT", 0x0000ff, () => this.tryInteract()); // Interact Left
+        makeBtn(790, 450, "SW", 0xaaaaaa, () => this.switchWeapon()); // Switch Top Right
+        makeBtn(720, 450, "NVG", 0x00ff00, () => this.toggleNVG()); // NVG Top
+        makeBtn(750, 30, "INV", 0x555555, () => this.toggleInventory()); // Inv Top Right Corner
     }
 
     createInventoryUI() {
         this.invContainer = this.add.container(400, 300).setDepth(300).setVisible(false);
-        const bg = this.add.rectangle(0, 0, 600, 400, 0x111111, 0.9).setStrokeStyle(4, 0x444444);
-        const title = this.add.text(0, -180, "INVENTORY", { fontSize: '32px', fill: '#fff' }).setOrigin(0.5);
-        this.invText = this.add.text(-280, -140, "", { fontSize: '18px', fill: '#ccc', lineSpacing: 10 });
-        this.armorSlots = {};
-        const slots = [{ id: 'head', x: 150, y: -100, label: 'HEAD' }, { id: 'body', x: 150, y: 0, label: 'BODY' }, { id: 'arms', x: 50, y: 0, label: 'ARMS' }, { id: 'feet', x: 150, y: 100, label: 'FEET' }];
-        slots.forEach(s => {
-            let slotBg = this.add.rectangle(s.x, s.y, 80, 80, 0x333333).setStrokeStyle(1, 0x666666);
-            let lbl = this.add.text(s.x, s.y - 30, s.label, { fontSize: '12px', fill: '#888' }).setOrigin(0.5);
-            let itemTxt = this.add.text(s.x, s.y, "EMPTY", { fontSize: '12px', fill: '#555' }).setOrigin(0.5);
-            this.invContainer.add([slotBg, lbl, itemTxt]);
-            this.armorSlots[s.id] = itemTxt;
-        });
-        this.invContainer.add([bg, title, this.invText]);
-    }
-    updateInventoryUI() {
-        this.invText.setText(`HP: ${this.playerStats.hp}/${this.playerStats.maxHp}\nAMMO: ${this.playerStats.ammo}\nSCRAP: ${this.playerStats.scrap}\n\nWEAPON: ${this.playerStats.currentWeapon.toUpperCase()}\nFLASHLIGHT: ${this.playerStats.hasFlashlight ? "YES" : "NO"}\nNVG: ${this.playerStats.hideout.armory.hasNVG ? "EQUIPPED" : "NO"}\n`);
-        for (const [slot, item] of Object.entries(this.playerStats.armor)) {
-            let txtObj = this.armorSlots[slot];
-            if (item) { txtObj.setText(`${item.name}\n${item.durability}/${item.maxDurability}`); txtObj.setColor('#00ff00');
-            } else { txtObj.setText("EMPTY"); txtObj.setColor('#555'); }
-        }
+        this.invContainer.add(this.add.rectangle(0,0,600,400,0x111111,0.9).setStrokeStyle(4,0x444444));
+        this.invText = this.add.text(-280,-180,"INVENTORY", {fontSize:'24px'});
+        this.invContainer.add(this.invText);
     }
     toggleInventory() {
         this.isInventoryOpen = !this.isInventoryOpen;
-        if (this.isInventoryOpen) { sfx.click(); this.updateInventoryUI(); this.invContainer.setVisible(true); this.physics.pause(); this.isPaused = true;
-        } else { sfx.click(); this.invContainer.setVisible(false); this.physics.resume(); this.isPaused = false; }
+        this.invContainer.setVisible(this.isInventoryOpen);
+        if(this.isInventoryOpen) {
+            this.physics.pause();
+            let txt = `HP: ${this.playerStats.hp}\nAMMO: ${this.playerStats.ammo}\nSCRAP: ${this.playerStats.scrap}\nWEAPON: ${this.playerStats.currentWeapon}`;
+            this.invText.setText(txt);
+        } else { this.physics.resume(); }
     }
-    togglePause() {
-        this.isPaused = !this.isPaused;
-        if (this.isPaused) { sfx.click(); this.physics.pause(); this.pauseText.setVisible(true); }
-        else { sfx.click(); this.physics.resume(); this.pauseText.setVisible(false); }
-    }
-    setupMapForLevel(level) {
-        if (level === 1) {
-            this.add.tileSprite(400, 300, 800, 600, 'floor_grass');
-            this.door = this.physics.add.staticSprite(400, 50, 'door'); 
-            this.walls.create(200, 200, 'wall').setScale(1, 4).refreshBody();
-            this.walls.create(600, 200, 'wall').setScale(1, 4).refreshBody();
-        } else if (level === 2) {
-            this.add.tileSprite(400, 300, 800, 600, 'floor_apt');
-            this.door = this.physics.add.staticSprite(400, 50, 'door').setTint(0x0000ff); 
-            this.debrisBlock = this.debris.create(400, 100, 'debris');
-            this.walls.create(250, 300, 'wall').setScale(1, 15).refreshBody();
-            this.walls.create(550, 300, 'wall').setScale(1, 15).refreshBody();
-        } else if (level === 3) {
-            this.add.tileSprite(400, 300, 800, 600, 'floor_roof');
-            this.door = this.physics.add.staticSprite(-100, -100, 'door'); 
+
+    update(time, delta) {
+        if(this.isPaused || this.isInventoryOpen) return;
+        
+        // Input Handling (Keyboard + Mobile)
+        let vx = 0, vy = 0;
+        if(this.cursors.left.isDown || this.mobileInput.x < -0.2) vx = -1;
+        if(this.cursors.right.isDown || this.mobileInput.x > 0.2) vx = 1;
+        if(this.cursors.up.isDown || this.mobileInput.y < -0.2) vy = -1;
+        if(this.cursors.down.isDown || this.mobileInput.y > 0.2) vy = 1;
+        
+        let speed = (this.cursors.shift.isDown || (Math.abs(this.mobileInput.x)>0.8 || Math.abs(this.mobileInput.y)>0.8)) ? 280 : 160;
+        if(vx!==0 || vy!==0) {
+            const mag = Math.sqrt(vx*vx + vy*vy);
+            this.player.setVelocity((vx/mag)*speed, (vy/mag)*speed);
+        } else { this.player.setVelocity(0); }
+        
+        // Keyboard Triggers
+        if(Phaser.Input.Keyboard.JustDown(this.keys.interact)) this.tryInteract();
+        if(Phaser.Input.Keyboard.JustDown(this.keys.switch)) this.switchWeapon();
+        if(Phaser.Input.Keyboard.JustDown(this.keys.nvg)) this.toggleNVG();
+        if(Phaser.Input.Keyboard.JustDown(this.keys.tab)) this.toggleInventory();
+        if(this.input.activePointer.isDown && !this.isMobileTouch(this.input.activePointer)) this.fireBullet(this.input.activePointer);
+
+        // Entities
+        this.enemies.getChildren().forEach(e => e.update(time, delta));
+        
+        // UI
+        this.uiText.setText(`HP: ${this.playerStats.hp} | AMMO: ${this.playerStats.ammo} | ${this.playerStats.currentWeapon}`);
+        
+        // Light
+        this.lightShape.clear(); this.lightShape.fillCircle(this.player.x, this.player.y, 60);
+        if(this.playerStats.hasFlashlight) {
+            const a = Phaser.Math.Angle.Between(this.player.x, this.player.y, this.input.activePointer.x, this.input.activePointer.y);
+            this.lightShape.fillStyle(0xffffff); this.lightShape.slice(this.player.x, this.player.y, 300, a-0.5, a+0.5); this.lightShape.fill();
         }
     }
-    spawnLevelEntities(level) {
-        let loot = [], cratePos = [];
-        if (level === 1) {
-            loot = ['key', 'flashlight', 'shotgun', 'ammo', 'ammo', 'helmet', 'vest', 'scrap'];
-            cratePos = [{x:100,y:100}, {x:700,y:500}, {x:50,y:300}, {x:750,y:300}, {x:400,y:400}, {x:200,y:50}, {x:600,y:50}, {x:400,y:500}];
-            this.spawnEnemy('walker', 100, 300); this.spawnEnemy('bandit', 700, 300); this.spawnEnemy('leaper', 200, 200); 
-        } else if (level === 2) {
-            loot = ['molotov', 'shotgun', 'ammo', 'ammo', 'scrap', 'helmet', 'vest', 'plug']; 
-            cratePos = [{x:100,y:100}, {x:100,y:500}, {x:700,y:100}, {x:700,y:500}, {x:400,y:300}, {x:50,y:250}, {x:750,y:250}, {x:200,y:550}, {x:400,y:550}, {x:600,y:400}];
-            this.spawnEnemy('bandit', 100, 100); this.spawnEnemy('bandit', 700, 100); this.spawnEnemy('leaper', 400, 450); this.spawnEnemy('leaper', 400, 150);
-        } else if (level === 3) {
-            loot = ['ammo', 'ammo', 'meds', 'meds', 'scrap', 'plug'];
-            cratePos = [{x:100,y:100}, {x:700,y:100}, {x:100,y:500}, {x:700,y:500}, {x:400,y:300}, {x:50,y:300}, {x:750,y:300}];
-            this.spawnEnemy('boss', 400, 100); this.bossBar.setVisible(true); this.bossText.setVisible(true); this.updateBossBar(5, 5); 
-            this.spawnEnemy('bandit', 100, 500); this.spawnEnemy('bandit', 700, 500);
-        }
-        Phaser.Utils.Array.Shuffle(loot);
-        cratePos.forEach((p, i) => { if(i < loot.length) this.crates.create(p.x, p.y, 'crate').setData('lootID', loot[i]); });
+    
+    isMobileTouch(pointer) { return pointer.y > 400; } // Prevent firing when using joystick/buttons
+
+    spawnCrates(loot) {
+        loot.forEach(l => {
+            let x=Phaser.Math.Between(50,750), y=Phaser.Math.Between(50,550);
+            this.crates.create(x, y, 'crate').setData('lootID', l);
+        });
     }
     spawnEnemy(type, x, y) { this.enemies.add(new Enemy(this, x, y, this.player, type)); }
-    spawnSwitch(x, y) {
-        let s = this.switches.create(x, y, 'switch');
-        this.showFloatingText(x, y, "BOSS DEAD! HIT THE SWITCH!", 0x00ff00);
-        this.switchDropped = true; this.bossBar.setVisible(false); this.bossText.setVisible(false);
-    }
-    activateExtraction() {
-        if (this.extractionActive) return;
-        this.extractionActive = true;
-        this.tweens.add({ targets: this.darkness, alpha: 0.2, duration: 500, yoyo: true, repeat: -1 });
-        this.showFloatingText(400, 300, "BEACON ONLINE! SURVIVE 15s!", 0xff0000);
-        this.spawnEnemy('bandit', 100, 100); this.spawnEnemy('bandit', 700, 100); this.spawnEnemy('leaper', 400, 500); this.spawnEnemy('leaper', 100, 500);
-        this.extractionTimerEvent = this.time.addEvent({ delay: 1000, callback: () => { this.extractionTimer--; if (this.extractionTimer <= 0) this.winGame(); }, repeat: 14 });
-    }
-    update(time, delta) {
-        if (Phaser.Input.Keyboard.JustDown(this.keys.tab) || Phaser.Input.Keyboard.JustDown(this.keys.inv)) this.toggleInventory();
-        // PAUSE LOGIC FIXED
-        if (Phaser.Input.Keyboard.JustDown(this.keys.esc)) {
-            if (this.isInventoryOpen) this.toggleInventory();
-            else this.togglePause();
-        }
-
-        if (Phaser.Input.Keyboard.JustDown(this.keys.nvg)) {
-            if (this.playerStats.hideout.armory.hasNVG) {
-                sfx.toggleNVG();
-                this.nvgOn = !this.nvgOn;
-                if (this.nvgOn) { 
-                    this.darkness.setVisible(false); 
-                    this.nvgLayer.setVisible(true); 
-                    this.cameras.main.setBackgroundColor(0x002200);
-                } else { 
-                    this.darkness.setVisible(true); 
-                    this.nvgLayer.setVisible(false); 
-                    this.cameras.main.setBackgroundColor(0x000000);
-                }
-            } else { this.showFloatingText(this.player.x, this.player.y - 40, "NO NVG EQUIPPED", 0xffffff); }
-        }
-        if (this.isPaused) return;
-        this.drawUI();
-        this.enemies.getChildren().forEach(e => e.update(time, delta));
-        this.lightShape.clear(); this.lightShape.fillCircle(this.player.x, this.player.y, 60); 
-        if (this.playerStats.hasFlashlight) {
-            const angle = Phaser.Math.Angle.Between(this.player.x, this.player.y, this.input.activePointer.x, this.input.activePointer.y);
-            this.lightShape.fillStyle(0xffffff); this.lightShape.slice(this.player.x, this.player.y, 300, angle - 0.5, angle + 0.5); this.lightShape.fill();
-        }
-        if (this.isPinned) {
-            if (this.pinnedBy && this.pinnedBy.active) this.pinnedBy.setPosition(this.player.x, this.player.y);
-            if (Phaser.Input.Keyboard.JustDown(this.keys.space)) this.recoverFromKnockdown();
-            return;
-        }
-        if (!this.isOpening && !this.debrisBurning) {
-            this.player.setVelocity(0); let speed = 160;
-            if ((this.cursors.shift.isDown || this.wasd.shift.isDown) && this.playerStats.stamina > 0) { speed = 280; this.playerStats.stamina -= 0.5; } 
-            else if (this.playerStats.stamina < this.playerStats.maxStamina) { this.playerStats.stamina += 0.2; }
-            let vx = 0, vy = 0;
-            if (this.cursors.left.isDown || this.wasd.left.isDown) vx = -1; else if (this.cursors.right.isDown || this.wasd.right.isDown) vx = 1;
-            if (this.cursors.up.isDown || this.wasd.up.isDown) vy = -1; else if (this.cursors.down.isDown || this.wasd.down.isDown) vy = 1;
-            if (vx !== 0 || vy !== 0) { const len = Math.sqrt(vx*vx+vy*vy); this.player.setVelocity((vx/len)*speed, (vy/len)*speed); }
-            if (Phaser.Input.Keyboard.JustDown(this.keys.melee)) this.meleeAttack();
-            if (Phaser.Input.Keyboard.JustDown(this.keys.switch)) this.switchWeapon();
-            if (Phaser.Input.Keyboard.JustDown(this.keys.interact)) { 
-                if (this.currentLevel === 2 && this.checkDebris()) return;
-                if (this.currentLevel === 3 && this.checkSwitch()) return;
-                if (this.checkDoor()) return; this.tryInteract(); 
-            }
-        } else {
-            this.player.setVelocity(0); 
-            if(this.openTimerEvent) { 
-                const p = this.openTimerEvent.getProgress(); 
-                this.uiGraphics.fillStyle(this.debrisBurning ? 0xff4500 : 0xffff00, 1); 
-                this.uiGraphics.fillRect(this.player.x - 20, this.player.y - 30, 40 * p, 6); 
-            }
-        }
-    }
-    switchWeapon() {
-        if (!this.playerStats.hasShotgun) return;
-        this.playerStats.currentWeapon = (this.playerStats.currentWeapon === 'pistol') ? 'shotgun' : 'pistol';
-        this.showFloatingText(this.player.x, this.player.y - 40, this.playerStats.currentWeapon.toUpperCase(), 0xffffff);
-        sfx.reload();
-    }
-    meleeAttack() {
-        if (this.isMeleeAttacking) return;
-        this.isMeleeAttacking = true;
-        const slash = this.add.sprite(this.player.x, this.player.y, 'slash').setTint(0xffffff).setDepth(20);
-        const angle = Phaser.Math.Angle.Between(this.player.x, this.player.y, this.input.activePointer.x, this.input.activePointer.y);
-        slash.setRotation(angle);
-        const vec = this.physics.velocityFromRotation(angle, 40);
-        slash.setPosition(this.player.x + vec.x, this.player.y + vec.y);
-        this.tweens.add({ targets: slash, alpha: 0, duration: 200, onComplete: () => slash.destroy() });
-        this.enemies.getChildren().forEach(e => {
-            if (e.active && Phaser.Math.Distance.Between(slash.x, slash.y, e.x, e.y) < 60) {
-                if (e.enemyType === 'boss') {
-                    if (!e.invulnerable) { e.takeDamage(2); e.invulnerable = true; this.time.delayedCall(200, ()=>{ if(e.active) e.invulnerable=false; }); }
-                } else if (e.takeDamage) e.takeDamage(2);
-            }
-        });
-        this.time.delayedCall(500, () => { this.isMeleeAttacking = false; });
-    }
+    spawnSwitch(x, y) { this.switches.create(x, y, 'switch'); this.switchDropped=true; }
+    spawnLootSkull(x, y, type) { this.skulls.create(x, y, 'skull').setData('lootID', 'scrap'); }
+    
     fireBullet(pointer) {
-        if (this.isOpening || this.playerStats.ammo <= 0 || this.isPaused || this.isInventoryOpen) return;
-        const now = this.time.now;
-        if (this.playerStats.currentWeapon === 'shotgun') {
-            if (this.playerStats.ammo < 2) return; 
-            if (now - this.lastFired < 1000) return;
-            sfx.shootShotgun(); // AUDIO
-            for(let i = -10; i <= 10; i+=5) {
-                const b = this.bullets.get(this.player.x, this.player.y);
-                if (b) b.fire(this.player.x, this.player.y, pointer.x, pointer.y, i, false);
-            }
-            this.playerStats.ammo -= 2; this.lastFired = now; this.cameras.main.shake(100, 0.005);
-        } else {
-            if (now - this.lastFired < 300) return;
-            sfx.shootPistol(); // AUDIO
-            const b = this.bullets.get(this.player.x, this.player.y);
-            if (b) b.fire(this.player.x, this.player.y, pointer.x, pointer.y, 0, false);
-            this.playerStats.ammo--; this.lastFired = now;
+        if(this.playerStats.ammo<=0 || this.time.now - this.lastFired < (this.playerStats.currentWeapon==='shotgun'?1000:300)) return;
+        this.lastFired = this.time.now; this.playerStats.ammo -= (this.playerStats.currentWeapon==='shotgun'?2:1);
+        sfx[this.playerStats.currentWeapon==='shotgun'?'shootShotgun':'shootPistol']();
+        const b = this.bullets.get(this.player.x, this.player.y);
+        if(b) b.fire(this.player.x, this.player.y, pointer.x, pointer.y);
+        this.cameras.main.shake(100, 0.005);
+    }
+    
+    switchWeapon() { 
+        if(this.playerStats.hasShotgun) { 
+            this.playerStats.currentWeapon = this.playerStats.currentWeapon==='pistol'?'shotgun':'pistol'; 
+            sfx.reload();
+        } 
+    }
+    toggleNVG() {
+        if(this.playerStats.hideout.armory.hasNVG) {
+            this.nvgOn = !this.nvgOn; sfx.toggleNVG();
+            this.nvgLayer.setVisible(this.nvgOn); this.darkness.setVisible(!this.nvgOn);
         }
     }
-    hitPlayer(damage) {
-        if (this.player.alpha < 1 || this.isPinned) return;
-        let mitigated = false;
-        const slots = ['body', 'head', 'arms', 'feet']; // Added all slots
-        for (let slot of slots) {
-            if (this.playerStats.armor[slot] && this.playerStats.armor[slot].durability > 0) {
-                this.playerStats.armor[slot].durability--;
-                this.showFloatingText(this.player.x, this.player.y - 20, "BLOCKED!", 0x00ffff);
-                if (this.playerStats.armor[slot].durability <= 0) {
-                    this.playerStats.armor[slot] = null;
-                    this.showFloatingText(this.player.x, this.player.y - 40, "ARMOR BROKE!", 0xff0000);
-                }
-                mitigated = true; break;
-            }
+    tryInteract() {
+        if(this.currentLevel===2 && this.checkDebris()) return;
+        if(this.currentLevel===3 && this.switchDropped && Phaser.Math.Distance.Between(this.player.x,this.player.y,this.switches.getFirstAlive().x,this.switches.getFirstAlive().y)<60) { this.winGame(); return; }
+        if(Phaser.Math.Distance.Between(this.player.x, this.player.y, this.door.x, this.door.y)<60) { this.nextLevel(); return; }
+        // Loot
+        let item = null, minDst = 60;
+        this.crates.getChildren().concat(this.skulls.getChildren()).forEach(i => {
+            let d = Phaser.Math.Distance.Between(this.player.x, this.player.y, i.x, i.y);
+            if(i.active && d < minDst) { item=i; minDst=d; }
+        });
+        if(item) {
+            sfx.loot(); this.applyLoot(item.getData('lootID')); item.destroy();
         }
-        if (!mitigated) {
-            sfx.playerHurt(); // AUDIO
-            this.playerStats.hp -= damage; this.cameras.main.shake(100, 0.01);
-            this.player.setAlpha(0.5); this.time.delayedCall(1000, () => this.player.setAlpha(1));
-        }
-        if (this.playerStats.hp <= 0) { 
-            this.showFloatingText(400, 300, "YOU DIED", 0xff0000); this.physics.pause();
-            this.time.delayedCall(2000, () => { this.scene.restart({ level: this.currentLevel, stats: this.checkpointStats }); });
-        }
-    }
-    triggerKnockdown(leaper) { 
-        if (this.isPinned) return; 
-        this.isPinned = true; this.pinnedBy = leaper; 
-        this.player.setVelocity(0); leaper.setVelocity(0); leaper.state = 'PINNING'; 
-        this.player.setTint(0x0000ff); this.showFloatingText(this.player.x, this.player.y - 50, "PRESS SPACE!", 0xff0000); 
-    }
-    recoverFromKnockdown() { 
-        this.isPinned = false; this.player.clearTint(); 
-        if (this.pinnedBy && this.pinnedBy.active) this.pinnedBy.knockBack(); 
-        this.pinnedBy = null; 
     }
     checkDebris() {
-        if (this.debrisBlock && this.debrisBlock.active && Phaser.Math.Distance.Between(this.player.x, this.player.y, this.debrisBlock.x, this.debrisBlock.y) < 80) {
-            if (this.hasMolotov) this.startBurningDebris(); else this.showFloatingText(this.debrisBlock.x, this.debrisBlock.y, "Need Molotov!", 0xffffff);
-            return true;
+        if(this.debrisBlock && this.debrisBlock.active && Phaser.Math.Distance.Between(this.player.x, this.player.y, this.debrisBlock.x, this.debrisBlock.y)<80) {
+            if(this.hasMolotov) { this.debrisBlock.destroy(); return true; }
         } return false;
-    }
-    startBurningDebris() {
-        this.debrisBurning = true; this.showFloatingText(this.debrisBlock.x, this.debrisBlock.y, "BURNING!", 0xff4500);
-        this.debrisBlock.setTint(0xff4500);
-        this.openTimerEvent = this.time.addEvent({ delay: 5000, callback: () => { this.debrisBurning = false; if(this.debrisBlock) this.debrisBlock.destroy(); this.showFloatingText(this.player.x, this.player.y, "CLEARED!", 0x00ff00); } });
-    }
-    checkSwitch() {
-        const s = this.switches.getFirstAlive();
-        if (s && Phaser.Math.Distance.Between(this.player.x, this.player.y, s.x, s.y) < 60) {
-            this.activateExtraction(); s.destroy(); return true;
-        } return false;
-    }
-    checkDoor() {
-        if (this.currentLevel === 3) return false; 
-        if (Phaser.Math.Distance.Between(this.player.x, this.player.y, this.door.x, this.door.y) < 60) {
-            if (this.currentLevel === 1) { if (this.hasKey) this.nextLevel(); else this.showFloatingText(this.door.x, this.door.y-40, "Need Key!", 0xffffff); } 
-            else if (this.currentLevel === 2) { this.nextLevel(); }
-            return true;
-        } return false;
-    }
-    nextLevel() {
-        this.cameras.main.fade(1000, 0, 0, 0);
-        this.time.delayedCall(1000, () => { this.scene.restart({ level: this.currentLevel + 1, stats: this.playerStats }); });
-    }
-    winGame() {
-        if (this.extractionTimerEvent) this.time.removeEvent(this.extractionTimerEvent);
-        this.extractionActive = false;
-        this.physics.pause();
-        this.levelText.setText("EXTRACTED!").setAlpha(1);
-        this.uiGraphics.clear();
-        localStorage.setItem(SAVE_KEY, JSON.stringify(this.playerStats));
-        this.time.delayedCall(2000, () => { this.scene.start('HideoutScene', { stats: this.playerStats }); });
-    }
-    tryInteract() { 
-        // 1. Check Crates
-        const crates = this.crates.getChildren();
-        let closest = null;
-        let minDst = 60;
-        crates.forEach(c => { 
-            const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, c.x, c.y);
-            if(c.active && d < minDst) { closest = c; minDst = d; }
-        }); 
-        if(closest) { this.openCrate(closest); return; }
-
-        // 2. Check Skulls (Loot)
-        const skulls = this.skulls.getChildren();
-        closest = null; minDst = 60;
-        skulls.forEach(s => {
-            const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, s.x, s.y);
-            if(s.active && d < minDst) { closest = s; minDst = d; }
-        });
-        if (closest) {
-            const itemID = closest.getData('lootID');
-            closest.destroy();
-            this.applyLoot(itemID);
-        }
-    }
-    openCrate(crate) { 
-        const itemID = crate.getData('lootID'); this.isOpening = true; 
-        this.openTimerEvent = this.time.addEvent({ delay: 1000, callback: () => { this.isOpening = false; crate.destroy(); this.applyLoot(itemID); } }); 
     }
     applyLoot(id) {
-        sfx.loot(); // AUDIO
-        let txt="", col=0xffffff;
-        if(id==='meds'){ this.playerStats.hp=Math.min(this.playerStats.hp+5, this.playerStats.maxHp); txt="+5 HP"; col=0xff0000; }
-        else if(id==='ammo'){ this.playerStats.ammo+=5; txt=`+5 Ammo`; col=0xffff00; }
-        else if(id==='key'){ this.hasKey=true; txt="KEY FOUND!"; col=0xffd700; }
-        else if(id==='flashlight'){ this.playerStats.hasFlashlight=true; txt="FLASHLIGHT!"; col=0xffffff; }
-        else if(id==='molotov'){ this.hasMolotov=true; txt="MOLOTOV!"; col=0xff4500; }
-        else if(id==='shotgun'){ this.playerStats.hasShotgun=true; txt="SHOTGUN!"; col=0xff00ff; }
-        else if(id==='scrap'){ this.playerStats.scrap+=5; txt="+5 SCRAP"; col=0xaaaaaa; }
-        else if(id==='plug'){ this.playerStats.hideout.hasSparkPlug=true; txt="SPARK PLUG!"; col=0x00ffff; }
-        else if(id==='helmet'){ this.playerStats.armor.head={name:'HELMET',durability:3,maxDurability:3}; txt="HELMET EQUIPPED"; col=0x00ff00; }
-        else if(id==='vest'){ this.playerStats.armor.body={name:'VEST',durability:5,maxDurability:5}; txt="VEST EQUIPPED"; col=0x00ff00; }
-        this.showFloatingText(this.player.x, this.player.y-30, txt, col);
+        if(id==='meds') this.playerStats.hp = Math.min(this.playerStats.hp+5, this.playerStats.maxHp);
+        else if(id==='ammo') this.playerStats.ammo += 5;
+        else if(id==='scrap') this.playerStats.scrap += 5;
+        else if(id==='molotov') this.hasMolotov = true;
+        else if(id==='shotgun') this.playerStats.hasShotgun = true;
+        else if(id==='plug') this.playerStats.hideout.hasSparkPlug = true;
+        this.add.text(this.player.x, this.player.y-50, id.toUpperCase(), {fontSize:'16px', color:'#00ff00'}).setDepth(200).setOrigin(0.5);
     }
-    showFloatingText(x, y, msg, color) { let t = this.add.text(x, y, msg, {font:'16px Arial', stroke:'#000', strokeThickness:3}).setTint(color).setOrigin(0.5).setDepth(101); this.tweens.add({ targets:t, y:y-50, alpha:0, duration:1500, onComplete:()=>t.destroy() }); }
-    updateBossBar(hp, max) {
-        this.bossBar.clear();
-        this.bossBar.fillStyle(0x000000, 1); this.bossBar.fillRect(200, 50, 400, 20); 
-        this.bossBar.fillStyle(0xff0000, 1); this.bossBar.fillRect(202, 52, 396 * (hp/max), 16); 
+    hitPlayer(damage) {
+        this.playerStats.hp -= damage; sfx.playerHurt(); this.cameras.main.shake(100,0.01);
+        if(this.playerStats.hp<=0) this.scene.restart({level:this.currentLevel, stats:this.checkpointStats});
     }
-    drawUI() {
-        this.uiGraphics.clear();
-        this.uiGraphics.fillStyle(0x000000, 0.5); this.uiGraphics.fillRect(10, 10, 204, 24);
-        this.uiGraphics.fillStyle(0xff0000, 1); this.uiGraphics.fillRect(12, 12, 200 * (this.playerStats.hp/this.playerStats.maxHp), 20);
-        this.uiGraphics.fillStyle(0x000000, 0.5); this.uiGraphics.fillRect(10, 40, 154, 14);
-        this.uiGraphics.fillStyle(0x0088ff, 1); this.uiGraphics.fillRect(12, 42, 150 * (this.playerStats.stamina/this.playerStats.maxStamina), 10);
-        let timerText = this.extractionActive ? ` | BEACON: ${this.extractionTimer}s` : "";
-        if (this.extractionActive) this.levelText.setText(this.extractionTimer).setAlpha(1).setTint(0xff0000);
-        let weaponName = this.playerStats.currentWeapon.toUpperCase();
-        this.uiText.setText(`AMMO: ${this.playerStats.ammo} | SCRAP: ${this.playerStats.scrap} | ${weaponName}${timerText}`);
-        let iconX = 300;
-        if (this.hasKey) { this.uiGraphics.fillStyle(0xFFD700, 1); this.uiGraphics.fillCircle(iconX, 22, 12); iconX+=30; }
-        if (this.playerStats.hasFlashlight) { this.uiGraphics.fillStyle(0xffffff, 1); this.uiGraphics.fillCircle(iconX, 22, 12); iconX+=30; }
-        if (this.hasMolotov) { this.uiGraphics.fillStyle(0xff4500, 1); this.uiGraphics.fillCircle(iconX, 22, 12); iconX+=30; }
-        if (this.playerStats.hideout.hasSparkPlug) { this.uiGraphics.fillStyle(0x00ffff, 1); this.uiGraphics.fillCircle(iconX, 22, 12); iconX+=30; }
-        if (this.playerStats.hideout.armory.hasNVG) { this.uiGraphics.fillStyle(0x00ff00, 1); this.uiGraphics.fillCircle(iconX, 22, 12); }
-    }
+    nextLevel() { this.scene.restart({level:this.currentLevel+1, stats:this.playerStats}); }
+    winGame() { this.scene.start('HideoutScene', {stats:this.playerStats}); }
 }
 
-const config = { type: Phaser.AUTO, width: 800, height: 600, backgroundColor: '#000000', parent: 'game-container', physics: { default: 'arcade', arcade: { gravity: { y: 0 } } }, scene: [MainMenuScene, GameScene, HideoutScene], scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH } };
+const config = { type: Phaser.AUTO, width: 800, height: 600, backgroundColor: '#000000', parent: 'game-container', 
+physics: { default: 'arcade', arcade: { gravity: { y: 0 } } }, scene: [MainMenuScene, GameScene, HideoutScene], 
+scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH } };
 const game = new Phaser.Game(config);
 </script>
 </body>
