@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Zombies - Build 9.2 (Lore Update - FIXED)</title>
+    <title>Zombies - Build 9.2 (Lore Stable)</title>
     <style>
         body { margin: 0; padding: 0; background-color: #000000; overflow: hidden; }
         canvas { display: block; margin: 0 auto; }
@@ -24,7 +24,7 @@ const DEFAULT_STATS = {
     hp: 10, maxHp: 10, stamina: 100, maxStamina: 100, ammo: 10, scrap: 0,
     hasFlashlight: false, hasShotgun: false, currentWeapon: 'pistol',
     armor: { head: null, body: null, arms: null, feet: null },
-    logs: [], // New: Tracks collected lore IDs
+    logs: [], 
     hideout: { 
         restAreaLvl: 0, 
         generatorLvl: 0, 
@@ -89,7 +89,7 @@ class MainMenuScene extends Phaser.Scene {
         this.add.rectangle(400, 300, 800, 600, 0x111111);
         this.add.grid(400, 300, 800, 600, 64, 64, 0x222222).setAlpha(0.2);
         this.add.text(400, 100, "ZOMBIE EXTRACTION", { fontSize: '64px', fill: '#00ff00', fontStyle: 'bold' }).setOrigin(0.5);
-        this.add.text(400, 160, "BUILD 9.2 (LORE UPDATE)", { fontSize: '24px', fill: '#555' }).setOrigin(0.5);
+        this.add.text(400, 160, "BUILD 9.2 (LORE STABLE)", { fontSize: '24px', fill: '#555' }).setOrigin(0.5);
 
         this.createButton(400, 250, "NEW RUN", 0x880000, () => {
             if(confirm("Start a new run? This overwrites current auto-save.")) {
@@ -370,10 +370,9 @@ class GameScene extends Phaser.Scene {
 
         this.add.tileSprite(400, 300, 800, 600, this.currentLevel===1?'floor_grass':(this.currentLevel===2?'floor_apt':'floor_roof')); 
         
-        // --- FIX: PLAYER CREATED BEFORE ENTITIES ---
+        // --- PLAYER CREATED BEFORE ENTITIES ---
         this.player = this.physics.add.sprite(400, 550, 'player').setCollideWorldBounds(true).setDepth(10);
-        // ------------------------------------------
-
+        
         // Spawn Entities & Lore
         if(this.currentLevel===1) {
             this.door = this.physics.add.staticSprite(400, 50, 'door');
@@ -404,12 +403,28 @@ class GameScene extends Phaser.Scene {
         this.physics.add.collider(this.enemies, this.crates);
         this.physics.add.collider(this.bullets, this.walls, (b) => b.destroy());
         this.physics.add.collider(this.bullets, this.crates, (b) => b.destroy());
-        this.physics.add.overlap(this.bullets, this.enemies, (b, e) => {
-            if(b.active && e.active && !b.isEnemyBullet) { b.destroy(); e.takeDamage(1); }
+        this.physics.add.collider(this.bullets, this.debris, (b) => b.destroy());
+        
+        // --- ROBUST COLLISION LOGIC ---
+        this.physics.add.overlap(this.bullets, this.enemies, (obj1, obj2) => {
+            let bullet = (obj1.texture.key === 'bullet') ? obj1 : obj2;
+            let enemy = (obj1.texture.key === 'bullet') ? obj2 : obj1;
+            
+            if (bullet.active && enemy.active && !bullet.hasHit) {
+                if (bullet.isEnemyBullet) return; 
+                bullet.hasHit = true; bullet.disableBody(true, true); bullet.destroy(); 
+                if (typeof enemy.takeDamage === 'function') enemy.takeDamage(1);
+            }
         });
-        this.physics.add.overlap(this.bullets, this.player, (p, b) => {
-            if(b.active && b.isEnemyBullet) { b.destroy(); this.hitPlayer(1); }
+        
+        this.physics.add.overlap(this.bullets, this.player, (player, bullet) => {
+            if (bullet.active && !bullet.hasHit) {
+                if (!bullet.isEnemyBullet) return; 
+                bullet.hasHit = true; bullet.disableBody(true, true); bullet.destroy();
+                this.hitPlayer(1);
+            }
         });
+        
         this.physics.add.overlap(this.player, this.enemies, (p, e) => {
             if(!e.active) return;
             if(e.enemyType==='leaper' && e.state==='LEAP') this.triggerKnockdown(e);
