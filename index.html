@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Zombies - Build 9.2 (Lore Stable)</title>
+    <title>Zombies - Build 9.1 (Stable Rollback)</title>
     <style>
         body { margin: 0; padding: 0; background-color: #000000; overflow: hidden; }
         canvas { display: block; margin: 0 auto; }
@@ -18,25 +18,18 @@
 <div id="instructions">WASD: Move | Mouse: Aim/Fire | TAB: Inventory | N: Night Vision | F: Interact | Q: Switch Weapon</div>
 <script>
 
-// --- CONSTANTS & LORE ---
-const SAVE_KEY = 'zombie_save_v9_2';
+// --- CONSTANTS ---
+const SAVE_KEY = 'zombie_save_v9_1'; // Changed key to protect save file integrity
 const DEFAULT_STATS = { 
     hp: 10, maxHp: 10, stamina: 100, maxStamina: 100, ammo: 10, scrap: 0,
     hasFlashlight: false, hasShotgun: false, currentWeapon: 'pistol',
     armor: { head: null, body: null, arms: null, feet: null },
-    logs: [], 
     hideout: { 
         restAreaLvl: 0, 
         generatorLvl: 0, 
         hasSparkPlug: false,
         armory: { crafting: null, hasNVG: false } 
     }
-};
-
-const LORE_DATA = {
-    1: { title: "THE EVICTION", text: "Management locked the courtyard gates at 6:00 PM. They said it was a curfew. But I hear screaming from the street. They aren't letting us out... they are keeping us in." },
-    2: { title: "CONTAINMENT", text: "The military didn't come to save us. They firebombed the lower floors to seal the stairwells. We are trapped in the upper apartments. The gas lines are leaking." },
-    3: { title: "SUBJECT ZERO", text: "It's not a virus. It's HIM. The big one on the roof. He absorbs the damage. As long as he stands, the horde keeps coming. We have to drop the extraction beacon to target him." }
 };
 
 // --- AUDIO MANAGER ---
@@ -77,7 +70,6 @@ class SoundManager {
     loot() { this.playTone(1200, 'square', 0.1, 0.2); this.playTone(1600, 'square', 0.1, 0.2); }
     toggleNVG() { this.playTone(2000, 'sine', 0.2, 0.1); }
     reload() { this.playTone(400, 'triangle', 0.2, 0.4); }
-    logFound() { this.playTone(400, 'sine', 0.1, 0.5); this.playTone(600, 'sine', 0.3, 0.5); } 
 }
 const sfx = new SoundManager();
 
@@ -89,10 +81,10 @@ class MainMenuScene extends Phaser.Scene {
         this.add.rectangle(400, 300, 800, 600, 0x111111);
         this.add.grid(400, 300, 800, 600, 64, 64, 0x222222).setAlpha(0.2);
         this.add.text(400, 100, "ZOMBIE EXTRACTION", { fontSize: '64px', fill: '#00ff00', fontStyle: 'bold' }).setOrigin(0.5);
-        this.add.text(400, 160, "BUILD 9.2 (LORE STABLE)", { fontSize: '24px', fill: '#555' }).setOrigin(0.5);
+        this.add.text(400, 160, "BUILD 9.1 (STABLE)", { fontSize: '24px', fill: '#555' }).setOrigin(0.5);
 
         this.createButton(400, 250, "NEW RUN", 0x880000, () => {
-            if(confirm("Start a new run? This overwrites current auto-save.")) {
+            if(confirm("Start a new run?")) {
                 localStorage.removeItem(SAVE_KEY);
                 this.scene.start('GameScene', { level: 1, stats: JSON.parse(JSON.stringify(DEFAULT_STATS)) });
             }
@@ -101,9 +93,7 @@ class MainMenuScene extends Phaser.Scene {
         this.createButton(400, 320, "CONTINUE", 0x004488, () => {
             let saved = localStorage.getItem(SAVE_KEY);
             if (saved) {
-                let stats = JSON.parse(saved);
-                if(!stats.logs) stats.logs = []; 
-                this.scene.start('HideoutScene', { stats: stats });
+                this.scene.start('HideoutScene', { stats: JSON.parse(saved) });
             } else { alert("No save found!"); }
         });
 
@@ -128,7 +118,6 @@ class MainMenuScene extends Phaser.Scene {
                     try {
                         const json = JSON.parse(event.target.result);
                         if (json.hp !== undefined) {
-                            if(!json.logs) json.logs = [];
                             localStorage.setItem(SAVE_KEY, JSON.stringify(json));
                             alert("Imported!");
                         }
@@ -145,7 +134,6 @@ class MainMenuScene extends Phaser.Scene {
             if (prompt("CODE:") === 'god mode') {
                 const god = JSON.parse(JSON.stringify(DEFAULT_STATS));
                 god.hp=20; god.maxHp=20; god.ammo=999; god.scrap=999; god.hasShotgun=true; god.hasFlashlight=true; god.hideout.armory.hasNVG=true;
-                god.logs = [1,2,3];
                 localStorage.setItem(SAVE_KEY, JSON.stringify(god));
                 this.scene.start('HideoutScene', { stats: god });
             }
@@ -214,7 +202,7 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
     }
     update(time, delta) {
         if (!this.active) return;
-        if (this.healthBar) this.healthBar.setPosition(0,0);
+        if (this.healthBar) this.healthBar.setPosition(0,0); // Update pos in draw loop or leave static if unused
         
         if (this.enemyType === 'bandit') {
             const dist = Phaser.Math.Distance.Between(this.x, this.y, this.target.x, this.target.y);
@@ -289,17 +277,6 @@ class HideoutScene extends Phaser.Scene {
             }
         });
 
-        // Logs Display in Hideout (Simple list)
-        this.add.text(40, 450, "DATA LOGS:", { fontSize: '24px', fill: '#00ccff' });
-        let logY = 480;
-        if(this.stats.logs.length === 0) this.add.text(40, logY, "No data collected.", {fontSize:'14px', fill:'#555'});
-        else {
-            this.stats.logs.forEach(id => {
-                this.add.text(40, logY, `> ${LORE_DATA[id].title}`, {fontSize:'14px', fill:'#00ccff'});
-                logY+=20;
-            });
-        }
-
         this.add.rectangle(650, 500, 200, 60, 0x008800).setInteractive().on('pointerdown', () => {
             sfx.click();
             if(this.stats.hideout.restAreaLvl>0) this.stats.hp = Math.min(this.stats.hp + (this.stats.hideout.restAreaLvl>=2?this.stats.maxHp:5), this.stats.maxHp);
@@ -342,21 +319,16 @@ class GameScene extends Phaser.Scene {
         gen(0xFF4500,32,32,'leaper'); gen(0x0000FF,32,32,'bandit'); gen(0xffff00,8,8,'bullet');
         gen(0xFFD700,40,60,'door'); gen(0x555555,32,32,'wall'); gen(0x333333,60,60,'debris'); gen(0x00ff00,30,30,'switch');
         
-        // Items
-        gen(0xff0000,20,20,'pickup_hp'); gen(0x0088ff,20,20,'pickup_stamina');
-        // Lore Disk
-        g.clear(); g.fillStyle(0x0088ff, 1); g.fillRect(0,0,24,24); g.fillStyle(0xffffff,1); g.fillRect(4,4,16,10); g.generateTexture('disk', 24, 24);
-
         g.clear(); g.fillStyle(0xEAEAEA, 1); g.fillCircle(16,14,11); g.fillRect(10,20,12,8); g.fillStyle(0,1); g.fillCircle(12,14,3.5); g.fillCircle(20,14,3.5); g.generateTexture('skull',32,32);
+        g.clear(); g.fillStyle(0xffffff,1); g.fillRect(0,0,40,40); g.generateTexture('slash',40,40); // Restored slash texture
     }
     create(data) {
         this.currentLevel = data.level || 1;
         this.playerStats = data.stats || JSON.parse(JSON.stringify(DEFAULT_STATS));
-        if(!this.playerStats.logs) this.playerStats.logs = [];
         this.checkpointStats = JSON.parse(JSON.stringify(this.playerStats));
         this.hasKey = false; this.hasMolotov = false; this.isPaused = false; this.isInventoryOpen = false; this.nvgOn = false;
         this.extractionTimer = 15; this.extractionActive = false;
-        this.lastFired = 0; this.invMode = 'GEAR'; // 'GEAR' or 'LOGS'
+        this.lastFired = 0;
 
         this.bullets = this.physics.add.group({ classType: Bullet, runChildUpdate: true });
         this.enemies = this.add.group();
@@ -366,21 +338,15 @@ class GameScene extends Phaser.Scene {
         this.debris = this.physics.add.staticGroup();
         this.skulls = this.physics.add.staticGroup();
         this.switches = this.physics.add.staticGroup();
-        this.disks = this.physics.add.staticGroup(); // Lore Items
 
         this.add.tileSprite(400, 300, 800, 600, this.currentLevel===1?'floor_grass':(this.currentLevel===2?'floor_apt':'floor_roof')); 
         
-        // --- PLAYER CREATED BEFORE ENTITIES ---
-        this.player = this.physics.add.sprite(400, 550, 'player').setCollideWorldBounds(true).setDepth(10);
-        
-        // Spawn Entities & Lore
         if(this.currentLevel===1) {
             this.door = this.physics.add.staticSprite(400, 50, 'door');
             this.walls.create(200, 200, 'wall').setScale(1, 4).refreshBody();
             this.walls.create(600, 200, 'wall').setScale(1, 4).refreshBody();
             this.spawnEnemy('walker', 100, 300); this.spawnEnemy('bandit', 700, 300); this.spawnEnemy('leaper', 200, 200);
             this.spawnCrates(['key','flashlight','shotgun','ammo','scrap']);
-            if(!this.playerStats.logs.includes(1)) this.disks.create(100, 500, 'disk').setData('id', 1);
         } else if(this.currentLevel===2) {
             this.door = this.physics.add.staticSprite(400, 50, 'door').setTint(0x0000ff);
             this.debrisBlock = this.debris.create(400, 100, 'debris');
@@ -388,13 +354,13 @@ class GameScene extends Phaser.Scene {
             this.walls.create(550, 300, 'wall').setScale(1, 15).refreshBody();
             this.spawnEnemy('bandit', 100, 100); this.spawnEnemy('bandit', 700, 100); this.spawnEnemy('leaper', 400, 450);
             this.spawnCrates(['molotov','ammo','meds','scrap','plug']);
-            if(!this.playerStats.logs.includes(2)) this.disks.create(400, 300, 'disk').setData('id', 2);
         } else {
             this.spawnEnemy('boss', 400, 100); this.spawnEnemy('bandit', 100, 500); this.spawnEnemy('bandit', 700, 500);
             this.spawnCrates(['ammo','meds','scrap']);
-            if(!this.playerStats.logs.includes(3)) this.disks.create(750, 500, 'disk').setData('id', 3);
         }
 
+        this.player = this.physics.add.sprite(400, 550, 'player').setCollideWorldBounds(true).setDepth(10);
+        
         // Collisions
         this.physics.add.collider(this.player, this.walls);
         this.physics.add.collider(this.player, this.crates);
@@ -403,28 +369,12 @@ class GameScene extends Phaser.Scene {
         this.physics.add.collider(this.enemies, this.crates);
         this.physics.add.collider(this.bullets, this.walls, (b) => b.destroy());
         this.physics.add.collider(this.bullets, this.crates, (b) => b.destroy());
-        this.physics.add.collider(this.bullets, this.debris, (b) => b.destroy());
-        
-        // --- ROBUST COLLISION LOGIC ---
-        this.physics.add.overlap(this.bullets, this.enemies, (obj1, obj2) => {
-            let bullet = (obj1.texture.key === 'bullet') ? obj1 : obj2;
-            let enemy = (obj1.texture.key === 'bullet') ? obj2 : obj1;
-            
-            if (bullet.active && enemy.active && !bullet.hasHit) {
-                if (bullet.isEnemyBullet) return; 
-                bullet.hasHit = true; bullet.disableBody(true, true); bullet.destroy(); 
-                if (typeof enemy.takeDamage === 'function') enemy.takeDamage(1);
-            }
+        this.physics.add.overlap(this.bullets, this.enemies, (b, e) => {
+            if(b.active && e.active && !b.isEnemyBullet) { b.destroy(); e.takeDamage(1); }
         });
-        
-        this.physics.add.overlap(this.bullets, this.player, (player, bullet) => {
-            if (bullet.active && !bullet.hasHit) {
-                if (!bullet.isEnemyBullet) return; 
-                bullet.hasHit = true; bullet.disableBody(true, true); bullet.destroy();
-                this.hitPlayer(1);
-            }
+        this.physics.add.overlap(this.bullets, this.player, (p, b) => {
+            if(b.active && b.isEnemyBullet) { b.destroy(); this.hitPlayer(1); }
         });
-        
         this.physics.add.overlap(this.player, this.enemies, (p, e) => {
             if(!e.active) return;
             if(e.enemyType==='leaper' && e.state==='LEAP') this.triggerKnockdown(e);
@@ -453,52 +403,18 @@ class GameScene extends Phaser.Scene {
 
     createInventoryUI() {
         this.invContainer = this.add.container(400, 300).setDepth(300).setVisible(false);
-        this.invContainer.add(this.add.rectangle(0,0,600,450,0x111111,0.95).setStrokeStyle(4,0x444444));
-        this.invTitle = this.add.text(0, -200, "INVENTORY", {fontSize:'32px'}).setOrigin(0.5);
-        this.invContainer.add(this.invTitle);
-        
-        // Mode Switch Buttons
-        const btnGear = this.add.rectangle(-150, -150, 200, 40, 0x333333).setInteractive();
-        const txtGear = this.add.text(-150, -150, "GEAR", {fontSize:'18px'}).setOrigin(0.5);
-        btnGear.on('pointerdown', ()=>{this.invMode='GEAR'; this.updateInventoryUI();});
-        
-        const btnLogs = this.add.rectangle(150, -150, 200, 40, 0x333333).setInteractive();
-        const txtLogs = this.add.text(150, -150, "LOGS", {fontSize:'18px'}).setOrigin(0.5);
-        btnLogs.on('pointerdown', ()=>{this.invMode='LOGS'; this.updateInventoryUI();});
-        
-        this.invContainer.add([btnGear, txtGear, btnLogs, txtLogs]);
-        
-        this.invContent = this.add.text(-280, -100, "", {fontSize:'16px', wordWrap:{width:560}}).setOrigin(0,0);
-        this.invContainer.add(this.invContent);
+        this.invContainer.add(this.add.rectangle(0,0,600,400,0x111111,0.9).setStrokeStyle(4,0x444444));
+        this.invText = this.add.text(-280,-180,"INVENTORY", {fontSize:'24px'});
+        this.invContainer.add(this.invText);
     }
-
-    updateInventoryUI() {
-        if(this.invMode === 'GEAR') {
-            this.invContent.setText(
-                `HP: ${this.playerStats.hp}/${this.playerStats.maxHp}\nAMMO: ${this.playerStats.ammo}\nSCRAP: ${this.playerStats.scrap}\n\n` +
-                `WEAPON: ${this.playerStats.currentWeapon.toUpperCase()}\n` +
-                `FLASHLIGHT: ${this.playerStats.hasFlashlight ? "YES" : "NO"}\n` +
-                `NVG: ${this.playerStats.hideout.armory.hasNVG ? "EQUIPPED" : "NO"}`
-            );
-        } else {
-            let txt = "ENCRYPTED LOGS:\n\n";
-            if(this.playerStats.logs.length === 0) txt += "No data found.";
-            else {
-                this.playerStats.logs.forEach(id => {
-                    let entry = LORE_DATA[id];
-                    txt += `[${entry.title}]\n${entry.text}\n\n`;
-                });
-            }
-            this.invContent.setText(txt);
-        }
-    }
-
     toggleInventory() {
         this.isInventoryOpen = !this.isInventoryOpen;
         this.invContainer.setVisible(this.isInventoryOpen);
         if(this.isInventoryOpen) {
-            this.physics.pause(); this.isPaused = true; this.updateInventoryUI(); sfx.click();
-        } else { this.physics.resume(); this.isPaused = false; sfx.click(); }
+            this.physics.pause();
+            let txt = `HP: ${this.playerStats.hp}\nAMMO: ${this.playerStats.ammo}\nSCRAP: ${this.playerStats.scrap}\nWEAPON: ${this.playerStats.currentWeapon}`;
+            this.invText.setText(txt);
+        } else { this.physics.resume(); }
     }
 
     update(time, delta) {
@@ -506,7 +422,6 @@ class GameScene extends Phaser.Scene {
         if(Phaser.Input.Keyboard.JustDown(this.keys.esc)) { if(this.isInventoryOpen) this.toggleInventory(); else this.isPaused=!this.isPaused; }
         if(this.isPaused || this.isInventoryOpen) return;
         
-        // Input
         let speed = (this.cursors.shift.isDown || this.wasd.shift.isDown) ? 280 : 160;
         let vx=0, vy=0;
         if(this.cursors.left.isDown || this.wasd.left.isDown) vx=-1; else if(this.cursors.right.isDown || this.wasd.right.isDown) vx=1;
@@ -521,7 +436,6 @@ class GameScene extends Phaser.Scene {
         this.drawUI();
         this.enemies.getChildren().forEach(e => e.update(time, delta));
         
-        // Light
         this.lightShape.clear(); this.lightShape.fillCircle(this.player.x, this.player.y, 60);
         if(this.playerStats.hasFlashlight) {
             const a = Phaser.Math.Angle.Between(this.player.x, this.player.y, this.input.activePointer.x, this.input.activePointer.y);
@@ -576,31 +490,14 @@ class GameScene extends Phaser.Scene {
         if(Phaser.Math.Distance.Between(this.player.x, this.player.y, this.door.x, this.door.y)<60) { this.nextLevel(); return; }
         
         let item = null, minDst = 60;
-        this.crates.getChildren().concat(this.skulls.getChildren(), this.disks.getChildren()).forEach(i => {
+        this.crates.getChildren().concat(this.skulls.getChildren()).forEach(i => {
             let d = Phaser.Math.Distance.Between(this.player.x, this.player.y, i.x, i.y);
             if(i.active && d < minDst) { item=i; minDst=d; }
         });
         if(item) {
-            if(item.texture.key === 'disk') {
-                this.collectLog(item);
-            } else {
-                sfx.loot(); this.applyLoot(item.getData('lootID')); item.destroy();
-            }
+            sfx.loot(); this.applyLoot(item.getData('lootID')); item.destroy();
         }
     }
-
-    collectLog(disk) {
-        let id = disk.getData('id');
-        disk.destroy();
-        sfx.logFound();
-        if(!this.playerStats.logs.includes(id)) {
-            this.playerStats.logs.push(id);
-            this.showFloatingText(this.player.x, this.player.y, "DATA LOG ACQUIRED", 0x00ccff);
-        } else {
-            this.showFloatingText(this.player.x, this.player.y, "ALREADY READ", 0x555555);
-        }
-    }
-
     checkDebris() {
         if(this.debrisBlock && this.debrisBlock.active && Phaser.Math.Distance.Between(this.player.x, this.player.y, this.debrisBlock.x, this.debrisBlock.y)<80) {
             if(this.hasMolotov) { this.debrisBlock.destroy(); return true; }
@@ -630,7 +527,7 @@ class GameScene extends Phaser.Scene {
         let weaponName = this.playerStats.currentWeapon.toUpperCase();
         this.uiText.setText(`AMMO: ${this.playerStats.ammo} | SCRAP: ${this.playerStats.scrap} | ${weaponName}`);
     }
-    triggerKnockdown(e) { this.hitPlayer(2); e.knockBack(); } // Simplified
+    triggerKnockdown(e) { this.hitPlayer(2); e.knockBack(); }
 }
 
 const config = { type: Phaser.AUTO, width: 800, height: 600, backgroundColor: '#000000', parent: 'game-container', 
