@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Zombies - File System 9.1 (Audio + AI Fix)</title>
+    <title>Zombies - File System 12.0 (Content Expansion)</title>
     <style>
         body { margin: 0; padding: 0; background-color: #000000; overflow: hidden; }
         canvas { display: block; margin: 0 auto; }
@@ -15,14 +15,171 @@
     <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
 </head>
 <body>
-<div id="instructions">WASD: Move | Mouse: Aim/Fire | TAB: Inventory | N: Night Vision | F: Interact | Q: Switch Weapon</div>
+<div id="instructions">WASD: Move | Mouse: Aim/Fire | SPACE: Dodge | R: Reload | G: Grenade | TAB: Inventory | N: NVG | F: Interact | Q: Switch | E: Melee</div>
 <script>
 
-// --- CONSTANTS ---
-const SAVE_KEY = 'zombie_save_v9';
+// =============================================================================
+// CONFIGURATION - All magic numbers centralized here
+// =============================================================================
+const CONFIG = {
+    // Save system
+    SAVE_KEY: 'zombie_save_v12',
+    
+    // Player settings
+    PLAYER: {
+        WALK_SPEED: 160,
+        SPRINT_SPEED: 280,
+        STAMINA_DRAIN: 0.5,
+        STAMINA_REGEN: 0.2,
+        INVULN_TIME: 1000,
+        MELEE_COOLDOWN: 500,
+        MELEE_RANGE: 60,
+        MELEE_DAMAGE: 2,
+        LIGHT_RADIUS: 60,
+        FLASHLIGHT_RANGE: 300,
+        FLASHLIGHT_ANGLE: 0.5,
+        // Dodge roll settings
+        DODGE_SPEED: 400,
+        DODGE_DURATION: 200,
+        DODGE_COOLDOWN: 800,
+        DODGE_STAMINA_COST: 20,
+        // Low HP threshold for vignette
+        LOW_HP_THRESHOLD: 0.3
+    },
+    
+    // Weapon settings
+    WEAPONS: {
+        PISTOL: {
+            FIRE_RATE: 300,
+            AMMO_COST: 1,
+            SPREAD: 0,
+            MAG_SIZE: 12,
+            RELOAD_TIME: 1000
+        },
+        SHOTGUN: {
+            FIRE_RATE: 1000,
+            AMMO_COST: 2,
+            PELLETS: 5,
+            SPREAD_STEP: 5,
+            MAG_SIZE: 6,
+            RELOAD_TIME: 1500
+        },
+        SMG: {
+            FIRE_RATE: 100,
+            AMMO_COST: 1,
+            SPREAD: 8,
+            MAG_SIZE: 30,
+            RELOAD_TIME: 1800
+        },
+        BULLET_SPEED: 500
+    },
+    
+    // Enemy configurations
+    ENEMIES: {
+        WALKER: {
+            HP: 2,
+            SPEED: 60,
+            DAMAGE: 2,
+            AGGRO_RANGE: 300,
+            TEXTURE: 'zombie'
+        },
+        LEAPER: {
+            HP: 1,
+            SPEED: 110,
+            DAMAGE: 2,
+            LEAP_RANGE: 180,
+            LEAP_SPEED: 450,
+            PREPARE_TIME: 500,
+            LEAP_DURATION: 600,
+            COOLDOWN_TIME: 1500,
+            KNOCKBACK_SPEED: 250,
+            TEXTURE: 'leaper'
+        },
+        BANDIT: {
+            HP: 3,
+            SPEED: 90,
+            DAMAGE: 1,
+            AMMO: 10,
+            FIRE_RANGE: 350,
+            FIRE_RATE: 2000,
+            MELEE_SPEED: 120,
+            SPREAD: 5,
+            TEXTURE: 'bandit'
+        },
+        BOSS: {
+            HP: 5,
+            SPEED: 85,
+            DAMAGE: 10,
+            SCALE: 3,
+            INVULN_TIME: 500,
+            TEXTURE: 'zombie'
+        },
+        SPITTER: {
+            HP: 2,
+            SPEED: 50,
+            DAMAGE: 1,
+            SPIT_RANGE: 280,
+            SPIT_COOLDOWN: 2500,
+            SPIT_SPEED: 200,
+            TEXTURE: 'spitter'
+        },
+        KNOCKBACK_SPEED: 100
+    },
+    
+    // Grenade settings
+    GRENADE: {
+        THROW_SPEED: 350,
+        FUSE_TIME: 1500,
+        EXPLOSION_RADIUS: 100,
+        DAMAGE: 5,
+        MAX_CARRY: 3
+    },
+    
+    // Interaction distances
+    DISTANCES: {
+        INTERACT: 60,
+        DEBRIS: 80,
+        DOOR: 60
+    },
+    
+    // Timings (in ms)
+    TIMINGS: {
+        CRATE_OPEN: 1000,
+        DEBRIS_BURN: 5000,
+        EXTRACTION: 15000,
+        DEATH_RESTART: 2000,
+        LEVEL_TRANSITION: 1000,
+        NVG_CRAFT: 90000
+    },
+    
+    // UI settings
+    UI: {
+        HP_BAR_WIDTH: 200,
+        HP_BAR_HEIGHT: 20,
+        STAMINA_BAR_WIDTH: 150,
+        STAMINA_BAR_HEIGHT: 10,
+        ICON_RADIUS: 12,
+        ICON_SPACING: 30
+    },
+    
+    // Loot tables
+    LOOT: {
+        BANDIT: ['ammo', 'ammo', 'scrap', 'meds', 'helmet', 'vest', 'grenade'],
+        ZOMBIE: ['ammo', 'scrap', 'meds', 'ammo'],
+        SPITTER: ['ammo', 'scrap', 'meds', 'grenade']
+    }
+};
+
 const DEFAULT_STATS = { 
-    hp: 10, maxHp: 10, stamina: 100, maxStamina: 100, ammo: 10, scrap: 0,
-    hasFlashlight: false, hasShotgun: false, currentWeapon: 'pistol',
+    hp: 10, maxHp: 10, stamina: 100, maxStamina: 100, ammo: 30, scrap: 0,
+    grenades: 0,
+    hasFlashlight: false, hasShotgun: false, hasSMG: false, currentWeapon: 'pistol',
+    // Magazine tracking - current rounds in each weapon's magazine
+    magazines: {
+        pistol: CONFIG.WEAPONS.PISTOL.MAG_SIZE,
+        shotgun: CONFIG.WEAPONS.SHOTGUN.MAG_SIZE,
+        smg: CONFIG.WEAPONS.SMG.MAG_SIZE
+    },
     armor: { head: null, body: null, arms: null, feet: null },
     hideout: { 
         restAreaLvl: 0, 
@@ -32,16 +189,17 @@ const DEFAULT_STATS = {
     }
 };
 
-// --- AUDIO MANAGER (PROCEDURAL SOUNDS) ---
+// =============================================================================
+// AUDIO MANAGER (PROCEDURAL SOUNDS)
+// =============================================================================
 class SoundManager {
     constructor() {
         this.ctx = new (window.AudioContext || window.webkitAudioContext)();
         this.masterGain = this.ctx.createGain();
-        this.masterGain.gain.value = 0.3; // Global volume
+        this.masterGain.gain.value = 0.3;
         this.masterGain.connect(this.ctx.destination);
     }
 
-    // Call this on first user interaction
     resume() { if (this.ctx.state === 'suspended') this.ctx.resume(); }
 
     playTone(freq, type, duration, vol = 1) {
@@ -74,58 +232,165 @@ class SoundManager {
     }
 
     // SFX PRESETS
-    shootPistol() { 
-        this.playTone(600, 'sawtooth', 0.1, 0.5); 
-        this.playNoise(0.1, 0.3);
-    }
-    shootShotgun() { 
-        this.playTone(200, 'square', 0.3, 0.6); 
-        this.playNoise(0.3, 0.6);
-    }
+    shootPistol() { this.playTone(600, 'sawtooth', 0.1, 0.5); this.playNoise(0.1, 0.3); }
+    shootShotgun() { this.playTone(200, 'square', 0.3, 0.6); this.playNoise(0.3, 0.6); }
+    shootSMG() { this.playTone(800, 'sawtooth', 0.05, 0.4); this.playNoise(0.05, 0.2); }
     enemyHit() { this.playTone(100, 'sawtooth', 0.1, 0.5); }
     playerHurt() { this.playTone(50, 'sawtooth', 0.3, 0.8); }
     click() { this.playTone(800, 'sine', 0.05, 0.3); }
     loot() { this.playTone(1200, 'square', 0.1, 0.2); this.playTone(1600, 'square', 0.1, 0.2); }
     toggleNVG() { this.playTone(2000, 'sine', 0.2, 0.1); }
     reload() { this.playTone(400, 'triangle', 0.2, 0.4); }
+    reloadFinish() { this.playTone(600, 'triangle', 0.1, 0.5); this.playTone(800, 'triangle', 0.1, 0.3); }
+    dodge() { this.playNoise(0.15, 0.3); this.playTone(300, 'sine', 0.1, 0.2); }
+    empty() { this.playTone(200, 'square', 0.05, 0.3); }
+    spit() { this.playTone(150, 'sawtooth', 0.2, 0.4); this.playNoise(0.15, 0.2); }
+    grenadeThrow() { this.playTone(400, 'sine', 0.1, 0.3); }
+    explosion() { this.playNoise(0.4, 0.8); this.playTone(60, 'square', 0.3, 0.6); this.playTone(40, 'sawtooth', 0.4, 0.5); }
 }
 
 const sfx = new SoundManager();
 
-// --- 1. MAIN MENU SCENE ---
+// =============================================================================
+// FLOATING TEXT POOL - Reuses text objects for performance
+// =============================================================================
+class FloatingTextPool {
+    constructor(scene, poolSize = 20) {
+        this.scene = scene;
+        this.pool = [];
+        for (let i = 0; i < poolSize; i++) {
+            const text = scene.add.text(0, 0, '', {
+                font: '16px Arial',
+                stroke: '#000',
+                strokeThickness: 3
+            }).setOrigin(0.5).setDepth(101).setVisible(false);
+            this.pool.push({ text, active: false });
+        }
+    }
+
+    spawn(x, y, msg, color) {
+        let item = this.pool.find(p => !p.active);
+        if (!item) {
+            const text = this.scene.add.text(x, y, msg, {
+                font: '16px Arial',
+                stroke: '#000',
+                strokeThickness: 3
+            }).setTint(color).setOrigin(0.5).setDepth(101);
+            this.scene.tweens.add({
+                targets: text,
+                y: y - 50,
+                alpha: 0,
+                duration: 1500,
+                onComplete: () => text.destroy()
+            });
+            return;
+        }
+
+        item.active = true;
+        item.text.setPosition(x, y).setText(msg).setTint(color).setAlpha(1).setVisible(true);
+        
+        this.scene.tweens.add({
+            targets: item.text,
+            y: y - 50,
+            alpha: 0,
+            duration: 1500,
+            onComplete: () => {
+                item.text.setVisible(false);
+                item.active = false;
+            }
+        });
+    }
+}
+
+// =============================================================================
+// PARTICLE POOL - For muzzle flashes and effects
+// =============================================================================
+class ParticlePool {
+    constructor(scene, poolSize = 30) {
+        this.scene = scene;
+        this.pool = [];
+        for (let i = 0; i < poolSize; i++) {
+            const particle = scene.add.circle(0, 0, 8, 0xffff00)
+                .setDepth(50).setVisible(false).setAlpha(0);
+            this.pool.push({ particle, active: false });
+        }
+    }
+
+    spawnMuzzleFlash(x, y, angle, size = 1) {
+        // Spawn 3-5 particles for a flash effect
+        const count = 3 + Math.floor(Math.random() * 3);
+        for (let i = 0; i < count; i++) {
+            let item = this.pool.find(p => !p.active);
+            if (!item) continue;
+
+            item.active = true;
+            const spread = (Math.random() - 0.5) * 0.5;
+            const dist = 20 + Math.random() * 15 * size;
+            const px = x + Math.cos(angle + spread) * dist;
+            const py = y + Math.sin(angle + spread) * dist;
+            
+            item.particle.setPosition(px, py)
+                .setRadius(4 + Math.random() * 6 * size)
+                .setFillStyle(Math.random() > 0.5 ? 0xffff00 : 0xffaa00)
+                .setVisible(true)
+                .setAlpha(1);
+
+            this.scene.tweens.add({
+                targets: item.particle,
+                alpha: 0,
+                scaleX: 0.1,
+                scaleY: 0.1,
+                duration: 80 + Math.random() * 40,
+                onComplete: () => {
+                    item.particle.setVisible(false).setScale(1);
+                    item.active = false;
+                }
+            });
+        }
+    }
+}
+
+// =============================================================================
+// MAIN MENU SCENE
+// =============================================================================
 class MainMenuScene extends Phaser.Scene {
     constructor() { super('MainMenuScene'); }
+    
     create() {
-        // Ensure audio starts on first click
         this.input.on('pointerdown', () => sfx.resume());
 
         this.add.rectangle(400, 300, 800, 600, 0x111111);
         this.add.grid(400, 300, 800, 600, 64, 64, 0x222222).setAlpha(0.2);
         this.add.text(400, 100, "ZOMBIE EXTRACTION", { fontSize: '64px', fill: '#00ff00', fontStyle: 'bold' }).setOrigin(0.5);
-        this.add.text(400, 160, "BUILD 9.1 (AUDIO UPDATE)", { fontSize: '24px', fill: '#555' }).setOrigin(0.5);
+        this.add.text(400, 160, "BUILD 12.0 (CONTENT EXPANSION)", { fontSize: '24px', fill: '#555' }).setOrigin(0.5);
 
-        // 1. NEW RUN
         this.createButton(400, 250, "NEW RUN", 0x880000, () => {
             if(confirm("Start a new run? This overwrites current auto-save.")) {
-                localStorage.removeItem(SAVE_KEY);
+                localStorage.removeItem(CONFIG.SAVE_KEY);
                 this.scene.start('GameScene', { level: 1, stats: JSON.parse(JSON.stringify(DEFAULT_STATS)) });
             }
         });
 
-        // 2. CONTINUE
         this.createButton(400, 320, "CONTINUE", 0x004488, () => {
-            let saved = localStorage.getItem(SAVE_KEY);
+            let saved = localStorage.getItem(CONFIG.SAVE_KEY);
             if (saved) {
                 let stats = JSON.parse(saved);
-                this.scene.start('HideoutScene', { stats: stats });
+                // Ensure magazines exist for old saves
+                if (!stats.magazines) {
+                    stats.magazines = {
+                        pistol: CONFIG.WEAPONS.PISTOL.MAG_SIZE,
+                        shotgun: CONFIG.WEAPONS.SHOTGUN.MAG_SIZE,
+                        smg: CONFIG.WEAPONS.SMG.MAG_SIZE
+                    };
+                }
+                this.scene.start('HideoutScene', { stats });
             } else {
                 alert("No save found!");
             }
         });
 
-        // 3. EXPORT SAVE
         this.createButton(400, 420, "EXPORT SAVE TO FILE", 0x444444, () => {
-            let saved = localStorage.getItem(SAVE_KEY);
+            let saved = localStorage.getItem(CONFIG.SAVE_KEY);
             if (!saved) { alert("No save data to export."); return; }
             
             const blob = new Blob([saved], { type: 'application/json' });
@@ -139,7 +404,6 @@ class MainMenuScene extends Phaser.Scene {
             URL.revokeObjectURL(url);
         });
 
-        // 4. IMPORT SAVE
         this.createButton(400, 490, "IMPORT SAVE FROM FILE", 0x444444, () => {
             const input = document.createElement('input');
             input.type = 'file';
@@ -152,7 +416,7 @@ class MainMenuScene extends Phaser.Scene {
                     try {
                         const json = JSON.parse(event.target.result);
                         if (json.hp !== undefined && json.hideout !== undefined) {
-                            localStorage.setItem(SAVE_KEY, JSON.stringify(json));
+                            localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(json));
                             alert("Save imported successfully!");
                         } else {
                             alert("Invalid save file format.");
@@ -166,13 +430,80 @@ class MainMenuScene extends Phaser.Scene {
             input.click();
         });
 
-        // CHEAT CODE
         const cheatBtn = this.add.text(10, 570, "[ CHEAT CODE ]", { fontSize: '16px', fill: '#444' }).setInteractive();
         cheatBtn.on('pointerdown', () => {
             sfx.click();
             const code = prompt("ENTER CHEAT CODE:");
             if (code === 'god mode') this.activateGodMode();
         });
+        
+        // Level select for testing
+        const levelBtn = this.add.text(790, 570, "[ LEVEL SELECT ]", { fontSize: '16px', fill: '#444' }).setOrigin(1, 0).setInteractive();
+        levelBtn.on('pointerdown', () => {
+            sfx.click();
+            this.showLevelSelect();
+        });
+    }
+    
+    showLevelSelect() {
+        // Create level select overlay
+        const overlay = this.add.rectangle(400, 300, 500, 350, 0x111111, 0.95).setDepth(500);
+        const title = this.add.text(400, 150, "SELECT LEVEL", { fontSize: '32px', fill: '#fff' }).setOrigin(0.5).setDepth(501);
+        const subtitle = this.add.text(400, 185, "(starts with full gear)", { fontSize: '14px', fill: '#888' }).setOrigin(0.5).setDepth(501);
+        
+        const levels = [
+            { num: 1, name: "Street", color: 0x2d5a27 },
+            { num: 2, name: "Apartment", color: 0x444444 },
+            { num: 3, name: "Rooftop", color: 0x1a1a2e },
+            { num: 4, name: "Sewers", color: 0x2a3a2a },
+            { num: 5, name: "Hospital", color: 0xddeedd }
+        ];
+        
+        const elements = [overlay, title, subtitle];
+        
+        levels.forEach((lvl, i) => {
+            const btn = this.add.rectangle(400, 230 + i * 50, 300, 40, lvl.color).setInteractive().setDepth(501);
+            const txt = this.add.text(400, 230 + i * 50, `${lvl.num}. ${lvl.name}`, { fontSize: '20px', fill: '#fff' }).setOrigin(0.5).setDepth(502);
+            btn.on('pointerdown', () => {
+                sfx.click();
+                this.startAtLevel(lvl.num);
+            });
+            btn.on('pointerover', () => btn.setAlpha(0.7));
+            btn.on('pointerout', () => btn.setAlpha(1));
+            elements.push(btn, txt);
+        });
+        
+        const closeBtn = this.add.text(400, 480, "[ CANCEL ]", { fontSize: '16px', fill: '#ff4444' }).setOrigin(0.5).setDepth(501).setInteractive();
+        closeBtn.on('pointerdown', () => {
+            sfx.click();
+            elements.forEach(e => e.destroy());
+            closeBtn.destroy();
+        });
+    }
+    
+    startAtLevel(level) {
+        // Create stats with full gear for testing
+        const testStats = {
+            hp: 20, maxHp: 20, stamina: 100, maxStamina: 100, ammo: 200, scrap: 50,
+            grenades: CONFIG.GRENADE.MAX_CARRY,
+            hasFlashlight: true, hasShotgun: true, hasSMG: true, currentWeapon: 'shotgun',
+            magazines: {
+                pistol: CONFIG.WEAPONS.PISTOL.MAG_SIZE,
+                shotgun: CONFIG.WEAPONS.SHOTGUN.MAG_SIZE,
+                smg: CONFIG.WEAPONS.SMG.MAG_SIZE
+            },
+            armor: {
+                head: { name: 'HELMET', durability: 3, maxDurability: 3 },
+                body: { name: 'VEST', durability: 5, maxDurability: 5 },
+                arms: null,
+                feet: null
+            },
+            hideout: {
+                restAreaLvl: 1, generatorLvl: 1, hasSparkPlug: true,
+                armory: { crafting: null, hasNVG: true }
+            }
+        };
+        this.scene.start('GameScene', { level: level, stats: testStats });
     }
 
     createButton(x, y, text, color, callback) {
@@ -186,7 +517,13 @@ class MainMenuScene extends Phaser.Scene {
     activateGodMode() {
         const godStats = {
             hp: 20, maxHp: 20, stamina: 100, maxStamina: 100, ammo: 999, scrap: 999,
-            hasFlashlight: true, hasShotgun: true, currentWeapon: 'shotgun',
+            grenades: CONFIG.GRENADE.MAX_CARRY,
+            hasFlashlight: true, hasShotgun: true, hasSMG: true, currentWeapon: 'shotgun',
+            magazines: {
+                pistol: CONFIG.WEAPONS.PISTOL.MAG_SIZE,
+                shotgun: CONFIG.WEAPONS.SHOTGUN.MAG_SIZE,
+                smg: CONFIG.WEAPONS.SMG.MAG_SIZE
+            },
             armor: {
                 head: { name: 'GOD HELM', durability: 100, maxDurability: 100 },
                 body: { name: 'GOD VEST', durability: 100, maxDurability: 100 },
@@ -198,146 +535,265 @@ class MainMenuScene extends Phaser.Scene {
                 armory: { crafting: null, hasNVG: true }
             }
         };
-        localStorage.setItem(SAVE_KEY, JSON.stringify(godStats));
+        localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(godStats));
         alert("GOD MODE ACTIVATED");
         this.scene.start('HideoutScene', { stats: godStats });
     }
 }
 
-// --- 2. BULLET CLASS ---
+// =============================================================================
+// BULLET CLASS
+// =============================================================================
 class Bullet extends Phaser.Physics.Arcade.Sprite {
-    constructor(scene, x, y) { super(scene, x, y, 'bullet'); }
+    constructor(scene, x, y) { 
+        super(scene, x, y, 'bullet'); 
+    }
+    
     fire(x, y, targetX, targetY, spreadAngle = 0, isEnemy = false) {
-        this.body.reset(x, y); this.body.enable = true; 
-        this.setActive(true); this.setVisible(true);
-        this.hasHit = false; this.isEnemyBullet = isEnemy; 
+        this.body.reset(x, y);
+        this.body.enable = true; 
+        this.setActive(true);
+        this.setVisible(true);
+        this.hasHit = false;
+        this.isEnemyBullet = isEnemy; 
         this.setTint(isEnemy ? 0xff0000 : 0xffff00);
         
-        // AUDIO: Play shot sound based on owner
-        if (!isEnemy) {
-            // Check scene for weapon type, simplified here
-            // We'll let the GameScene handle player shot sound to distinguish shotgun/pistol
-        } else {
-             sfx.shootPistol(); // Bandits use pistols
-        }
+        if (isEnemy) sfx.shootPistol();
 
         let baseAngle = Phaser.Math.Angle.Between(x, y, targetX, targetY);
         let finalAngle = baseAngle + Phaser.Math.DegToRad(spreadAngle);
-        this.scene.physics.velocityFromRotation(finalAngle, 500, this.body.velocity);
+        this.scene.physics.velocityFromRotation(finalAngle, CONFIG.WEAPONS.BULLET_SPEED, this.body.velocity);
         this.setRotation(finalAngle);
     }
+    
     preUpdate(time, delta) {
         super.preUpdate(time, delta);
-        if (this.y < -50 || this.y > 650 || this.x < -50 || this.x > 850) { this.destroy(); }
+        if (this.y < -50 || this.y > 650 || this.x < -50 || this.x > 850) {
+            this.setActive(false);
+            this.setVisible(false);
+            this.body.enable = false;
+        }
     }
 }
 
-// --- 3. ENEMY CLASSES ---
+// =============================================================================
+// ENEMY CLASS
+// =============================================================================
 class Enemy extends Phaser.Physics.Arcade.Sprite {
     constructor(scene, x, y, target, type) {
-        let texture = type === 'leaper' ? 'leaper' : (type === 'bandit' ? 'bandit' : 'zombie');
-        super(scene, x, y, texture);
-        scene.add.existing(this); scene.physics.add.existing(this);
+        const cfg = CONFIG.ENEMIES[type.toUpperCase()] || CONFIG.ENEMIES.WALKER;
+        super(scene, x, y, cfg.TEXTURE);
+        
+        scene.add.existing(this);
+        scene.physics.add.existing(this);
+        
         this.target = target;
-        this.enemyType = type; 
+        this.enemyType = type;
+        this.config = cfg;
         this.canTakeDamage = true;
         this.healthBar = scene.add.graphics().setDepth(100).setVisible(false);
-        
-        // ** FIX: Initialize lastFired so math works for Bandits **
-        this.lastFired = 0; 
+        this.lastFired = 0;
+        this.isInvulnerable = false;
 
-        if (this.enemyType === 'boss') {
-            this.setScale(3); this.setTint(0xff0000);
-            this.hp = 5; this.maxHp = 5; this.speed = 85; this.damage = 10;
-        } else if (this.enemyType === 'leaper') {
-            this.hp = 1; this.maxHp = 1; this.speed = 110; this.damage = 2;
-            this.state = 'CHASE'; this.leapTimer = 0;
-        } else if (this.enemyType === 'bandit') {
-            this.hp = 3; this.maxHp = 3; this.speed = 90; this.damage = 1; 
-            this.ammo = 10; this.state = 'CHASE';
-        } else { 
-            this.hp = 2; this.maxHp = 2; this.speed = 60; this.damage = 2;
+        this.hp = cfg.HP;
+        this.maxHp = cfg.HP;
+        this.speed = cfg.SPEED;
+        this.damage = cfg.DAMAGE;
+
+        if (type === 'boss') {
+            this.setScale(cfg.SCALE);
+            this.setTint(0xff0000);
+        } else if (type === 'leaper') {
+            this.state = 'CHASE';
+            this.leapTimer = 0;
+        } else if (type === 'bandit') {
+            this.ammo = cfg.AMMO;
+            this.state = 'CHASE';
+        } else if (type === 'spitter') {
+            this.lastSpit = 0;
+            this.setTint(0x00ff00); // Green tint for toxic look
         }
     }
+    
     takeDamage(amount) {
-        if (!this.active || !this.canTakeDamage) return;
+        if (!this.active || !this.canTakeDamage || this.isInvulnerable) return;
+        
         this.hp -= amount;
-        sfx.enemyHit(); // AUDIO
+        sfx.enemyHit();
         this.setTint(0xffffff);
         this.scene.time.delayedCall(50, () => { if (this.active) this.clearTint(); });
         this.updateHealthBar();
+        
         if (this.enemyType === 'boss') {
             this.scene.updateBossBar(this.hp, this.maxHp);
-            this.canTakeDamage = false; 
-            this.scene.time.delayedCall(500, () => { if(this.active) this.canTakeDamage = true; });
+            this.canTakeDamage = false;
+            this.isInvulnerable = true;
+            this.flashTween = this.scene.tweens.add({
+                targets: this,
+                alpha: 0.5,
+                duration: 100,
+                yoyo: true,
+                repeat: 4,
+                onComplete: () => {
+                    if (this.active) {
+                        this.setAlpha(1);
+                        this.canTakeDamage = true;
+                        this.isInvulnerable = false;
+                    }
+                }
+            });
         }
+        
         if (this.hp <= 0) {
-            if (this.enemyType === 'boss') this.scene.spawnSwitch(this.x, this.y);
+            if (this.enemyType === 'boss' && this.scene.currentLevel === 5) {
+                this.scene.spawnSwitch(this.x, this.y);
+            }
             this.scene.spawnLootSkull(this.x, this.y, this.enemyType);
             this.destroy();
         }
     }
+    
     updateHealthBar() {
         if (this.hp <= 0) { this.healthBar.setVisible(false); return; }
-        this.healthBar.setVisible(true); this.healthBar.clear();
+        this.healthBar.setVisible(true);
+        this.healthBar.clear();
         const w = 40, h = 6, x = -w / 2, y = -40;
-        this.healthBar.fillStyle(0xff0000); this.healthBar.fillRect(x, y, w, h);
-        this.healthBar.fillStyle(0x00ff00); this.healthBar.fillRect(x, y, w * (this.hp / this.maxHp), h);
+        this.healthBar.fillStyle(0xff0000);
+        this.healthBar.fillRect(x, y, w, h);
+        this.healthBar.fillStyle(0x00ff00);
+        this.healthBar.fillRect(x, y, w * (this.hp / this.maxHp), h);
     }
+    
     knockBack() {
-        const speed = (this.enemyType === 'leaper') ? 250 : 100;
-        if(this.enemyType === 'leaper') { this.state = 'COOLDOWN'; this.leapTimer = 2000; }
+        const speed = (this.enemyType === 'leaper') ? CONFIG.ENEMIES.LEAPER.KNOCKBACK_SPEED : CONFIG.ENEMIES.KNOCKBACK_SPEED;
+        if (this.enemyType === 'leaper') {
+            this.state = 'COOLDOWN';
+            this.leapTimer = CONFIG.ENEMIES.LEAPER.COOLDOWN_TIME;
+        }
         const angle = Phaser.Math.Angle.Between(this.target.x, this.target.y, this.x, this.y);
         this.scene.physics.velocityFromRotation(angle, speed, this.body.velocity);
     }
+    
     update(time, delta) {
         if (!this.active || !this.body) return;
         if (this.healthBar) this.healthBar.setPosition(this.x, this.y);
 
+        const cfg = this.config;
+
         if (this.enemyType === 'bandit') {
             const dist = Phaser.Math.Distance.Between(this.x, this.y, this.target.x, this.target.y);
             if (this.ammo > 0) {
-                if (dist < 350) {
-                    this.setVelocity(0); 
-                    // ** FIX: This check now works because lastFired is initialized **
-                    if (time - this.lastFired > 2000) { 
+                if (dist < cfg.FIRE_RANGE) {
+                    this.setVelocity(0);
+                    if (time - this.lastFired > cfg.FIRE_RATE) {
                         const b = this.scene.bullets.get(this.x, this.y);
                         if (b) {
-                            b.fire(this.x, this.y, this.target.x, this.target.y, Phaser.Math.Between(-5, 5), true);
-                            this.ammo--; this.lastFired = time;
+                            b.fire(this.x, this.y, this.target.x, this.target.y, Phaser.Math.Between(-cfg.SPREAD, cfg.SPREAD), true);
+                            this.ammo--;
+                            this.lastFired = time;
                         }
                     }
-                } else { this.scene.physics.moveToObject(this, this.target, this.speed); }
-            } else { this.scene.physics.moveToObject(this, this.target, 120); }
+                } else {
+                    this.scene.physics.moveToObject(this, this.target, this.speed);
+                }
+            } else {
+                this.scene.physics.moveToObject(this, this.target, cfg.MELEE_SPEED);
+            }
             return;
         }
 
-        if (this.enemyType === 'boss') this.scene.physics.moveToObject(this, this.target, this.speed);
-        else if (this.enemyType === 'walker') {
-            if (Phaser.Math.Distance.Between(this.x, this.y, this.target.x, this.target.y) < 300) 
+        if (this.enemyType === 'spitter') {
+            const dist = Phaser.Math.Distance.Between(this.x, this.y, this.target.x, this.target.y);
+            if (dist < cfg.SPIT_RANGE) {
+                this.setVelocity(0);
+                if (time - this.lastSpit > cfg.SPIT_COOLDOWN) {
+                    // Spit acid at player
+                    this.scene.spawnAcidSpit(this.x, this.y, this.target.x, this.target.y);
+                    this.lastSpit = time;
+                    sfx.spit();
+                    // Visual feedback - flash when spitting
+                    this.setTint(0xffff00);
+                    this.scene.time.delayedCall(100, () => { if (this.active) this.setTint(0x00ff00); });
+                }
+            } else {
                 this.scene.physics.moveToObject(this, this.target, this.speed);
+            }
+            return;
+        }
+
+        if (this.enemyType === 'boss') {
+            this.scene.physics.moveToObject(this, this.target, this.speed);
+        } else if (this.enemyType === 'walker') {
+            if (Phaser.Math.Distance.Between(this.x, this.y, this.target.x, this.target.y) < cfg.AGGRO_RANGE) {
+                this.scene.physics.moveToObject(this, this.target, this.speed);
+            }
         } else if (this.enemyType === 'leaper') {
             const dist = Phaser.Math.Distance.Between(this.x, this.y, this.target.x, this.target.y);
             switch (this.state) {
-                case 'CHASE': this.scene.physics.moveToObject(this, this.target, 110);
-                    if (dist < 180) { this.state = 'PREPARE'; this.setVelocity(0); this.setTint(0xffaa00); this.leapTimer = 500; } break;
-                case 'PREPARE': this.leapTimer -= delta;
-                    if (this.leapTimer <= 0) { this.state = 'LEAP'; this.clearTint(); this.scene.physics.moveToObject(this, this.target, 450); this.leapTimer = 600; } break;
-                case 'LEAP': this.leapTimer -= delta;
-                    if (this.leapTimer <= 0) { this.state = 'COOLDOWN'; this.setVelocity(0); this.leapTimer = 1500; } break;
-                case 'COOLDOWN': this.leapTimer -= delta; if (this.leapTimer <= 0) this.state = 'CHASE'; break;
+                case 'CHASE':
+                    this.scene.physics.moveToObject(this, this.target, cfg.SPEED);
+                    if (dist < cfg.LEAP_RANGE) {
+                        this.state = 'PREPARE';
+                        this.setVelocity(0);
+                        this.setTint(0xffaa00);
+                        this.leapTimer = cfg.PREPARE_TIME;
+                    }
+                    break;
+                case 'PREPARE':
+                    this.leapTimer -= delta;
+                    if (this.leapTimer <= 0) {
+                        this.state = 'LEAP';
+                        this.clearTint();
+                        this.scene.physics.moveToObject(this, this.target, cfg.LEAP_SPEED);
+                        this.leapTimer = cfg.LEAP_DURATION;
+                    }
+                    break;
+                case 'LEAP':
+                    this.leapTimer -= delta;
+                    if (this.leapTimer <= 0) {
+                        this.state = 'COOLDOWN';
+                        this.setVelocity(0);
+                        this.leapTimer = cfg.COOLDOWN_TIME;
+                    }
+                    break;
+                case 'PINNING':
+                    break;
+                case 'COOLDOWN':
+                    this.leapTimer -= delta;
+                    if (this.leapTimer <= 0) this.state = 'CHASE';
+                    break;
             }
         }
     }
-    destroy(fromScene) { if (this.healthBar) this.healthBar.destroy(); super.destroy(fromScene); }
+    
+    destroy(fromScene) {
+        if (this.healthBar) this.healthBar.destroy();
+        if (this.flashTween) this.flashTween.stop();
+        super.destroy(fromScene);
+    }
 }
 
-// --- 4. HIDEOUT SCENE ---
+// =============================================================================
+// HIDEOUT SCENE
+// =============================================================================
 class HideoutScene extends Phaser.Scene {
     constructor() { super('HideoutScene'); }
+    
     create(data) {
         this.stats = data.stats;
-        localStorage.setItem(SAVE_KEY, JSON.stringify(this.stats));
+        // Ensure magazines exist
+        if (!this.stats.magazines) {
+            this.stats.magazines = {
+                pistol: CONFIG.WEAPONS.PISTOL.MAG_SIZE,
+                shotgun: CONFIG.WEAPONS.SHOTGUN.MAG_SIZE,
+                smg: CONFIG.WEAPONS.SMG.MAG_SIZE
+            };
+        }
+        // Ensure grenades exist for old saves
+        if (this.stats.grenades === undefined) {
+            this.stats.grenades = 0;
+        }
+        localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(this.stats));
 
         this.add.rectangle(400, 300, 800, 600, 0x1a1a1a);
         this.add.grid(400, 300, 800, 600, 32, 32, 0x222222).setAlpha(0.5);
@@ -351,12 +807,17 @@ class HideoutScene extends Phaser.Scene {
             () => {
                 const cost = (this.stats.hideout.restAreaLvl + 1) * 5;
                 if (this.stats.scrap >= cost) {
-                    this.stats.scrap -= cost; this.stats.hideout.restAreaLvl++;
-                    if(this.stats.hideout.restAreaLvl > 0) this.stats.hp = this.stats.maxHp; 
-                    if(this.stats.hideout.restAreaLvl > 1) this.stats.maxHp += 2;
-                    this.updateStatText(); localStorage.setItem(SAVE_KEY, JSON.stringify(this.stats)); return true;
-                } return false;
-            }, () => `UPGRADE (${(this.stats.hideout.restAreaLvl + 1) * 5} SCRAP)`
+                    this.stats.scrap -= cost;
+                    this.stats.hideout.restAreaLvl++;
+                    if (this.stats.hideout.restAreaLvl > 0) this.stats.hp = this.stats.maxHp;
+                    if (this.stats.hideout.restAreaLvl > 1) this.stats.maxHp += 2;
+                    this.updateStatText();
+                    localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(this.stats));
+                    return true;
+                }
+                return false;
+            },
+            () => `UPGRADE (${(this.stats.hideout.restAreaLvl + 1) * 5} SCRAP)`
         );
 
         this.createUpgradeCard(270, 200, "GENERATOR", 
@@ -367,12 +828,18 @@ class HideoutScene extends Phaser.Scene {
             () => {
                 if (this.stats.hideout.generatorLvl === 0) {
                     if (this.stats.scrap >= 10 && this.stats.hideout.hasSparkPlug) {
-                        this.stats.scrap -= 10; this.stats.hideout.generatorLvl = 1;
-                        this.stats.hideout.hasSparkPlug = false; this.stats.hasFlashlight = true;
-                        this.updateStatText(); localStorage.setItem(SAVE_KEY, JSON.stringify(this.stats)); return true;
+                        this.stats.scrap -= 10;
+                        this.stats.hideout.generatorLvl = 1;
+                        this.stats.hideout.hasSparkPlug = false;
+                        this.stats.hasFlashlight = true;
+                        this.updateStatText();
+                        localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(this.stats));
+                        return true;
                     }
-                } return false;
-            }, () => this.stats.hideout.generatorLvl === 0 ? "BUILD (10 SCRAP + PLUG)" : "MAX LEVEL"
+                }
+                return false;
+            },
+            () => this.stats.hideout.generatorLvl === 0 ? "BUILD (10 SCRAP + PLUG)" : "MAX LEVEL"
         );
 
         this.createArmoryCard(500, 200);
@@ -386,6 +853,10 @@ class HideoutScene extends Phaser.Scene {
                 this.stats.hp = Math.min(this.stats.hp + heal, this.stats.maxHp);
             }
             if (this.stats.hideout.generatorLvl > 0) this.stats.hasFlashlight = true;
+            // Refill magazines on deploy
+            this.stats.magazines.pistol = CONFIG.WEAPONS.PISTOL.MAG_SIZE;
+            this.stats.magazines.shotgun = CONFIG.WEAPONS.SHOTGUN.MAG_SIZE;
+            this.stats.magazines.smg = CONFIG.WEAPONS.SMG.MAG_SIZE;
             this.cameras.main.fade(500, 0, 0, 0);
             this.time.delayedCall(500, () => { this.scene.start('GameScene', { level: 1, stats: this.stats }); });
         });
@@ -411,7 +882,7 @@ class HideoutScene extends Phaser.Scene {
     }
 
     createArmoryCard(x, y) {
-        const bg = this.add.rectangle(x + 100, y + 75, 220, 160, 0x333333).setStrokeStyle(2, 0x555555);
+        this.add.rectangle(x + 100, y + 75, 220, 160, 0x333333).setStrokeStyle(2, 0x555555);
         this.add.text(x + 10, y + 10, "ARMORY", { fontSize: '20px', fill: '#ff00ff' });
         this.armoryDesc = this.add.text(x + 10, y + 40, "", { fontSize: '14px', fill: '#aaa' });
         this.armoryTimerText = this.add.text(x + 10, y + 80, "", { fontSize: '14px', fill: '#00ff00' });
@@ -427,22 +898,31 @@ class HideoutScene extends Phaser.Scene {
             let armory = this.stats.hideout.armory;
             if (armory.hasNVG) return;
             if (armory.crafting && Date.now() >= armory.crafting.finishTime) {
-                armory.hasNVG = true; armory.crafting = null;
-                this.updateArmoryUI(); localStorage.setItem(SAVE_KEY, JSON.stringify(this.stats)); return;
+                armory.hasNVG = true;
+                armory.crafting = null;
+                this.updateArmoryUI();
+                localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(this.stats));
+                return;
             }
             if (armory.crafting) return;
             if (this.stats.scrap >= 3) {
                 this.stats.scrap -= 3;
-                armory.crafting = { item: 'nvg', finishTime: Date.now() + 90000 };
-                this.updateStatText(); this.updateArmoryUI(); localStorage.setItem(SAVE_KEY, JSON.stringify(this.stats));
-            } else { this.cameras.main.shake(100, 0.005); }
+                armory.crafting = { item: 'nvg', finishTime: Date.now() + CONFIG.TIMINGS.NVG_CRAFT };
+                this.updateStatText();
+                this.updateArmoryUI();
+                localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(this.stats));
+            } else {
+                this.cameras.main.shake(100, 0.005);
+            }
         });
 
         ammoBtn.on('pointerdown', () => {
             if (this.stats.scrap >= 1) {
                 sfx.reload();
-                this.stats.scrap -= 1; this.stats.ammo += 4;
-                this.updateStatText(); localStorage.setItem(SAVE_KEY, JSON.stringify(this.stats));
+                this.stats.scrap -= 1;
+                this.stats.ammo += 4;
+                this.updateStatText();
+                localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(this.stats));
                 this.cameras.main.flash(100, 0, 255, 0);
             }
         });
@@ -452,13 +932,18 @@ class HideoutScene extends Phaser.Scene {
         let armory = this.stats.hideout.armory;
         if (armory.hasNVG) {
             this.armoryDesc.setText("NVG UNLOCKED\nPress [N] in game.");
-            this.armoryBtnText.setText("EQUIPPED"); this.armoryTimerText.setText("");
-            this.armoryBtn.disableInteractive(); this.armoryBtn.setFillStyle(0x222222);
+            this.armoryBtnText.setText("EQUIPPED");
+            this.armoryTimerText.setText("");
+            this.armoryBtn.disableInteractive();
+            this.armoryBtn.setFillStyle(0x222222);
         } else if (armory.crafting) {
-            this.armoryDesc.setText("Fabricating NVG..."); this.armoryBtn.disableInteractive();
+            this.armoryDesc.setText("Fabricating NVG...");
+            this.armoryBtn.disableInteractive();
         } else {
             this.armoryDesc.setText("Craft Night Vision\nCost: 3 Scrap\nTime: 1m 30s");
-            this.armoryBtnText.setText("CRAFT (3 SCRAP)"); this.armoryTimerText.setText(""); this.armoryBtn.setInteractive();
+            this.armoryBtnText.setText("CRAFT (3 SCRAP)");
+            this.armoryTimerText.setText("");
+            this.armoryBtn.setInteractive();
         }
     }
 
@@ -479,7 +964,7 @@ class HideoutScene extends Phaser.Scene {
     }
 
     createUpgradeCard(x, y, title, descFn, actionFn, costFn) {
-        const bg = this.add.rectangle(x + 100, y + 75, 220, 160, 0x333333).setStrokeStyle(2, 0x555555);
+        this.add.rectangle(x + 100, y + 75, 220, 160, 0x333333).setStrokeStyle(2, 0x555555);
         this.add.text(x + 10, y + 10, title, { fontSize: '20px', fill: '#ffff00' });
         const descText = this.add.text(x + 10, y + 40, descFn(), { fontSize: '14px', fill: '#aaa' });
         const btn = this.add.rectangle(x + 100, y + 130, 200, 30, 0x555555).setInteractive();
@@ -487,141 +972,519 @@ class HideoutScene extends Phaser.Scene {
         btn.on('pointerdown', () => {
             if (actionFn()) {
                 sfx.click();
-                descText.setText(descFn()); btnText.setText(costFn()); this.cameras.main.shake(100, 0.005);
+                descText.setText(descFn());
+                btnText.setText(costFn());
+                this.cameras.main.shake(100, 0.005);
             } else {
-                this.cameras.main.shake(100, 0.005); btn.setTint(0xff0000); this.time.delayedCall(200, () => btn.clearTint());
+                this.cameras.main.shake(100, 0.005);
+                btn.setFillStyle(0xff0000);
+                this.time.delayedCall(200, () => btn.setFillStyle(0x555555));
             }
         });
     }
 }
 
-// --- 5. GAME SCENE ---
+// =============================================================================
+// GAME SCENE
+// =============================================================================
 class GameScene extends Phaser.Scene {
     constructor() { super('GameScene'); }
+    
     preload() {
         const graphics = this.make.graphics({ x: 0, y: 0, add: false });
-        // Textures
+        
         graphics.fillStyle(0x00ff00, 1); graphics.fillRect(0,0,32,32); graphics.generateTexture('player', 32,32);
         graphics.fillStyle(0x8B4513, 1); graphics.fillRect(0,0,32,32); graphics.generateTexture('crate', 32,32);
         graphics.fillStyle(0x663399, 1); graphics.fillRect(0,0,32,32); graphics.generateTexture('zombie', 32,32);
         graphics.fillStyle(0xFF4500, 1); graphics.fillRect(0,0,32,32); graphics.generateTexture('leaper', 32,32);
-        graphics.fillStyle(0x0000FF, 1); graphics.fillRect(0,0,32,32); graphics.generateTexture('bandit', 32,32); 
+        graphics.fillStyle(0x0000FF, 1); graphics.fillRect(0,0,32,32); graphics.generateTexture('bandit', 32,32);
+        graphics.fillStyle(0x00AA00, 1); graphics.fillRect(0,0,32,32); graphics.generateTexture('spitter', 32,32);
         graphics.fillStyle(0xffff00, 1); graphics.fillRect(0,0,8,8); graphics.generateTexture('bullet', 8,8);
+        graphics.fillStyle(0x00ff00, 1); graphics.fillCircle(6,6,6); graphics.generateTexture('acid', 12,12);
+        graphics.fillStyle(0x556B2F, 1); graphics.fillCircle(8,8,8); graphics.generateTexture('grenade', 16,16);
         graphics.fillStyle(0xFFD700, 1); graphics.fillRect(0,0,40,60); graphics.generateTexture('door', 40,60);
         graphics.fillStyle(0x555555, 1); graphics.fillRect(0,0,32,32); graphics.generateTexture('wall', 32,32);
         graphics.fillStyle(0xffffff, 1); graphics.fillRect(0,0,40,40); graphics.generateTexture('slash', 40,40);
         graphics.fillStyle(0x2d5a27, 1); graphics.fillRect(0,0,32,32); graphics.generateTexture('floor_grass', 32,32);
-        graphics.fillStyle(0x444444, 1); graphics.fillRect(0,0,32,32); graphics.generateTexture('floor_apt', 32,32);
-        graphics.fillStyle(0x1a1a2e, 1); graphics.fillRect(0,0,32,32); graphics.generateTexture('floor_roof', 32,32);
-        graphics.fillStyle(0xff0000, 1); graphics.fillRect(0,0,20,20); graphics.generateTexture('pickup_hp', 20,20);
-        graphics.fillStyle(0x0088ff, 1); graphics.fillRect(0,0,20,20); graphics.generateTexture('pickup_stamina', 20,20);
-        graphics.fillStyle(0x333333, 1); graphics.fillRect(0,0,60,60); graphics.generateTexture('debris', 60,60); 
-        graphics.fillStyle(0x00ff00, 1); graphics.fillRect(0,0,30,30); graphics.generateTexture('switch', 30,30);
+        graphics.clear(); graphics.fillStyle(0x444444, 1); graphics.fillRect(0,0,32,32); graphics.generateTexture('floor_apt', 32,32);
+        graphics.clear(); graphics.fillStyle(0x1a1a2e, 1); graphics.fillRect(0,0,32,32); graphics.generateTexture('floor_roof', 32,32);
+        graphics.clear(); graphics.fillStyle(0x2a3a2a, 1); graphics.fillRect(0,0,32,32); graphics.generateTexture('floor_sewer', 32,32);
+        graphics.clear(); graphics.fillStyle(0xddeedd, 1); graphics.fillRect(0,0,32,32); graphics.generateTexture('floor_hospital', 32,32);
+        graphics.clear(); graphics.fillStyle(0xff0000, 1); graphics.fillRect(0,0,20,20); graphics.generateTexture('pickup_hp', 20,20);
+        graphics.clear(); graphics.fillStyle(0x0088ff, 1); graphics.fillRect(0,0,20,20); graphics.generateTexture('pickup_stamina', 20,20);
+        graphics.clear(); graphics.fillStyle(0x333333, 1); graphics.fillRect(0,0,60,60); graphics.generateTexture('debris', 60,60);
+        graphics.clear(); graphics.fillStyle(0x00ff00, 1); graphics.fillRect(0,0,30,30); graphics.generateTexture('switch', 30,30);
         
-        // --- SKULL ART GENERATION ---
+        // Skull art
         graphics.clear();
-        graphics.lineStyle(2, 0x000000, 1); // Outline
-        graphics.fillStyle(0xEAEAEA, 1); // Bone Color
-        graphics.fillCircle(16, 14, 11); graphics.strokeCircle(16, 14, 11); // Cranium
-        graphics.fillRect(10, 20, 12, 8); graphics.strokeRect(10, 20, 12, 8); // Jaw
-        graphics.fillStyle(0x000000, 1); graphics.fillCircle(12, 14, 3.5); graphics.fillCircle(20, 14, 3.5); // Eyes
-        graphics.beginPath(); graphics.moveTo(16, 18); graphics.lineTo(14, 21); graphics.lineTo(18, 21); graphics.closePath(); graphics.fill(); // Nose
-        graphics.lineStyle(1, 0x000000); graphics.beginPath(); graphics.moveTo(13, 20); graphics.lineTo(13, 28); graphics.moveTo(16, 20); graphics.lineTo(16, 28); graphics.moveTo(19, 20); graphics.lineTo(19, 28); graphics.strokePath(); // Teeth
+        graphics.lineStyle(2, 0x000000, 1);
+        graphics.fillStyle(0xEAEAEA, 1);
+        graphics.fillCircle(16, 14, 11); graphics.strokeCircle(16, 14, 11);
+        graphics.fillRect(10, 20, 12, 8); graphics.strokeRect(10, 20, 12, 8);
+        graphics.fillStyle(0x000000, 1);
+        graphics.fillCircle(12, 14, 3.5); graphics.fillCircle(20, 14, 3.5);
+        graphics.beginPath(); graphics.moveTo(16, 18); graphics.lineTo(14, 21); graphics.lineTo(18, 21); graphics.closePath(); graphics.fill();
+        graphics.lineStyle(1, 0x000000);
+        graphics.beginPath(); graphics.moveTo(13, 20); graphics.lineTo(13, 28); graphics.moveTo(16, 20); graphics.lineTo(16, 28); graphics.moveTo(19, 20); graphics.lineTo(19, 28); graphics.strokePath();
         graphics.generateTexture('skull', 32, 32);
     }
+    
     create(data = {}) {
         this.currentLevel = data.level || 1;
         this.playerStats = data.stats ? JSON.parse(JSON.stringify(data.stats)) : JSON.parse(JSON.stringify(DEFAULT_STATS));
+        // Ensure magazines exist
+        if (!this.playerStats.magazines) {
+            this.playerStats.magazines = {
+                pistol: CONFIG.WEAPONS.PISTOL.MAG_SIZE,
+                shotgun: CONFIG.WEAPONS.SHOTGUN.MAG_SIZE,
+                smg: CONFIG.WEAPONS.SMG.MAG_SIZE
+            };
+        }
+        // Ensure grenades exist for old saves
+        if (this.playerStats.grenades === undefined) {
+            this.playerStats.grenades = 0;
+        }
         this.checkpointStats = JSON.parse(JSON.stringify(this.playerStats));
 
-        this.hasKey = false; this.hasMolotov = false; this.isOpening = false; this.isPaused = false;
-        this.isPinned = false; this.isMeleeAttacking = false; this.debrisBurning = false;
-        this.lastFired = 0; this.switchDropped = false; this.extractionTimer = 15; this.extractionActive = false;
-        this.isInventoryOpen = false; this.nvgOn = false;
+        // State flags
+        this.hasKey = false;
+        this.hasMolotov = false;
+        this.isOpening = false;
+        this.isPaused = false;
+        this.isPinned = false;
+        this.pinnedBy = null;
+        this.isMeleeAttacking = false;
+        this.debrisBurning = false;
+        this.lastFired = 0;
+        this.switchDropped = false;
+        this.extractionTimer = 15;
+        this.extractionActive = false;
+        this.isInventoryOpen = false;
+        this.nvgOn = false;
+        
+        // Dodge roll state
+        this.isDodging = false;
+        this.dodgeCooldown = 0;
+        this.lastDodgeTime = 0;
+        
+        // Reload state
+        this.isReloading = false;
+        this.reloadTimer = null;
+        
+        // Transition state - prevents updates during level change
+        this.isTransitioning = false;
+        
+        // Track active timer events for cleanup
+        this.activeTimerEvents = [];
 
-        this.bullets = this.physics.add.group({ classType: Bullet, runChildUpdate: true });
-        this.enemies = this.add.group(); 
+        // Groups
+        this.bullets = this.physics.add.group({ classType: Bullet, runChildUpdate: true, maxSize: 50 });
+        this.acidProjectiles = this.physics.add.group({ runChildUpdate: true, maxSize: 20 });
+        this.grenades = this.physics.add.group({ runChildUpdate: true, maxSize: 10 });
+        this.enemies = this.add.group();
         this.pickups = this.physics.add.staticGroup();
         this.crates = this.physics.add.staticGroup();
-        this.skulls = this.physics.add.staticGroup(); 
+        this.skulls = this.physics.add.staticGroup();
         this.walls = this.physics.add.staticGroup();
         this.debris = this.physics.add.staticGroup();
         this.switches = this.physics.add.staticGroup();
+
+        // Floating text and particle pools
+        this.floatingText = new FloatingTextPool(this, 20);
+        this.particles = new ParticlePool(this, 30);
+
+        // UI elements needed by spawnLevelEntities (must be created before)
+        this.uiGraphics = this.add.graphics().setDepth(100);
+        this.uiText = this.add.text(10, 65, '', { font: '16px Arial', fill: '#fff' }).setDepth(100);
+        this.bossBar = this.add.graphics().setDepth(150).setVisible(false);
+        this.bossText = this.add.text(400, 25, "BOSS", { fontSize: '20px', fill: '#fff' }).setOrigin(0.5).setDepth(200).setVisible(false);
 
         this.setupMapForLevel(this.currentLevel);
         this.player = this.physics.add.sprite(400, 550, 'player').setCollideWorldBounds(true).setDepth(10);
         this.spawnLevelEntities(this.currentLevel);
 
+        // Colliders
         this.physics.add.collider(this.player, this.walls);
         this.physics.add.collider(this.player, this.crates);
         this.physics.add.collider(this.player, this.debris);
         this.physics.add.collider(this.enemies, this.walls);
         this.physics.add.collider(this.enemies, this.crates);
-        this.physics.add.collider(this.bullets, this.walls, (b) => b.destroy());
-        this.physics.add.collider(this.bullets, this.crates, (b) => b.destroy());
-        this.physics.add.collider(this.bullets, this.debris, (b) => b.destroy());
+        this.physics.add.collider(this.bullets, this.walls, (b) => { b.setActive(false); b.setVisible(false); b.body.enable = false; });
+        this.physics.add.collider(this.bullets, this.crates, (b) => { b.setActive(false); b.setVisible(false); b.body.enable = false; });
+        this.physics.add.collider(this.bullets, this.debris, (b) => { b.setActive(false); b.setVisible(false); b.body.enable = false; });
 
+        // Overlaps
         this.physics.add.overlap(this.bullets, this.enemies, (obj1, obj2) => {
             const bullet = (obj1.texture.key === 'bullet') ? obj1 : obj2;
             const enemy = (obj1.texture.key === 'bullet') ? obj2 : obj1;
             if (bullet.active && enemy.active && !bullet.hasHit) {
-                if (bullet.isEnemyBullet) return; 
-                bullet.hasHit = true; bullet.disableBody(true, true); bullet.destroy(); 
+                if (bullet.isEnemyBullet) return;
+                bullet.hasHit = true;
+                bullet.setActive(false);
+                bullet.setVisible(false);
+                bullet.body.enable = false;
                 if (typeof enemy.takeDamage === 'function') enemy.takeDamage(1);
             }
         });
-        
+
         this.physics.add.overlap(this.bullets, this.player, (player, bullet) => {
             if (bullet.active && !bullet.hasHit) {
-                if (!bullet.isEnemyBullet) return; 
-                bullet.hasHit = true; bullet.disableBody(true, true); bullet.destroy();
+                if (!bullet.isEnemyBullet) return;
+                // Dodge roll grants invincibility
+                if (this.isDodging) return;
+                bullet.hasHit = true;
+                bullet.setActive(false);
+                bullet.setVisible(false);
+                bullet.body.enable = false;
                 this.hitPlayer(1);
             }
         });
 
+        // Acid projectile hits player
+        this.physics.add.overlap(this.acidProjectiles, this.player, (player, acid) => {
+            if (acid.active && !acid.hasHit) {
+                if (this.isDodging) return;
+                acid.hasHit = true;
+                acid.setActive(false);
+                acid.setVisible(false);
+                acid.body.enable = false;
+                this.hitPlayer(CONFIG.ENEMIES.SPITTER.DAMAGE);
+                this.showFloatingText(this.player.x, this.player.y - 30, "ACID!", 0x00ff00);
+            }
+        });
+
+        // Acid hits walls
+        this.physics.add.collider(this.acidProjectiles, this.walls, (acid) => { 
+            acid.setActive(false); acid.setVisible(false); acid.body.enable = false; 
+        });
+        this.physics.add.collider(this.acidProjectiles, this.crates, (acid) => { 
+            acid.setActive(false); acid.setVisible(false); acid.body.enable = false; 
+        });
+
         this.physics.add.overlap(this.player, this.enemies, (p, e) => {
             if (!e.active) return;
+            // Dodge roll grants invincibility
+            if (this.isDodging) return;
             if (e.enemyType === 'leaper' && e.state === 'LEAP') this.triggerKnockdown(e);
-            else if (e.enemyType === 'bandit' && e.ammo > 0) return; 
+            else if (e.enemyType === 'bandit' && e.ammo > 0) return;
             else this.hitPlayer(e.damage);
         });
 
-        this.physics.add.overlap(this.player, this.pickups, (p, item) => { this.applyLoot(item.getData('type')); item.destroy(); });
+        this.physics.add.overlap(this.player, this.pickups, (p, item) => {
+            this.applyLoot(item.getData('type'));
+            item.destroy();
+        });
 
+        // Input
         this.cursors = this.input.keyboard.createCursorKeys();
-        this.wasd = this.input.keyboard.addKeys({ up:87, down:83, left:65, right:68, shift:16 });
-        this.keys = this.input.keyboard.addKeys({ interact:70, space:32, esc:27, melee:69, switch:81, inv: 73, tab: 9, nvg: 78 }); 
+        this.wasd = this.input.keyboard.addKeys('W,A,S,D,SHIFT');
+        this.keys = this.input.keyboard.addKeys({
+            interact: Phaser.Input.Keyboard.KeyCodes.F,
+            space: Phaser.Input.Keyboard.KeyCodes.SPACE,
+            esc: Phaser.Input.Keyboard.KeyCodes.ESC,
+            melee: Phaser.Input.Keyboard.KeyCodes.E,
+            switch: Phaser.Input.Keyboard.KeyCodes.Q,
+            inv: Phaser.Input.Keyboard.KeyCodes.I,
+            tab: Phaser.Input.Keyboard.KeyCodes.TAB,
+            nvg: Phaser.Input.Keyboard.KeyCodes.N,
+            reload: Phaser.Input.Keyboard.KeyCodes.R,
+            grenade: Phaser.Input.Keyboard.KeyCodes.G
+        });
         this.input.on('pointerdown', (p) => this.fireBullet(p));
 
-        this.uiGraphics = this.add.graphics().setDepth(100);
-        this.uiText = this.add.text(10, 65, '', { font: '16px Arial', fill: '#fff' }).setDepth(100);
+        // Level text (UI elements like uiGraphics, bossBar already created above)
         this.levelText = this.add.text(400, 300, `LEVEL ${this.currentLevel}`, { fontSize: '64px', fill: '#fff' }).setOrigin(0.5).setDepth(200);
         this.tweens.add({ targets: this.levelText, alpha: 0, duration: 2000, delay: 1000 });
-        this.bossBar = this.add.graphics().setDepth(150).setVisible(false);
-        this.bossText = this.add.text(400, 25, "BOSS", { fontSize: '20px', fill: '#fff' }).setOrigin(0.5).setDepth(200).setVisible(false);
 
         this.createInventoryUI();
         this.pauseText = this.add.text(400, 300, 'PAUSED', { fontSize: '48px', fill: '#fff' }).setOrigin(0.5).setDepth(200).setVisible(false);
 
-        // LIGHTING & NVG LAYERS
+        // Lighting & NVG
         this.lightShape = this.make.graphics({ x: 0, y: 0, add: false });
-        const mask = this.lightShape.createGeometryMask(); mask.setInvertAlpha(true);
+        const mask = this.lightShape.createGeometryMask();
+        mask.setInvertAlpha(true);
         this.darkness = this.add.rectangle(400, 300, 800, 600, 0x000000, 0.95).setDepth(90);
         this.darkness.setMask(mask);
         this.nvgLayer = this.add.rectangle(400, 300, 800, 600, 0x00ff00, 0.2).setDepth(95).setVisible(false);
+        
+        // Low HP Vignette - red edges when health is low
+        this.vignetteGraphics = this.add.graphics().setDepth(105);
+        
+        // Scene shutdown cleanup
+        this.events.on('shutdown', this.shutdown, this);
     }
     
-    spawnLootSkull(x, y, enemyType) {
-        let lootList = [];
-        if (enemyType === 'bandit') {
-            lootList = ['ammo', 'ammo', 'scrap', 'meds', 'helmet', 'vest'];
-        } else {
-            lootList = ['ammo', 'scrap', 'meds', 'ammo'];
+    shutdown() {
+        // Clean up graphics objects to prevent errors during transition
+        if (this.lightShape) {
+            this.lightShape.destroy();
+            this.lightShape = null;
         }
+        if (this.vignetteGraphics) {
+            this.vignetteGraphics.destroy();
+            this.vignetteGraphics = null;
+        }
+        if (this.uiGraphics) {
+            this.uiGraphics.destroy();
+            this.uiGraphics = null;
+        }
+        this.events.off('shutdown', this.shutdown, this);
+    }
+
+    // ==================== DODGE ROLL ====================
+    performDodgeRoll() {
+        const now = this.time.now;
+        const cfg = CONFIG.PLAYER;
+        
+        // Check cooldown and stamina
+        if (now - this.lastDodgeTime < cfg.DODGE_COOLDOWN) return;
+        if (this.playerStats.stamina < cfg.DODGE_STAMINA_COST) {
+            this.showFloatingText(this.player.x, this.player.y - 40, "NO STAMINA!", 0xff0000);
+            return;
+        }
+        if (this.isDodging || this.isPinned || this.isReloading) return;
+        
+        // Get movement direction or face direction
+        let vx = 0, vy = 0;
+        if (this.cursors.left.isDown || this.wasd.A.isDown) vx = -1;
+        else if (this.cursors.right.isDown || this.wasd.D.isDown) vx = 1;
+        if (this.cursors.up.isDown || this.wasd.W.isDown) vy = -1;
+        else if (this.cursors.down.isDown || this.wasd.S.isDown) vy = 1;
+        
+        // If not moving, dodge toward mouse
+        if (vx === 0 && vy === 0) {
+            const angle = Phaser.Math.Angle.Between(
+                this.player.x, this.player.y,
+                this.input.activePointer.x, this.input.activePointer.y
+            );
+            vx = Math.cos(angle);
+            vy = Math.sin(angle);
+        } else {
+            // Normalize
+            const len = Math.sqrt(vx * vx + vy * vy);
+            vx /= len;
+            vy /= len;
+        }
+        
+        // Consume stamina
+        this.playerStats.stamina -= cfg.DODGE_STAMINA_COST;
+        this.isDodging = true;
+        this.lastDodgeTime = now;
+        
+        // Visual feedback
+        sfx.dodge();
+        this.player.setAlpha(0.5);
+        this.player.setTint(0x00ffff);
+        
+        // Apply velocity
+        this.player.setVelocity(vx * cfg.DODGE_SPEED, vy * cfg.DODGE_SPEED);
+        
+        // End dodge after duration
+        this.time.delayedCall(cfg.DODGE_DURATION, () => {
+            this.isDodging = false;
+            this.player.setAlpha(1);
+            this.player.clearTint();
+        });
+    }
+
+    // ==================== RELOAD SYSTEM ====================
+    startReload() {
+        if (this.isReloading) return;
+        
+        const weapon = this.playerStats.currentWeapon;
+        const wpnConfig = CONFIG.WEAPONS[weapon.toUpperCase()];
+        const currentMag = this.playerStats.magazines[weapon];
+        
+        // Already full
+        if (currentMag >= wpnConfig.MAG_SIZE) {
+            this.showFloatingText(this.player.x, this.player.y - 40, "MAG FULL", 0xffff00);
+            return;
+        }
+        
+        // No reserve ammo
+        if (this.playerStats.ammo <= 0) {
+            this.showFloatingText(this.player.x, this.player.y - 40, "NO AMMO!", 0xff0000);
+            return;
+        }
+        
+        this.isReloading = true;
+        sfx.reload();
+        this.showFloatingText(this.player.x, this.player.y - 40, "RELOADING...", 0xffff00);
+        
+        this.reloadTimer = this.time.delayedCall(wpnConfig.RELOAD_TIME, () => {
+            const needed = wpnConfig.MAG_SIZE - this.playerStats.magazines[weapon];
+            const toLoad = Math.min(needed, this.playerStats.ammo);
+            
+            this.playerStats.magazines[weapon] += toLoad;
+            this.playerStats.ammo -= toLoad;
+            
+            this.isReloading = false;
+            this.reloadTimer = null;
+            sfx.reloadFinish();
+            this.showFloatingText(this.player.x, this.player.y - 40, "RELOADED!", 0x00ff00);
+        });
+    }
+    
+    cancelReload() {
+        if (this.reloadTimer) {
+            this.reloadTimer.remove();
+            this.reloadTimer = null;
+        }
+        this.isReloading = false;
+    }
+
+    // ==================== LOW HP VIGNETTE ====================
+    drawVignette() {
+        if (!this.vignetteGraphics) return;
+        this.vignetteGraphics.clear();
+        
+        const hpPercent = this.playerStats.hp / this.playerStats.maxHp;
+        if (hpPercent > CONFIG.PLAYER.LOW_HP_THRESHOLD) return;
+        
+        // Intensity increases as HP decreases
+        const intensity = 1 - (hpPercent / CONFIG.PLAYER.LOW_HP_THRESHOLD);
+        const alpha = 0.3 + intensity * 0.4; // 0.3 to 0.7
+        
+        // Pulsing effect when very low
+        let pulseAlpha = alpha;
+        if (hpPercent < 0.15) {
+            const pulse = Math.sin(this.time.now / 200) * 0.15;
+            pulseAlpha = alpha + pulse;
+        }
+        
+        // Draw red gradient from edges
+        const thickness = 60 + intensity * 40; // 60-100px thick
+        
+        // Top edge
+        this.vignetteGraphics.fillGradientStyle(0xff0000, 0xff0000, 0xff0000, 0xff0000, pulseAlpha, pulseAlpha, 0, 0);
+        this.vignetteGraphics.fillRect(0, 0, 800, thickness);
+        
+        // Bottom edge
+        this.vignetteGraphics.fillGradientStyle(0xff0000, 0xff0000, 0xff0000, 0xff0000, 0, 0, pulseAlpha, pulseAlpha);
+        this.vignetteGraphics.fillRect(0, 600 - thickness, 800, thickness);
+        
+        // Left edge
+        this.vignetteGraphics.fillGradientStyle(0xff0000, 0xff0000, 0xff0000, 0xff0000, pulseAlpha, 0, 0, pulseAlpha);
+        this.vignetteGraphics.fillRect(0, 0, thickness, 600);
+        
+        // Right edge
+        this.vignetteGraphics.fillGradientStyle(0xff0000, 0xff0000, 0xff0000, 0xff0000, 0, pulseAlpha, pulseAlpha, 0);
+        this.vignetteGraphics.fillRect(800 - thickness, 0, thickness, 600);
+    }
+
+    spawnLootSkull(x, y, enemyType) {
+        let lootList;
+        if (enemyType === 'bandit') lootList = CONFIG.LOOT.BANDIT;
+        else if (enemyType === 'spitter') lootList = CONFIG.LOOT.SPITTER;
+        else lootList = CONFIG.LOOT.ZOMBIE;
         const item = Phaser.Utils.Array.GetRandom(lootList);
         let s = this.skulls.create(x, y, 'skull').setScale(0.8);
         s.setData('lootID', item);
         this.showFloatingText(x, y, "LOOT", 0xaaaaaa);
+    }
+
+    // ==================== ACID SPIT (Spitter Enemy) ====================
+    spawnAcidSpit(fromX, fromY, toX, toY) {
+        const acid = this.acidProjectiles.create(fromX, fromY, 'acid');
+        if (!acid) return;
+        
+        acid.hasHit = false;
+        acid.setDepth(15);
+        
+        const angle = Phaser.Math.Angle.Between(fromX, fromY, toX, toY);
+        this.physics.velocityFromRotation(angle, CONFIG.ENEMIES.SPITTER.SPIT_SPEED, acid.body.velocity);
+        
+        // Destroy after 3 seconds if not hit
+        this.time.delayedCall(3000, () => {
+            if (acid.active) {
+                acid.setActive(false);
+                acid.setVisible(false);
+                acid.body.enable = false;
+            }
+        });
+    }
+
+    // ==================== GRENADE SYSTEM ====================
+    throwGrenade() {
+        if (this.playerStats.grenades <= 0) {
+            this.showFloatingText(this.player.x, this.player.y - 40, "NO GRENADES!", 0xff0000);
+            return;
+        }
+        if (this.isDodging || this.isPinned || this.isReloading) return;
+
+        this.playerStats.grenades--;
+        sfx.grenadeThrow();
+
+        const grenade = this.grenades.create(this.player.x, this.player.y, 'grenade');
+        if (!grenade) return;
+
+        grenade.setDepth(15);
+        grenade.hasExploded = false;
+
+        // Throw toward mouse
+        const angle = Phaser.Math.Angle.Between(
+            this.player.x, this.player.y,
+            this.input.activePointer.x, this.input.activePointer.y
+        );
+        this.physics.velocityFromRotation(angle, CONFIG.GRENADE.THROW_SPEED, grenade.body.velocity);
+        
+        // Slow down over time (drag)
+        grenade.body.setDrag(200, 200);
+
+        // Explode after fuse time
+        this.time.delayedCall(CONFIG.GRENADE.FUSE_TIME, () => {
+            if (grenade.active && !grenade.hasExploded) {
+                this.explodeGrenade(grenade.x, grenade.y);
+                grenade.hasExploded = true;
+                grenade.destroy();
+            }
+        });
+    }
+
+    explodeGrenade(x, y) {
+        sfx.explosion();
+        this.cameras.main.shake(200, 0.02);
+
+        // Visual explosion
+        const explosion = this.add.circle(x, y, 10, 0xff4500, 1).setDepth(100);
+        this.tweens.add({
+            targets: explosion,
+            radius: CONFIG.GRENADE.EXPLOSION_RADIUS,
+            alpha: 0,
+            duration: 300,
+            onComplete: () => explosion.destroy()
+        });
+
+        // Spawn multiple flash particles
+        for (let i = 0; i < 8; i++) {
+            const angle = (i / 8) * Math.PI * 2;
+            const dist = 30 + Math.random() * 40;
+            this.particles.spawnMuzzleFlash(
+                x + Math.cos(angle) * dist,
+                y + Math.sin(angle) * dist,
+                angle, 1.5
+            );
+        }
+
+        // Damage enemies in radius
+        this.enemies.getChildren().forEach(enemy => {
+            if (!enemy.active) return;
+            const dist = Phaser.Math.Distance.Between(x, y, enemy.x, enemy.y);
+            if (dist < CONFIG.GRENADE.EXPLOSION_RADIUS) {
+                // Damage scales with distance (closer = more damage)
+                const damageMult = 1 - (dist / CONFIG.GRENADE.EXPLOSION_RADIUS) * 0.5;
+                const damage = Math.ceil(CONFIG.GRENADE.DAMAGE * damageMult);
+                if (enemy.takeDamage) enemy.takeDamage(damage);
+                
+                // Knockback (only if enemy still alive and has body)
+                if (enemy.active && enemy.body) {
+                    const knockAngle = Phaser.Math.Angle.Between(x, y, enemy.x, enemy.y);
+                    this.physics.velocityFromRotation(knockAngle, 300, enemy.body.velocity);
+                }
+            }
+        });
+
+        this.showFloatingText(x, y, "BOOM!", 0xff4500);
     }
 
     createInventoryUI() {
@@ -630,7 +1493,12 @@ class GameScene extends Phaser.Scene {
         const title = this.add.text(0, -180, "INVENTORY", { fontSize: '32px', fill: '#fff' }).setOrigin(0.5);
         this.invText = this.add.text(-280, -140, "", { fontSize: '18px', fill: '#ccc', lineSpacing: 10 });
         this.armorSlots = {};
-        const slots = [{ id: 'head', x: 150, y: -100, label: 'HEAD' }, { id: 'body', x: 150, y: 0, label: 'BODY' }, { id: 'arms', x: 50, y: 0, label: 'ARMS' }, { id: 'feet', x: 150, y: 100, label: 'FEET' }];
+        const slots = [
+            { id: 'head', x: 150, y: -100, label: 'HEAD' },
+            { id: 'body', x: 150, y: 0, label: 'BODY' },
+            { id: 'arms', x: 50, y: 0, label: 'ARMS' },
+            { id: 'feet', x: 150, y: 100, label: 'FEET' }
+        ];
         slots.forEach(s => {
             let slotBg = this.add.rectangle(s.x, s.y, 80, 80, 0x333333).setStrokeStyle(1, 0x666666);
             let lbl = this.add.text(s.x, s.y - 30, s.label, { fontSize: '12px', fill: '#888' }).setOrigin(0.5);
@@ -640,77 +1508,210 @@ class GameScene extends Phaser.Scene {
         });
         this.invContainer.add([bg, title, this.invText]);
     }
+
     updateInventoryUI() {
-        this.invText.setText(`HP: ${this.playerStats.hp}/${this.playerStats.maxHp}\nAMMO: ${this.playerStats.ammo}\nSCRAP: ${this.playerStats.scrap}\n\nWEAPON: ${this.playerStats.currentWeapon.toUpperCase()}\nFLASHLIGHT: ${this.playerStats.hasFlashlight ? "YES" : "NO"}\nNVG: ${this.playerStats.hideout.armory.hasNVG ? "EQUIPPED" : "NO"}\n`);
+        const weapon = this.playerStats.currentWeapon;
+        const mag = this.playerStats.magazines[weapon];
+        const maxMag = CONFIG.WEAPONS[weapon.toUpperCase()].MAG_SIZE;
+        
+        this.invText.setText(
+            `HP: ${this.playerStats.hp}/${this.playerStats.maxHp}\n` +
+            `AMMO: ${mag}/${maxMag} (${this.playerStats.ammo} reserve)\n` +
+            `GRENADES: ${this.playerStats.grenades}/${CONFIG.GRENADE.MAX_CARRY}\n` +
+            `SCRAP: ${this.playerStats.scrap}\n\n` +
+            `WEAPON: ${weapon.toUpperCase()}\n` +
+            `FLASHLIGHT: ${this.playerStats.hasFlashlight ? "YES" : "NO"}\n` +
+            `NVG: ${this.playerStats.hideout.armory.hasNVG ? "EQUIPPED" : "NO"}\n`
+        );
         for (const [slot, item] of Object.entries(this.playerStats.armor)) {
             let txtObj = this.armorSlots[slot];
-            if (item) { txtObj.setText(`${item.name}\n${item.durability}/${item.maxDurability}`); txtObj.setColor('#00ff00');
-            } else { txtObj.setText("EMPTY"); txtObj.setColor('#555'); }
+            if (item) {
+                txtObj.setText(`${item.name}\n${item.durability}/${item.maxDurability}`);
+                txtObj.setColor('#00ff00');
+            } else {
+                txtObj.setText("EMPTY");
+                txtObj.setColor('#555');
+            }
         }
     }
+
     toggleInventory() {
         this.isInventoryOpen = !this.isInventoryOpen;
-        if (this.isInventoryOpen) { sfx.click(); this.updateInventoryUI(); this.invContainer.setVisible(true); this.physics.pause(); this.isPaused = true;
-        } else { sfx.click(); this.invContainer.setVisible(false); this.physics.resume(); this.isPaused = false; }
+        sfx.click();
+        if (this.isInventoryOpen) {
+            this.updateInventoryUI();
+            this.invContainer.setVisible(true);
+            this.physics.pause();
+            this.isPaused = true;
+        } else {
+            this.invContainer.setVisible(false);
+            this.physics.resume();
+            this.isPaused = false;
+        }
     }
+
     togglePause() {
         this.isPaused = !this.isPaused;
-        if (this.isPaused) { sfx.click(); this.physics.pause(); this.pauseText.setVisible(true); }
-        else { sfx.click(); this.physics.resume(); this.pauseText.setVisible(false); }
+        sfx.click();
+        if (this.isPaused) {
+            this.physics.pause();
+            this.pauseText.setVisible(true);
+        } else {
+            this.physics.resume();
+            this.pauseText.setVisible(false);
+        }
     }
+
     setupMapForLevel(level) {
         if (level === 1) {
             this.add.tileSprite(400, 300, 800, 600, 'floor_grass');
-            this.door = this.physics.add.staticSprite(400, 50, 'door'); 
+            this.door = this.physics.add.staticSprite(400, 50, 'door');
             this.walls.create(200, 200, 'wall').setScale(1, 4).refreshBody();
             this.walls.create(600, 200, 'wall').setScale(1, 4).refreshBody();
         } else if (level === 2) {
             this.add.tileSprite(400, 300, 800, 600, 'floor_apt');
-            this.door = this.physics.add.staticSprite(400, 50, 'door').setTint(0x0000ff); 
+            this.door = this.physics.add.staticSprite(400, 50, 'door').setTint(0x0000ff);
             this.debrisBlock = this.debris.create(400, 100, 'debris');
             this.walls.create(250, 300, 'wall').setScale(1, 15).refreshBody();
             this.walls.create(550, 300, 'wall').setScale(1, 15).refreshBody();
         } else if (level === 3) {
             this.add.tileSprite(400, 300, 800, 600, 'floor_roof');
-            this.door = this.physics.add.staticSprite(-100, -100, 'door'); 
+            this.door = this.physics.add.staticSprite(400, 50, 'door').setTint(0x00ff00);
+        } else if (level === 4) {
+            // SEWERS - Dark, tight corridors with toxic spitters
+            this.add.tileSprite(400, 300, 800, 600, 'floor_sewer');
+            this.door = this.physics.add.staticSprite(750, 300, 'door').setTint(0x00ffff);
+            // Sewer pipe walls - narrow corridor maze
+            this.walls.create(200, 150, 'wall').setScale(6, 1).refreshBody();
+            this.walls.create(600, 150, 'wall').setScale(3, 1).refreshBody();
+            this.walls.create(100, 300, 'wall').setScale(1, 4).refreshBody();
+            this.walls.create(400, 300, 'wall').setScale(1, 6).refreshBody();
+            this.walls.create(200, 450, 'wall').setScale(6, 1).refreshBody();
+            this.walls.create(550, 450, 'wall').setScale(4, 1).refreshBody();
+            // Water hazard visual (dark area)
+            this.add.rectangle(300, 380, 150, 80, 0x003300, 0.5).setDepth(1);
+        } else if (level === 5) {
+            // HOSPITAL - Open areas, final extraction
+            this.add.tileSprite(400, 300, 800, 600, 'floor_hospital');
+            this.door = this.physics.add.staticSprite(-100, -100, 'door'); // No door - extraction level
+            // Hospital layout - rooms and corridors
+            this.walls.create(150, 200, 'wall').setScale(1, 8).refreshBody();
+            this.walls.create(650, 200, 'wall').setScale(1, 8).refreshBody();
+            this.walls.create(300, 100, 'wall').setScale(4, 1).refreshBody();
+            this.walls.create(500, 100, 'wall').setScale(4, 1).refreshBody();
+            this.walls.create(400, 350, 'wall').setScale(8, 1).refreshBody();
         }
     }
+
     spawnLevelEntities(level) {
         let loot = [], cratePos = [];
         if (level === 1) {
             loot = ['key', 'flashlight', 'shotgun', 'ammo', 'ammo', 'helmet', 'vest', 'scrap'];
             cratePos = [{x:100,y:100}, {x:700,y:500}, {x:50,y:300}, {x:750,y:300}, {x:400,y:400}, {x:200,y:50}, {x:600,y:50}, {x:400,y:500}];
-            this.spawnEnemy('walker', 100, 300); this.spawnEnemy('bandit', 700, 300); this.spawnEnemy('leaper', 200, 200); 
+            this.spawnEnemy('walker', 100, 300);
+            this.spawnEnemy('bandit', 700, 300);
+            this.spawnEnemy('leaper', 200, 200);
         } else if (level === 2) {
-            loot = ['molotov', 'shotgun', 'ammo', 'ammo', 'scrap', 'helmet', 'vest', 'plug']; 
+            loot = ['molotov', 'shotgun', 'ammo', 'ammo', 'scrap', 'helmet', 'vest', 'plug'];
             cratePos = [{x:100,y:100}, {x:100,y:500}, {x:700,y:100}, {x:700,y:500}, {x:400,y:300}, {x:50,y:250}, {x:750,y:250}, {x:200,y:550}, {x:400,y:550}, {x:600,y:400}];
-            this.spawnEnemy('bandit', 100, 100); this.spawnEnemy('bandit', 700, 100); this.spawnEnemy('leaper', 400, 450); this.spawnEnemy('leaper', 400, 150);
+            this.spawnEnemy('bandit', 100, 100);
+            this.spawnEnemy('bandit', 700, 100);
+            this.spawnEnemy('leaper', 400, 450);
+            this.spawnEnemy('leaper', 400, 150);
         } else if (level === 3) {
-            loot = ['ammo', 'ammo', 'meds', 'meds', 'scrap', 'plug'];
+            loot = ['key', 'ammo', 'ammo', 'meds', 'meds', 'scrap', 'grenade'];
             cratePos = [{x:100,y:100}, {x:700,y:100}, {x:100,y:500}, {x:700,y:500}, {x:400,y:300}, {x:50,y:300}, {x:750,y:300}];
-            this.spawnEnemy('boss', 400, 100); this.bossBar.setVisible(true); this.bossText.setVisible(true); this.updateBossBar(5, 5); 
-            this.spawnEnemy('bandit', 100, 500); this.spawnEnemy('bandit', 700, 500);
+            this.spawnEnemy('walker', 400, 100);
+            this.spawnEnemy('walker', 200, 300);
+            this.spawnEnemy('spitter', 600, 300);
+            this.spawnEnemy('bandit', 100, 500);
+            this.spawnEnemy('bandit', 700, 500);
+        } else if (level === 4) {
+            // SEWERS - Spitter-heavy with tight corridors
+            loot = ['key', 'smg', 'ammo', 'ammo', 'ammo', 'grenade', 'grenade', 'meds', 'scrap', 'plug'];
+            cratePos = [{x:50,y:80}, {x:700,y:80}, {x:50,y:520}, {x:700,y:520}, {x:250,y:220}, {x:550,y:220}, {x:250,y:380}, {x:650,y:380}, {x:500,y:550}, {x:150,y:550}];
+            // Spitters in the sewers
+            this.spawnEnemy('spitter', 300, 250);
+            this.spawnEnemy('spitter', 500, 250);
+            this.spawnEnemy('spitter', 200, 500);
+            // Walkers emerging from pipes
+            this.spawnEnemy('walker', 100, 200);
+            this.spawnEnemy('walker', 650, 500);
+            this.spawnEnemy('leaper', 400, 200);
+        } else if (level === 5) {
+            // HOSPITAL - Boss fight + extraction
+            loot = ['ammo', 'ammo', 'ammo', 'meds', 'meds', 'grenade', 'scrap', 'scrap'];
+            cratePos = [{x:100,y:450}, {x:700,y:450}, {x:100,y:550}, {x:700,y:550}, {x:300,y:550}, {x:500,y:550}, {x:250,y:250}, {x:550,y:250}];
+            // Hospital Boss
+            this.spawnEnemy('boss', 400, 150);
+            this.bossBar.setVisible(true);
+            this.bossText.setVisible(true);
+            this.bossText.setText("PATIENT ZERO");
+            this.updateBossBar(CONFIG.ENEMIES.BOSS.HP, CONFIG.ENEMIES.BOSS.HP);
+            // Support enemies
+            this.spawnEnemy('spitter', 200, 200);
+            this.spawnEnemy('spitter', 600, 200);
+            this.spawnEnemy('walker', 100, 400);
+            this.spawnEnemy('walker', 700, 400);
         }
         Phaser.Utils.Array.Shuffle(loot);
-        cratePos.forEach((p, i) => { if(i < loot.length) this.crates.create(p.x, p.y, 'crate').setData('lootID', loot[i]); });
+        cratePos.forEach((p, i) => {
+            if (i < loot.length) this.crates.create(p.x, p.y, 'crate').setData('lootID', loot[i]);
+        });
     }
-    spawnEnemy(type, x, y) { this.enemies.add(new Enemy(this, x, y, this.player, type)); }
+
+    spawnEnemy(type, x, y) {
+        this.enemies.add(new Enemy(this, x, y, this.player, type));
+    }
+
     spawnSwitch(x, y) {
-        let s = this.switches.create(x, y, 'switch');
+        this.switches.create(x, y, 'switch');
         this.showFloatingText(x, y, "BOSS DEAD! HIT THE SWITCH!", 0x00ff00);
-        this.switchDropped = true; this.bossBar.setVisible(false); this.bossText.setVisible(false);
+        this.switchDropped = true;
+        this.bossBar.setVisible(false);
+        this.bossText.setVisible(false);
     }
+
     activateExtraction() {
         if (this.extractionActive) return;
         this.extractionActive = true;
         this.tweens.add({ targets: this.darkness, alpha: 0.2, duration: 500, yoyo: true, repeat: -1 });
         this.showFloatingText(400, 300, "BEACON ONLINE! SURVIVE 15s!", 0xff0000);
-        this.spawnEnemy('bandit', 100, 100); this.spawnEnemy('bandit', 700, 100); this.spawnEnemy('leaper', 400, 500); this.spawnEnemy('leaper', 100, 500);
-        this.extractionTimerEvent = this.time.addEvent({ delay: 1000, callback: () => { this.extractionTimer--; if (this.extractionTimer <= 0) this.winGame(); }, repeat: 14 });
+        this.spawnEnemy('bandit', 100, 100);
+        this.spawnEnemy('bandit', 700, 100);
+        this.spawnEnemy('leaper', 400, 500);
+        this.spawnEnemy('leaper', 100, 500);
+        this.extractionTimerEvent = this.time.addEvent({
+            delay: 1000,
+            callback: () => {
+                this.extractionTimer--;
+                if (this.extractionTimer <= 0) this.winGame();
+            },
+            repeat: 14
+        });
+        this.activeTimerEvents.push(this.extractionTimerEvent);
     }
+
+    cleanupTimerEvents() {
+        this.activeTimerEvents.forEach(event => {
+            if (event) this.time.removeEvent(event);
+        });
+        this.activeTimerEvents = [];
+        if (this.extractionTimerEvent) {
+            this.time.removeEvent(this.extractionTimerEvent);
+            this.extractionTimerEvent = null;
+        }
+        this.cancelReload();
+    }
+
     update(time, delta) {
-        if (Phaser.Input.Keyboard.JustDown(this.keys.tab) || Phaser.Input.Keyboard.JustDown(this.keys.inv)) this.toggleInventory();
-        // PAUSE LOGIC FIXED
+        // Skip all updates during level transitions
+        if (this.isTransitioning) return;
+        
+        // Input handling (works even when paused for menu/inventory)
+        if (Phaser.Input.Keyboard.JustDown(this.keys.tab) || Phaser.Input.Keyboard.JustDown(this.keys.inv)) {
+            this.toggleInventory();
+        }
         if (Phaser.Input.Keyboard.JustDown(this.keys.esc)) {
             if (this.isInventoryOpen) this.toggleInventory();
             else this.togglePause();
@@ -720,102 +1721,216 @@ class GameScene extends Phaser.Scene {
             if (this.playerStats.hideout.armory.hasNVG) {
                 sfx.toggleNVG();
                 this.nvgOn = !this.nvgOn;
-                if (this.nvgOn) { 
-                    this.darkness.setVisible(false); 
-                    this.nvgLayer.setVisible(true); 
+                if (this.nvgOn) {
+                    this.darkness.setVisible(false);
+                    this.nvgLayer.setVisible(true);
                     this.cameras.main.setBackgroundColor(0x002200);
-                } else { 
-                    this.darkness.setVisible(true); 
-                    this.nvgLayer.setVisible(false); 
+                } else {
+                    this.darkness.setVisible(true);
+                    this.nvgLayer.setVisible(false);
                     this.cameras.main.setBackgroundColor(0x000000);
                 }
-            } else { this.showFloatingText(this.player.x, this.player.y - 40, "NO NVG EQUIPPED", 0xffffff); }
+            } else {
+                this.showFloatingText(this.player.x, this.player.y - 40, "NO NVG EQUIPPED", 0xffffff);
+            }
         }
+
         if (this.isPaused) return;
+
         this.drawUI();
+        this.drawVignette();
         this.enemies.getChildren().forEach(e => e.update(time, delta));
-        this.lightShape.clear(); this.lightShape.fillCircle(this.player.x, this.player.y, 60); 
-        if (this.playerStats.hasFlashlight) {
-            const angle = Phaser.Math.Angle.Between(this.player.x, this.player.y, this.input.activePointer.x, this.input.activePointer.y);
-            this.lightShape.fillStyle(0xffffff); this.lightShape.slice(this.player.x, this.player.y, 300, angle - 0.5, angle + 0.5); this.lightShape.fill();
+
+        // Update lighting (with safety check for scene transitions)
+        if (this.lightShape && this.lightShape.scene) {
+            this.lightShape.clear();
+            this.lightShape.fillCircle(this.player.x, this.player.y, CONFIG.PLAYER.LIGHT_RADIUS);
+            if (this.playerStats.hasFlashlight) {
+                const angle = Phaser.Math.Angle.Between(this.player.x, this.player.y, this.input.activePointer.x, this.input.activePointer.y);
+                this.lightShape.fillStyle(0xffffff);
+                this.lightShape.slice(this.player.x, this.player.y, CONFIG.PLAYER.FLASHLIGHT_RANGE, angle - CONFIG.PLAYER.FLASHLIGHT_ANGLE, angle + CONFIG.PLAYER.FLASHLIGHT_ANGLE);
+                this.lightShape.fill();
+            }
         }
+
+        // Auto-recover if pinned enemy dies
         if (this.isPinned) {
-            if (this.pinnedBy && this.pinnedBy.active) this.pinnedBy.setPosition(this.player.x, this.player.y);
-            if (Phaser.Input.Keyboard.JustDown(this.keys.space)) this.recoverFromKnockdown();
+            if (!this.pinnedBy || !this.pinnedBy.active) {
+                this.recoverFromKnockdown();
+            } else {
+                this.pinnedBy.setPosition(this.player.x, this.player.y);
+                if (Phaser.Input.Keyboard.JustDown(this.keys.space)) this.recoverFromKnockdown();
+            }
             return;
         }
-        if (!this.isOpening && !this.debrisBurning) {
-            this.player.setVelocity(0); let speed = 160;
-            if ((this.cursors.shift.isDown || this.wasd.shift.isDown) && this.playerStats.stamina > 0) { speed = 280; this.playerStats.stamina -= 0.5; } 
-            else if (this.playerStats.stamina < this.playerStats.maxStamina) { this.playerStats.stamina += 0.2; }
+
+        // Dodge roll (SPACE when not pinned)
+        if (Phaser.Input.Keyboard.JustDown(this.keys.space) && !this.isDodging) {
+            this.performDodgeRoll();
+        }
+        
+        // Reload (R key)
+        if (Phaser.Input.Keyboard.JustDown(this.keys.reload)) {
+            this.startReload();
+        }
+        
+        // Grenade (G key)
+        if (Phaser.Input.Keyboard.JustDown(this.keys.grenade)) {
+            this.throwGrenade();
+        }
+
+        if (!this.isOpening && !this.debrisBurning && !this.isDodging) {
+            this.player.setVelocity(0);
+            let speed = CONFIG.PLAYER.WALK_SPEED;
+
+            if ((this.cursors.shift.isDown || this.wasd.SHIFT.isDown) && this.playerStats.stamina > 0) {
+                speed = CONFIG.PLAYER.SPRINT_SPEED;
+                this.playerStats.stamina -= CONFIG.PLAYER.STAMINA_DRAIN;
+            } else if (this.playerStats.stamina < this.playerStats.maxStamina) {
+                this.playerStats.stamina += CONFIG.PLAYER.STAMINA_REGEN;
+            }
+
             let vx = 0, vy = 0;
-            if (this.cursors.left.isDown || this.wasd.left.isDown) vx = -1; else if (this.cursors.right.isDown || this.wasd.right.isDown) vx = 1;
-            if (this.cursors.up.isDown || this.wasd.up.isDown) vy = -1; else if (this.cursors.down.isDown || this.wasd.down.isDown) vy = 1;
-            if (vx !== 0 || vy !== 0) { const len = Math.sqrt(vx*vx+vy*vy); this.player.setVelocity((vx/len)*speed, (vy/len)*speed); }
+            if (this.cursors.left.isDown || this.wasd.A.isDown) vx = -1;
+            else if (this.cursors.right.isDown || this.wasd.D.isDown) vx = 1;
+            if (this.cursors.up.isDown || this.wasd.W.isDown) vy = -1;
+            else if (this.cursors.down.isDown || this.wasd.S.isDown) vy = 1;
+
+            if (vx !== 0 || vy !== 0) {
+                const len = Math.sqrt(vx * vx + vy * vy);
+                this.player.setVelocity((vx / len) * speed, (vy / len) * speed);
+            }
+
             if (Phaser.Input.Keyboard.JustDown(this.keys.melee)) this.meleeAttack();
             if (Phaser.Input.Keyboard.JustDown(this.keys.switch)) this.switchWeapon();
-            if (Phaser.Input.Keyboard.JustDown(this.keys.interact)) { 
+            if (Phaser.Input.Keyboard.JustDown(this.keys.interact)) {
                 if (this.currentLevel === 2 && this.checkDebris()) return;
-                if (this.currentLevel === 3 && this.checkSwitch()) return;
-                if (this.checkDoor()) return; this.tryInteract(); 
+                if (this.currentLevel === 5 && this.checkSwitch()) return;
+                if (this.checkDoor()) return;
+                this.tryInteract();
             }
-        } else {
-            this.player.setVelocity(0); 
-            if(this.openTimerEvent) { 
-                const p = this.openTimerEvent.getProgress(); 
-                this.uiGraphics.fillStyle(this.debrisBurning ? 0xff4500 : 0xffff00, 1); 
-                this.uiGraphics.fillRect(this.player.x - 20, this.player.y - 30, 40 * p, 6); 
+        } else if (!this.isDodging) {
+            this.player.setVelocity(0);
+            if (this.openTimerEvent) {
+                const p = this.openTimerEvent.getProgress();
+                this.uiGraphics.fillStyle(this.debrisBurning ? 0xff4500 : 0xffff00, 1);
+                this.uiGraphics.fillRect(this.player.x - 20, this.player.y - 30, 40 * p, 6);
             }
         }
     }
+
     switchWeapon() {
-        if (!this.playerStats.hasShotgun) return;
-        this.playerStats.currentWeapon = (this.playerStats.currentWeapon === 'pistol') ? 'shotgun' : 'pistol';
+        this.cancelReload(); // Cancel reload when switching
+        
+        const weapons = ['pistol'];
+        if (this.playerStats.hasShotgun) weapons.push('shotgun');
+        if (this.playerStats.hasSMG) weapons.push('smg');
+        
+        if (weapons.length === 1) return;
+        
+        const currentIdx = weapons.indexOf(this.playerStats.currentWeapon);
+        const nextIdx = (currentIdx + 1) % weapons.length;
+        this.playerStats.currentWeapon = weapons[nextIdx];
+        
         this.showFloatingText(this.player.x, this.player.y - 40, this.playerStats.currentWeapon.toUpperCase(), 0xffffff);
         sfx.reload();
     }
+
     meleeAttack() {
         if (this.isMeleeAttacking) return;
         this.isMeleeAttacking = true;
+        this.cancelReload();
+
         const slash = this.add.sprite(this.player.x, this.player.y, 'slash').setTint(0xffffff).setDepth(20);
         const angle = Phaser.Math.Angle.Between(this.player.x, this.player.y, this.input.activePointer.x, this.input.activePointer.y);
         slash.setRotation(angle);
         const vec = this.physics.velocityFromRotation(angle, 40);
         slash.setPosition(this.player.x + vec.x, this.player.y + vec.y);
+
         this.tweens.add({ targets: slash, alpha: 0, duration: 200, onComplete: () => slash.destroy() });
+
         this.enemies.getChildren().forEach(e => {
-            if (e.active && Phaser.Math.Distance.Between(slash.x, slash.y, e.x, e.y) < 60) {
+            if (e.active && Phaser.Math.Distance.Between(slash.x, slash.y, e.x, e.y) < CONFIG.PLAYER.MELEE_RANGE) {
                 if (e.enemyType === 'boss') {
-                    if (!e.invulnerable) { e.takeDamage(2); e.invulnerable = true; this.time.delayedCall(200, ()=>{ if(e.active) e.invulnerable=false; }); }
-                } else if (e.takeDamage) e.takeDamage(2);
+                    if (!e.isInvulnerable) e.takeDamage(CONFIG.PLAYER.MELEE_DAMAGE);
+                } else if (e.takeDamage) {
+                    e.takeDamage(CONFIG.PLAYER.MELEE_DAMAGE);
+                }
             }
         });
-        this.time.delayedCall(500, () => { this.isMeleeAttacking = false; });
+
+        this.time.delayedCall(CONFIG.PLAYER.MELEE_COOLDOWN, () => { this.isMeleeAttacking = false; });
     }
+
     fireBullet(pointer) {
-        if (this.isOpening || this.playerStats.ammo <= 0 || this.isPaused || this.isInventoryOpen) return;
+        if (this.isOpening || this.isPaused || this.isInventoryOpen || this.isReloading || this.isDodging) return;
+
+        const weapon = this.playerStats.currentWeapon;
+        const wpnConfig = CONFIG.WEAPONS[weapon.toUpperCase()];
+        const currentMag = this.playerStats.magazines[weapon];
+        
+        // Check magazine
+        if (currentMag <= 0) {
+            sfx.empty();
+            // Auto-reload when empty
+            this.startReload();
+            return;
+        }
+        
+        // Check ammo cost
+        if (weapon === 'shotgun' && currentMag < wpnConfig.AMMO_COST) {
+            sfx.empty();
+            this.startReload();
+            return;
+        }
+
         const now = this.time.now;
-        if (this.playerStats.currentWeapon === 'shotgun') {
-            if (this.playerStats.ammo < 2) return; 
-            if (now - this.lastFired < 1000) return;
-            sfx.shootShotgun(); // AUDIO
-            for(let i = -10; i <= 10; i+=5) {
+        const angle = Phaser.Math.Angle.Between(this.player.x, this.player.y, pointer.x, pointer.y);
+
+        if (weapon === 'shotgun') {
+            if (now - this.lastFired < wpnConfig.FIRE_RATE) return;
+
+            sfx.shootShotgun();
+            this.particles.spawnMuzzleFlash(this.player.x, this.player.y, angle, 1.5);
+            
+            for (let i = -10; i <= 10; i += wpnConfig.SPREAD_STEP) {
                 const b = this.bullets.get(this.player.x, this.player.y);
                 if (b) b.fire(this.player.x, this.player.y, pointer.x, pointer.y, i, false);
             }
-            this.playerStats.ammo -= 2; this.lastFired = now; this.cameras.main.shake(100, 0.005);
-        } else {
-            if (now - this.lastFired < 300) return;
-            sfx.shootPistol(); // AUDIO
+            this.playerStats.magazines[weapon] -= wpnConfig.AMMO_COST;
+            this.lastFired = now;
+            this.cameras.main.shake(100, 0.005);
+        } else if (weapon === 'smg') {
+            if (now - this.lastFired < wpnConfig.FIRE_RATE) return;
+
+            sfx.shootSMG();
+            this.particles.spawnMuzzleFlash(this.player.x, this.player.y, angle, 0.6);
+            
+            const spread = Phaser.Math.Between(-wpnConfig.SPREAD, wpnConfig.SPREAD);
             const b = this.bullets.get(this.player.x, this.player.y);
-            if (b) b.fire(this.player.x, this.player.y, pointer.x, pointer.y, 0, false);
-            this.playerStats.ammo--; this.lastFired = now;
+            if (b) b.fire(this.player.x, this.player.y, pointer.x, pointer.y, spread, false);
+            this.playerStats.magazines[weapon] -= wpnConfig.AMMO_COST;
+            this.lastFired = now;
+        } else {
+            // Pistol
+            if (now - this.lastFired < wpnConfig.FIRE_RATE) return;
+
+            sfx.shootPistol();
+            this.particles.spawnMuzzleFlash(this.player.x, this.player.y, angle, 1);
+            
+            const b = this.bullets.get(this.player.x, this.player.y);
+            if (b) b.fire(this.player.x, this.player.y, pointer.x, pointer.y, wpnConfig.SPREAD, false);
+            this.playerStats.magazines[weapon] -= wpnConfig.AMMO_COST;
+            this.lastFired = now;
         }
     }
+
     hitPlayer(damage) {
-        if (this.player.alpha < 1 || this.isPinned) return;
+        if (this.player.alpha < 1 || this.isPinned || this.isDodging) return;
+
         let mitigated = false;
-        const slots = ['body', 'head', 'arms', 'feet']; // Added all slots
+        const slots = ['body', 'head', 'arms', 'feet'];
+
         for (let slot of slots) {
             if (this.playerStats.armor[slot] && this.playerStats.armor[slot].durability > 0) {
                 this.playerStats.armor[slot].durability--;
@@ -824,85 +1939,156 @@ class GameScene extends Phaser.Scene {
                     this.playerStats.armor[slot] = null;
                     this.showFloatingText(this.player.x, this.player.y - 40, "ARMOR BROKE!", 0xff0000);
                 }
-                mitigated = true; break;
+                mitigated = true;
+                break;
             }
         }
+
         if (!mitigated) {
-            sfx.playerHurt(); // AUDIO
-            this.playerStats.hp -= damage; this.cameras.main.shake(100, 0.01);
-            this.player.setAlpha(0.5); this.time.delayedCall(1000, () => this.player.setAlpha(1));
+            sfx.playerHurt();
+            this.playerStats.hp -= damage;
+            this.cameras.main.shake(100, 0.01);
+            this.player.setAlpha(0.5);
+            this.time.delayedCall(CONFIG.PLAYER.INVULN_TIME, () => this.player.setAlpha(1));
         }
-        if (this.playerStats.hp <= 0) { 
-            this.showFloatingText(400, 300, "YOU DIED", 0xff0000); this.physics.pause();
-            this.time.delayedCall(2000, () => { this.scene.restart({ level: this.currentLevel, stats: this.checkpointStats }); });
+
+        if (this.playerStats.hp <= 0) {
+            this.handlePlayerDeath();
         }
     }
-    triggerKnockdown(leaper) { 
-        if (this.isPinned) return; 
-        this.isPinned = true; this.pinnedBy = leaper; 
-        this.player.setVelocity(0); leaper.setVelocity(0); leaper.state = 'PINNING'; 
-        this.player.setTint(0x0000ff); this.showFloatingText(this.player.x, this.player.y - 50, "PRESS SPACE!", 0xff0000); 
+
+    handlePlayerDeath() {
+        if (this.isTransitioning) return;
+        this.isTransitioning = true;
+        this.cleanupTimerEvents();
+        
+        this.showFloatingText(400, 300, "YOU DIED", 0xff0000);
+        this.physics.pause();
+        
+        this.time.delayedCall(CONFIG.TIMINGS.DEATH_RESTART, () => {
+            this.scene.restart({ level: this.currentLevel, stats: this.checkpointStats });
+        });
     }
-    recoverFromKnockdown() { 
-        this.isPinned = false; this.player.clearTint(); 
-        if (this.pinnedBy && this.pinnedBy.active) this.pinnedBy.knockBack(); 
-        this.pinnedBy = null; 
+
+    triggerKnockdown(leaper) {
+        if (this.isPinned || this.isDodging) return;
+        this.isPinned = true;
+        this.pinnedBy = leaper;
+        this.player.setVelocity(0);
+        leaper.setVelocity(0);
+        leaper.state = 'PINNING';
+        this.player.setTint(0x0000ff);
+        this.showFloatingText(this.player.x, this.player.y - 50, "PRESS SPACE!", 0xff0000);
+        this.cancelReload();
     }
+
+    recoverFromKnockdown() {
+        this.isPinned = false;
+        this.player.clearTint();
+        if (this.pinnedBy && this.pinnedBy.active && this.pinnedBy.body) {
+            this.pinnedBy.knockBack();
+        }
+        this.pinnedBy = null;
+    }
+
     checkDebris() {
-        if (this.debrisBlock && this.debrisBlock.active && Phaser.Math.Distance.Between(this.player.x, this.player.y, this.debrisBlock.x, this.debrisBlock.y) < 80) {
-            if (this.hasMolotov) this.startBurningDebris(); else this.showFloatingText(this.debrisBlock.x, this.debrisBlock.y, "Need Molotov!", 0xffffff);
+        if (this.debrisBlock && this.debrisBlock.active &&
+            Phaser.Math.Distance.Between(this.player.x, this.player.y, this.debrisBlock.x, this.debrisBlock.y) < CONFIG.DISTANCES.DEBRIS) {
+            if (this.hasMolotov) this.startBurningDebris();
+            else this.showFloatingText(this.debrisBlock.x, this.debrisBlock.y, "Need Molotov!", 0xffffff);
             return true;
-        } return false;
+        }
+        return false;
     }
+
     startBurningDebris() {
-        this.debrisBurning = true; this.showFloatingText(this.debrisBlock.x, this.debrisBlock.y, "BURNING!", 0xff4500);
+        this.debrisBurning = true;
+        this.showFloatingText(this.debrisBlock.x, this.debrisBlock.y, "BURNING!", 0xff4500);
         this.debrisBlock.setTint(0xff4500);
-        this.openTimerEvent = this.time.addEvent({ delay: 5000, callback: () => { this.debrisBurning = false; if(this.debrisBlock) this.debrisBlock.destroy(); this.showFloatingText(this.player.x, this.player.y, "CLEARED!", 0x00ff00); } });
+        this.openTimerEvent = this.time.addEvent({
+            delay: CONFIG.TIMINGS.DEBRIS_BURN,
+            callback: () => {
+                this.debrisBurning = false;
+                if (this.debrisBlock) this.debrisBlock.destroy();
+                this.showFloatingText(this.player.x, this.player.y, "CLEARED!", 0x00ff00);
+            }
+        });
     }
+
     checkSwitch() {
+        if (this.currentLevel !== 5) return false; // Extraction only on level 5
         const s = this.switches.getFirstAlive();
-        if (s && Phaser.Math.Distance.Between(this.player.x, this.player.y, s.x, s.y) < 60) {
-            this.activateExtraction(); s.destroy(); return true;
-        } return false;
-    }
-    checkDoor() {
-        if (this.currentLevel === 3) return false; 
-        if (Phaser.Math.Distance.Between(this.player.x, this.player.y, this.door.x, this.door.y) < 60) {
-            if (this.currentLevel === 1) { if (this.hasKey) this.nextLevel(); else this.showFloatingText(this.door.x, this.door.y-40, "Need Key!", 0xffffff); } 
-            else if (this.currentLevel === 2) { this.nextLevel(); }
+        if (s && Phaser.Math.Distance.Between(this.player.x, this.player.y, s.x, s.y) < CONFIG.DISTANCES.INTERACT) {
+            this.activateExtraction();
+            s.destroy();
             return true;
-        } return false;
+        }
+        return false;
     }
+
+    checkDoor() {
+        if (this.currentLevel === 5) return false; // Hospital is extraction-only
+        if (Phaser.Math.Distance.Between(this.player.x, this.player.y, this.door.x, this.door.y) < CONFIG.DISTANCES.DOOR) {
+            if (this.currentLevel === 1) {
+                if (this.hasKey) this.nextLevel();
+                else this.showFloatingText(this.door.x, this.door.y - 40, "Need Key!", 0xffffff);
+            } else if (this.currentLevel === 2) {
+                this.nextLevel();
+            } else if (this.currentLevel === 3) {
+                if (this.hasKey) this.nextLevel();
+                else this.showFloatingText(this.door.x, this.door.y - 40, "Need Key!", 0xffffff);
+            } else if (this.currentLevel === 4) {
+                if (this.hasKey) this.nextLevel();
+                else this.showFloatingText(this.door.x, this.door.y - 40, "Need Key!", 0xffffff);
+            }
+            return true;
+        }
+        return false;
+    }
+
     nextLevel() {
-        this.cameras.main.fade(1000, 0, 0, 0);
-        this.time.delayedCall(1000, () => { this.scene.restart({ level: this.currentLevel + 1, stats: this.playerStats }); });
+        if (this.isTransitioning) return;
+        this.isTransitioning = true;
+        this.cleanupTimerEvents();
+        this.physics.pause();
+        this.cameras.main.fade(CONFIG.TIMINGS.LEVEL_TRANSITION, 0, 0, 0);
+        this.time.delayedCall(CONFIG.TIMINGS.LEVEL_TRANSITION, () => {
+            this.scene.restart({ level: this.currentLevel + 1, stats: this.playerStats });
+        });
     }
+
     winGame() {
-        if (this.extractionTimerEvent) this.time.removeEvent(this.extractionTimerEvent);
+        if (this.isTransitioning) return;
+        this.isTransitioning = true;
+        this.cleanupTimerEvents();
         this.extractionActive = false;
         this.physics.pause();
         this.levelText.setText("EXTRACTED!").setAlpha(1);
         this.uiGraphics.clear();
-        localStorage.setItem(SAVE_KEY, JSON.stringify(this.playerStats));
-        this.time.delayedCall(2000, () => { this.scene.start('HideoutScene', { stats: this.playerStats }); });
+        localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(this.playerStats));
+        this.time.delayedCall(CONFIG.TIMINGS.DEATH_RESTART, () => {
+            this.scene.start('HideoutScene', { stats: this.playerStats });
+        });
     }
-    tryInteract() { 
-        // 1. Check Crates
+
+    tryInteract() {
         const crates = this.crates.getChildren();
         let closest = null;
-        let minDst = 60;
-        crates.forEach(c => { 
-            const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, c.x, c.y);
-            if(c.active && d < minDst) { closest = c; minDst = d; }
-        }); 
-        if(closest) { this.openCrate(closest); return; }
+        let minDst = CONFIG.DISTANCES.INTERACT;
 
-        // 2. Check Skulls (Loot)
+        crates.forEach(c => {
+            const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, c.x, c.y);
+            if (c.active && d < minDst) { closest = c; minDst = d; }
+        });
+        if (closest) { this.openCrate(closest); return; }
+
         const skulls = this.skulls.getChildren();
-        closest = null; minDst = 60;
+        closest = null;
+        minDst = CONFIG.DISTANCES.INTERACT;
+
         skulls.forEach(s => {
             const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, s.x, s.y);
-            if(s.active && d < minDst) { closest = s; minDst = d; }
+            if (s.active && d < minDst) { closest = s; minDst = d; }
         });
         if (closest) {
             const itemID = closest.getData('lootID');
@@ -910,51 +2096,188 @@ class GameScene extends Phaser.Scene {
             this.applyLoot(itemID);
         }
     }
-    openCrate(crate) { 
-        const itemID = crate.getData('lootID'); this.isOpening = true; 
-        this.openTimerEvent = this.time.addEvent({ delay: 1000, callback: () => { this.isOpening = false; crate.destroy(); this.applyLoot(itemID); } }); 
+
+    openCrate(crate) {
+        const itemID = crate.getData('lootID');
+        this.isOpening = true;
+        this.openTimerEvent = this.time.addEvent({
+            delay: CONFIG.TIMINGS.CRATE_OPEN,
+            callback: () => {
+                this.isOpening = false;
+                crate.destroy();
+                this.applyLoot(itemID);
+            }
+        });
     }
+
     applyLoot(id) {
-        sfx.loot(); // AUDIO
-        let txt="", col=0xffffff;
-        if(id==='meds'){ this.playerStats.hp=Math.min(this.playerStats.hp+5, this.playerStats.maxHp); txt="+5 HP"; col=0xff0000; }
-        else if(id==='ammo'){ this.playerStats.ammo+=5; txt=`+5 Ammo`; col=0xffff00; }
-        else if(id==='key'){ this.hasKey=true; txt="KEY FOUND!"; col=0xffd700; }
-        else if(id==='flashlight'){ this.playerStats.hasFlashlight=true; txt="FLASHLIGHT!"; col=0xffffff; }
-        else if(id==='molotov'){ this.hasMolotov=true; txt="MOLOTOV!"; col=0xff4500; }
-        else if(id==='shotgun'){ this.playerStats.hasShotgun=true; txt="SHOTGUN!"; col=0xff00ff; }
-        else if(id==='scrap'){ this.playerStats.scrap+=5; txt="+5 SCRAP"; col=0xaaaaaa; }
-        else if(id==='plug'){ this.playerStats.hideout.hasSparkPlug=true; txt="SPARK PLUG!"; col=0x00ffff; }
-        else if(id==='helmet'){ this.playerStats.armor.head={name:'HELMET',durability:3,maxDurability:3}; txt="HELMET EQUIPPED"; col=0x00ff00; }
-        else if(id==='vest'){ this.playerStats.armor.body={name:'VEST',durability:5,maxDurability:5}; txt="VEST EQUIPPED"; col=0x00ff00; }
-        this.showFloatingText(this.player.x, this.player.y-30, txt, col);
+        sfx.loot();
+        let txt = "", col = 0xffffff;
+
+        switch (id) {
+            case 'meds':
+                this.playerStats.hp = Math.min(this.playerStats.hp + 5, this.playerStats.maxHp);
+                txt = "+5 HP"; col = 0xff0000;
+                break;
+            case 'ammo':
+                this.playerStats.ammo += 5;
+                txt = "+5 Ammo"; col = 0xffff00;
+                break;
+            case 'key':
+                this.hasKey = true;
+                txt = "KEY FOUND!"; col = 0xffd700;
+                break;
+            case 'flashlight':
+                this.playerStats.hasFlashlight = true;
+                txt = "FLASHLIGHT!"; col = 0xffffff;
+                break;
+            case 'molotov':
+                this.hasMolotov = true;
+                txt = "MOLOTOV!"; col = 0xff4500;
+                break;
+            case 'shotgun':
+                this.playerStats.hasShotgun = true;
+                txt = "SHOTGUN!"; col = 0xff00ff;
+                break;
+            case 'smg':
+                this.playerStats.hasSMG = true;
+                txt = "SMG!"; col = 0x00ffff;
+                break;
+            case 'scrap':
+                this.playerStats.scrap += 5;
+                txt = "+5 SCRAP"; col = 0xaaaaaa;
+                break;
+            case 'plug':
+                this.playerStats.hideout.hasSparkPlug = true;
+                txt = "SPARK PLUG!"; col = 0x00ffff;
+                break;
+            case 'helmet':
+                this.playerStats.armor.head = { name: 'HELMET', durability: 3, maxDurability: 3 };
+                txt = "HELMET EQUIPPED"; col = 0x00ff00;
+                break;
+            case 'vest':
+                this.playerStats.armor.body = { name: 'VEST', durability: 5, maxDurability: 5 };
+                txt = "VEST EQUIPPED"; col = 0x00ff00;
+                break;
+            case 'grenade':
+                if (this.playerStats.grenades < CONFIG.GRENADE.MAX_CARRY) {
+                    this.playerStats.grenades++;
+                    txt = "+1 GRENADE"; col = 0x556B2F;
+                } else {
+                    txt = "GRENADES FULL"; col = 0x888888;
+                }
+                break;
+        }
+
+        this.showFloatingText(this.player.x, this.player.y - 30, txt, col);
     }
-    showFloatingText(x, y, msg, color) { let t = this.add.text(x, y, msg, {font:'16px Arial', stroke:'#000', strokeThickness:3}).setTint(color).setOrigin(0.5).setDepth(101); this.tweens.add({ targets:t, y:y-50, alpha:0, duration:1500, onComplete:()=>t.destroy() }); }
+
+    showFloatingText(x, y, msg, color) {
+        this.floatingText.spawn(x, y, msg, color);
+    }
+
     updateBossBar(hp, max) {
         this.bossBar.clear();
-        this.bossBar.fillStyle(0x000000, 1); this.bossBar.fillRect(200, 50, 400, 20); 
-        this.bossBar.fillStyle(0xff0000, 1); this.bossBar.fillRect(202, 52, 396 * (hp/max), 16); 
+        this.bossBar.fillStyle(0x000000, 1);
+        this.bossBar.fillRect(200, 50, 400, 20);
+        this.bossBar.fillStyle(0xff0000, 1);
+        this.bossBar.fillRect(202, 52, 396 * (hp / max), 16);
     }
+
     drawUI() {
+        if (!this.uiGraphics) return;
+        const ui = CONFIG.UI;
         this.uiGraphics.clear();
-        this.uiGraphics.fillStyle(0x000000, 0.5); this.uiGraphics.fillRect(10, 10, 204, 24);
-        this.uiGraphics.fillStyle(0xff0000, 1); this.uiGraphics.fillRect(12, 12, 200 * (this.playerStats.hp/this.playerStats.maxHp), 20);
-        this.uiGraphics.fillStyle(0x000000, 0.5); this.uiGraphics.fillRect(10, 40, 154, 14);
-        this.uiGraphics.fillStyle(0x0088ff, 1); this.uiGraphics.fillRect(12, 42, 150 * (this.playerStats.stamina/this.playerStats.maxStamina), 10);
+
+        // HP Bar
+        this.uiGraphics.fillStyle(0x000000, 0.5);
+        this.uiGraphics.fillRect(10, 10, ui.HP_BAR_WIDTH + 4, ui.HP_BAR_HEIGHT + 4);
+        this.uiGraphics.fillStyle(0xff0000, 1);
+        this.uiGraphics.fillRect(12, 12, ui.HP_BAR_WIDTH * (this.playerStats.hp / this.playerStats.maxHp), ui.HP_BAR_HEIGHT);
+
+        // Stamina Bar
+        this.uiGraphics.fillStyle(0x000000, 0.5);
+        this.uiGraphics.fillRect(10, 40, ui.STAMINA_BAR_WIDTH + 4, ui.STAMINA_BAR_HEIGHT + 4);
+        this.uiGraphics.fillStyle(0x0088ff, 1);
+        this.uiGraphics.fillRect(12, 42, ui.STAMINA_BAR_WIDTH * (this.playerStats.stamina / this.playerStats.maxStamina), ui.STAMINA_BAR_HEIGHT);
+
+        // Ammo display with magazine
+        const weapon = this.playerStats.currentWeapon;
+        const mag = this.playerStats.magazines[weapon];
+        const maxMag = CONFIG.WEAPONS[weapon.toUpperCase()].MAG_SIZE;
+        
+        let reloadText = this.isReloading ? " [RELOADING]" : "";
         let timerText = this.extractionActive ? ` | BEACON: ${this.extractionTimer}s` : "";
         if (this.extractionActive) this.levelText.setText(this.extractionTimer).setAlpha(1).setTint(0xff0000);
-        let weaponName = this.playerStats.currentWeapon.toUpperCase();
-        this.uiText.setText(`AMMO: ${this.playerStats.ammo} | SCRAP: ${this.playerStats.scrap} | ${weaponName}${timerText}`);
+        
+        this.uiText.setText(`${weapon.toUpperCase()}: ${mag}/${maxMag} (${this.playerStats.ammo})${reloadText} | GREN: ${this.playerStats.grenades} | SCRAP: ${this.playerStats.scrap}${timerText}`);
+
+        // Icons
         let iconX = 300;
-        if (this.hasKey) { this.uiGraphics.fillStyle(0xFFD700, 1); this.uiGraphics.fillCircle(iconX, 22, 12); iconX+=30; }
-        if (this.playerStats.hasFlashlight) { this.uiGraphics.fillStyle(0xffffff, 1); this.uiGraphics.fillCircle(iconX, 22, 12); iconX+=30; }
-        if (this.hasMolotov) { this.uiGraphics.fillStyle(0xff4500, 1); this.uiGraphics.fillCircle(iconX, 22, 12); iconX+=30; }
-        if (this.playerStats.hideout.hasSparkPlug) { this.uiGraphics.fillStyle(0x00ffff, 1); this.uiGraphics.fillCircle(iconX, 22, 12); iconX+=30; }
-        if (this.playerStats.hideout.armory.hasNVG) { this.uiGraphics.fillStyle(0x00ff00, 1); this.uiGraphics.fillCircle(iconX, 22, 12); }
+        if (this.hasKey) {
+            this.uiGraphics.fillStyle(0xFFD700, 1);
+            this.uiGraphics.fillCircle(iconX, 22, ui.ICON_RADIUS);
+            iconX += ui.ICON_SPACING;
+        }
+        if (this.playerStats.hasFlashlight) {
+            this.uiGraphics.fillStyle(0xffffff, 1);
+            this.uiGraphics.fillCircle(iconX, 22, ui.ICON_RADIUS);
+            iconX += ui.ICON_SPACING;
+        }
+        if (this.hasMolotov) {
+            this.uiGraphics.fillStyle(0xff4500, 1);
+            this.uiGraphics.fillCircle(iconX, 22, ui.ICON_RADIUS);
+            iconX += ui.ICON_SPACING;
+        }
+        if (this.playerStats.hideout.hasSparkPlug) {
+            this.uiGraphics.fillStyle(0x00ffff, 1);
+            this.uiGraphics.fillCircle(iconX, 22, ui.ICON_RADIUS);
+            iconX += ui.ICON_SPACING;
+        }
+        if (this.playerStats.hideout.armory.hasNVG) {
+            this.uiGraphics.fillStyle(0x00ff00, 1);
+            this.uiGraphics.fillCircle(iconX, 22, ui.ICON_RADIUS);
+            iconX += ui.ICON_SPACING;
+        }
+        if (this.playerStats.grenades > 0) {
+            this.uiGraphics.fillStyle(0x556B2F, 1);
+            this.uiGraphics.fillCircle(iconX, 22, ui.ICON_RADIUS);
+            // Show count
+            this.uiGraphics.fillStyle(0xffffff, 1);
+        }
+        
+        // Dodge cooldown indicator
+        const dodgeCooldownRemaining = CONFIG.PLAYER.DODGE_COOLDOWN - (this.time.now - this.lastDodgeTime);
+        if (dodgeCooldownRemaining > 0) {
+            const cooldownPercent = dodgeCooldownRemaining / CONFIG.PLAYER.DODGE_COOLDOWN;
+            this.uiGraphics.fillStyle(0x444444, 0.8);
+            this.uiGraphics.fillRect(10, 56, 50, 8);
+            this.uiGraphics.fillStyle(0x00ffff, 1);
+            this.uiGraphics.fillRect(10, 56, 50 * (1 - cooldownPercent), 8);
+        }
     }
 }
 
-const config = { type: Phaser.AUTO, width: 800, height: 600, backgroundColor: '#000000', parent: 'game-container', physics: { default: 'arcade', arcade: { gravity: { y: 0 } } }, scene: [MainMenuScene, GameScene, HideoutScene], scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH } };
+// =============================================================================
+// GAME CONFIGURATION
+// =============================================================================
+const config = {
+    type: Phaser.AUTO,
+    width: 800,
+    height: 600,
+    backgroundColor: '#000000',
+    parent: 'game-container',
+    physics: {
+        default: 'arcade',
+        arcade: { gravity: { y: 0 } }
+    },
+    scene: [MainMenuScene, GameScene, HideoutScene],
+    scale: {
+        mode: Phaser.Scale.FIT,
+        autoCenter: Phaser.Scale.CENTER_BOTH
+    }
+};
+
 const game = new Phaser.Game(config);
 </script>
 </body>
