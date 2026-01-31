@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Zombies - File System 15.0 (Trader Update)</title>
+    <title>Zombies - File System 16.0 (Content Expansion)</title>
     <style>
         body { margin: 0; padding: 0; background-color: #000000; overflow: hidden; }
         canvas { display: block; margin: 0 auto; }
@@ -23,8 +23,8 @@
 // =============================================================================
 const CONFIG = {
     // Save system
-    SAVE_KEY: 'zombie_save_v15',
-    SETTINGS_KEY: 'zombie_settings_v15',
+    SAVE_KEY: 'zombie_save_v16',
+    SETTINGS_KEY: 'zombie_settings_v16',
     
     // Player settings
     PLAYER: {
@@ -71,6 +71,24 @@ const CONFIG = {
             SPREAD: 8,
             MAG_SIZE: 30,
             RELOAD_TIME: 1800
+        },
+        CROSSBOW: {
+            FIRE_RATE: 1500,      // Slow reload between shots
+            AMMO_COST: 1,
+            DAMAGE: 3,            // High damage (one-shots walkers)
+            MAG_SIZE: 1,          // Single bolt
+            RELOAD_TIME: 2000,
+            PIERCING: true,       // Passes through first target
+            SILENT: true          // Doesn't alert nearby enemies
+        },
+        RIFLE: {
+            FIRE_RATE: 200,       // Medium rate
+            AMMO_COST: 1,
+            DAMAGE: 1.5,          // Slightly higher than pistol
+            SPREAD: 3,            // Tight spread
+            MAG_SIZE: 25,
+            RELOAD_TIME: 1500,
+            FIRST_SHOT_BONUS: true // Extra accuracy when stationary
         },
         BULLET_SPEED: 500
     },
@@ -124,6 +142,25 @@ const CONFIG = {
             SPIT_SPEED: 200,
             TEXTURE: 'spitter'
         },
+        EXPLODER: {
+            HP: 2,
+            SPEED: 100,           // Fast
+            DAMAGE: 3,            // Explosion damage to player
+            EXPLOSION_RADIUS: 80,
+            ENEMY_DAMAGE: 5,      // Damage to other enemies (chain reactions!)
+            TEXTURE: 'zombie'     // Reuse zombie texture with orange tint
+        },
+        NECROMANCER: {
+            HP: 8,
+            SPEED: 60,
+            DAMAGE: 2,
+            SUMMON_COUNT: 4,        // Zombies per summon
+            VULNERABLE_TIME: 10000, // 10 sec window
+            PROJECTILE_SPEED: 150,
+            PROJECTILE_DAMAGE: 2,
+            TELEPORT_COOLDOWN: 5000,
+            TEXTURE: 'zombie'     // Will use custom tint
+        },
         KNOCKBACK_SPEED: 100
     },
     
@@ -171,7 +208,9 @@ const CONFIG = {
     LOOT: {
         BANDIT: ['ammo', 'ammo', 'scrap', 'meds', 'helmet', 'vest', 'grenade'],
         ZOMBIE: ['ammo', 'scrap', 'meds', 'ammo'],
-        SPITTER: ['ammo', 'scrap', 'meds', 'grenade']
+        SPITTER: ['ammo', 'scrap', 'meds', 'grenade'],
+        EXPLODER: ['ammo', 'scrap', 'grenade'],
+        NECROMANCER: ['materials', 'materials', 'grenade', 'meds']
     },
     
     // Achievements
@@ -227,7 +266,9 @@ const CONFIG = {
         SPITTER: { currency: 'scrap', min: 2, max: 4, items: ['ammo', 'meds', 'grenade'] },
         BANDIT: { currency: 'credits', min: 5, max: 15, items: ['ammo', 'helmet', 'vest'] },
         BOSS: { currency: 'materials', min: 5, max: 15, items: ['grenade', 'meds'] },
-        LEAPER: { currency: 'scrap', min: 1, max: 2, items: ['ammo'] }
+        LEAPER: { currency: 'scrap', min: 1, max: 2, items: ['ammo'] },
+        EXPLODER: { currency: 'scrap', min: 2, max: 5, items: ['ammo', 'grenade'] },
+        NECROMANCER: { currency: 'materials', min: 10, max: 20, items: ['grenade', 'meds', 'crossbow'] }
     }
 };
 
@@ -236,13 +277,16 @@ const DEFAULT_STATS = {
     credits: 0,
     materials: 0,
     grenades: 0,
+    nextLevel: 1,  // Track which level to start on after extraction
     consumables: [null, null, null],  // 3 slots for hotkeys 1, 2, 3
-    hasFlashlight: false, hasShotgun: false, hasSMG: false, currentWeapon: 'pistol',
+    hasFlashlight: false, hasShotgun: false, hasSMG: false, hasCrossbow: false, hasRifle: false, currentWeapon: 'pistol',
     // Magazine tracking - current rounds in each weapon's magazine
     magazines: {
         pistol: CONFIG.WEAPONS.PISTOL.MAG_SIZE,
         shotgun: CONFIG.WEAPONS.SHOTGUN.MAG_SIZE,
-        smg: CONFIG.WEAPONS.SMG.MAG_SIZE
+        smg: CONFIG.WEAPONS.SMG.MAG_SIZE,
+        crossbow: CONFIG.WEAPONS.CROSSBOW.MAG_SIZE,
+        rifle: CONFIG.WEAPONS.RIFLE.MAG_SIZE
     },
     armor: { head: null, body: null, arms: null, feet: null },
     hideout: { 
@@ -284,7 +328,7 @@ const DEFAULT_PERSISTENT = {
     achievements: []
 };
 
-const PERSISTENT_KEY = 'zombie_persistent_v15';
+const PERSISTENT_KEY = 'zombie_persistent_v16';
 
 // Default settings
 const DEFAULT_SETTINGS = {
@@ -440,6 +484,87 @@ class SoundManager {
     shootSMG() { 
         this.playToneVaried(800, 'sawtooth', 0.05, 0.4, 0.15); 
         this.playNoise(0.05, 0.2); 
+    }
+    
+    // Crossbow - quiet twang
+    shootCrossbow() {
+        this.playToneVaried(300, 'triangle', 0.15, 0.2, 0.1);
+        this.playToneVaried(150, 'sine', 0.1, 0.15, 0.1);
+    }
+    
+    // Assault Rifle - medium crack
+    shootRifle() {
+        this.playToneVaried(400, 'sawtooth', 0.15, 0.5, 0.08);
+        this.playNoise(0.15, 0.4);
+        this.playTone(150, 'square', 0.1, 0.25);
+    }
+    
+    // ==================== EXPLODER SOUNDS ====================
+    exploderWarning() {
+        // Ticking/bubbling sound as it charges
+        this.playTone(200, 'sine', 0.1, 0.2);
+        this.playTone(250, 'sine', 0.08, 0.15);
+    }
+    
+    exploderExplode() {
+        // Meaty explosion
+        this.playTone(80, 'sawtooth', 0.4, 0.7);
+        this.playNoise(0.35, 0.6);
+        this.playTone(40, 'square', 0.3, 0.4);
+    }
+    
+    // ==================== STEALTH SOUNDS ====================
+    detectionPing() {
+        // Soft ping when detection rises
+        this.playTone(600, 'sine', 0.1, 0.2);
+    }
+    
+    detectionMax() {
+        // Alarm sound when fully detected
+        this.playTone(800, 'square', 0.3, 0.5);
+        this.playTone(600, 'square', 0.2, 0.4);
+        this.playTone(800, 'square', 0.3, 0.5);
+    }
+    
+    stealthKill() {
+        // Satisfying quiet kill
+        this.playTone(100, 'triangle', 0.15, 0.3);
+        this.playFilteredNoise(0.1, 0.2, 800, 'lowpass');
+    }
+    
+    // ==================== NECROMANCER SOUNDS ====================
+    necroSummon() {
+        // Ethereal chanting
+        this.playTone(150, 'sine', 0.5, 0.3);
+        this.playTone(200, 'sine', 0.4, 0.25);
+        this.playTone(175, 'triangle', 0.3, 0.2);
+    }
+    
+    necroVulnerable() {
+        // Shield break sound
+        this.playTone(400, 'sawtooth', 0.2, 0.4);
+        this.playNoise(0.15, 0.3);
+        this.playTone(200, 'square', 0.3, 0.3);
+    }
+    
+    necroTeleport() {
+        // Whoosh
+        this.playFilteredNoise(0.2, 0.3, 2000, 'highpass');
+        this.playTone(500, 'sine', 0.15, 0.2);
+    }
+    
+    necroProjectile() {
+        // Ghostly whistle
+        this.playTone(600, 'sine', 0.2, 0.25);
+        this.playTone(650, 'sine', 0.15, 0.2);
+    }
+    
+    necroDeath() {
+        // Dramatic echo fade
+        this.playTone(200, 'sawtooth', 0.5, 0.5);
+        this.playTone(150, 'sawtooth', 0.6, 0.4);
+        this.playTone(100, 'sawtooth', 0.7, 0.3);
+        this.playFilteredNoise(0.4, 0.4, 500, 'lowpass');
     }
     
     // ==================== HIT/DAMAGE SOUNDS ====================
@@ -964,7 +1089,7 @@ class MainMenuScene extends Phaser.Scene {
         this.add.rectangle(400, 300, 800, 600, 0x111111);
         this.add.grid(400, 300, 800, 600, 64, 64, 0x222222).setAlpha(0.2);
         this.add.text(400, 100, "ZOMBIE EXTRACTION", { fontSize: '64px', fill: '#00ff00', fontStyle: 'bold' }).setOrigin(0.5);
-        this.add.text(400, 160, "BUILD 14.0 (POLISH PASS)", { fontSize: '24px', fill: '#555' }).setOrigin(0.5);
+        this.add.text(400, 160, "BUILD 17.0 (LEVEL PROGRESSION)", { fontSize: '24px', fill: '#555' }).setOrigin(0.5);
 
         this.createButton(400, 240, "NEW RUN", 0x880000, () => {
             if(confirm("Start a new run? This overwrites current auto-save.")) {
@@ -977,17 +1102,41 @@ class MainMenuScene extends Phaser.Scene {
         this.createButton(400, 300, "CONTINUE", 0x004488, () => {
             let saved = localStorage.getItem(CONFIG.SAVE_KEY);
             if (saved) {
-                let stats = JSON.parse(saved);
-                // Ensure magazines exist for old saves
-                if (!stats.magazines) {
-                    stats.magazines = {
-                        pistol: CONFIG.WEAPONS.PISTOL.MAG_SIZE,
-                        shotgun: CONFIG.WEAPONS.SHOTGUN.MAG_SIZE,
-                        smg: CONFIG.WEAPONS.SMG.MAG_SIZE
-                    };
+                try {
+                    let stats = JSON.parse(saved);
+                    // Validate critical fields exist
+                    if (stats.hp === undefined || stats.hideout === undefined) {
+                        throw new Error("Invalid save data");
+                    }
+                    // Ensure magazines exist for old saves
+                    if (!stats.magazines) {
+                        stats.magazines = {
+                            pistol: CONFIG.WEAPONS.PISTOL.MAG_SIZE,
+                            shotgun: CONFIG.WEAPONS.SHOTGUN.MAG_SIZE,
+                            smg: CONFIG.WEAPONS.SMG.MAG_SIZE,
+                            crossbow: CONFIG.WEAPONS.CROSSBOW.MAG_SIZE,
+                            rifle: CONFIG.WEAPONS.RIFLE.MAG_SIZE
+                        };
+                    }
+                    // Ensure new weapon magazines exist
+                    if (stats.magazines.crossbow === undefined) stats.magazines.crossbow = CONFIG.WEAPONS.CROSSBOW.MAG_SIZE;
+                    if (stats.magazines.rifle === undefined) stats.magazines.rifle = CONFIG.WEAPONS.RIFLE.MAG_SIZE;
+                    // Ensure new weapon flags exist
+                    if (stats.hasCrossbow === undefined) stats.hasCrossbow = false;
+                    if (stats.hasRifle === undefined) stats.hasRifle = false;
+                    // Ensure currentWeapon is valid (fixes null rendering)
+                    if (!stats.currentWeapon) stats.currentWeapon = 'pistol';
+                    // Ensure nextLevel exists
+                    if (stats.nextLevel === undefined) stats.nextLevel = 1;
+                    // Ensure consumables array exists
+                    if (!stats.consumables) stats.consumables = [null, null, null];
+                    sfx.menuOpen();
+                    this.scene.start('HideoutScene', { stats });
+                } catch (e) {
+                    sfx.error();
+                    alert("Save data corrupted. Please start a new game.");
+                    localStorage.removeItem(CONFIG.SAVE_KEY);
                 }
-                sfx.menuOpen();
-                this.scene.start('HideoutScene', { stats });
             } else {
                 sfx.error();
                 alert("No save found!");
@@ -1168,23 +1317,25 @@ class MainMenuScene extends Phaser.Scene {
     
     showLevelSelect() {
         // Create level select overlay
-        const overlay = this.add.rectangle(400, 300, 500, 350, 0x111111, 0.95).setDepth(500);
-        const title = this.add.text(400, 150, "SELECT LEVEL", { fontSize: '32px', fill: '#fff' }).setOrigin(0.5).setDepth(501);
-        const subtitle = this.add.text(400, 185, "(starts with full gear)", { fontSize: '14px', fill: '#888' }).setOrigin(0.5).setDepth(501);
+        const overlay = this.add.rectangle(400, 300, 500, 450, 0x111111, 0.95).setDepth(500);
+        const title = this.add.text(400, 100, "SELECT LEVEL", { fontSize: '32px', fill: '#fff' }).setOrigin(0.5).setDepth(501);
+        const subtitle = this.add.text(400, 135, "(starts with full gear)", { fontSize: '14px', fill: '#888' }).setOrigin(0.5).setDepth(501);
         
         const levels = [
             { num: 1, name: "Street", color: 0x2d5a27 },
             { num: 2, name: "Apartment", color: 0x444444 },
             { num: 3, name: "Rooftop", color: 0x1a1a2e },
             { num: 4, name: "Sewers", color: 0x2a3a2a },
-            { num: 5, name: "Hospital", color: 0xddeedd }
+            { num: 5, name: "Hospital", color: 0xddeedd },
+            { num: 6, name: "Mall", color: 0x8B4513 },
+            { num: 7, name: "Cemetery", color: 0x1a1a1a }
         ];
         
         const elements = [overlay, title, subtitle];
         
         levels.forEach((lvl, i) => {
-            const btn = this.add.rectangle(400, 230 + i * 50, 300, 40, lvl.color).setInteractive().setDepth(501);
-            const txt = this.add.text(400, 230 + i * 50, `${lvl.num}. ${lvl.name}`, { fontSize: '20px', fill: '#fff' }).setOrigin(0.5).setDepth(502);
+            const btn = this.add.rectangle(400, 170 + i * 45, 300, 38, lvl.color).setInteractive().setDepth(501);
+            const txt = this.add.text(400, 170 + i * 45, `${lvl.num}. ${lvl.name}`, { fontSize: '18px', fill: '#fff' }).setOrigin(0.5).setDepth(502);
             btn.on('pointerdown', () => {
                 sfx.click();
                 this.startAtLevel(lvl.num);
@@ -1194,7 +1345,7 @@ class MainMenuScene extends Phaser.Scene {
             elements.push(btn, txt);
         });
         
-        const closeBtn = this.add.text(400, 480, "[ CANCEL ]", { fontSize: '16px', fill: '#ff4444' }).setOrigin(0.5).setDepth(501).setInteractive();
+        const closeBtn = this.add.text(400, 510, "[ CANCEL ]", { fontSize: '16px', fill: '#ff4444' }).setOrigin(0.5).setDepth(501).setInteractive();
         closeBtn.on('pointerdown', () => {
             sfx.click();
             elements.forEach(e => e.destroy());
@@ -1206,12 +1357,16 @@ class MainMenuScene extends Phaser.Scene {
         // Create stats with full gear for testing
         const testStats = {
             hp: 20, maxHp: 20, stamina: 100, maxStamina: 100, ammo: 200, scrap: 50,
+            credits: 100, materials: 50,
             grenades: CONFIG.GRENADE.MAX_CARRY,
-            hasFlashlight: true, hasShotgun: true, hasSMG: true, currentWeapon: 'shotgun',
+            consumables: [null, null, null],
+            hasFlashlight: true, hasShotgun: true, hasSMG: true, hasCrossbow: true, hasRifle: true, currentWeapon: 'shotgun',
             magazines: {
                 pistol: CONFIG.WEAPONS.PISTOL.MAG_SIZE,
                 shotgun: CONFIG.WEAPONS.SHOTGUN.MAG_SIZE,
-                smg: CONFIG.WEAPONS.SMG.MAG_SIZE
+                smg: CONFIG.WEAPONS.SMG.MAG_SIZE,
+                crossbow: CONFIG.WEAPONS.CROSSBOW.MAG_SIZE,
+                rifle: CONFIG.WEAPONS.RIFLE.MAG_SIZE
             },
             armor: {
                 head: { name: 'HELMET', durability: 3, maxDurability: 3 },
@@ -1239,12 +1394,16 @@ class MainMenuScene extends Phaser.Scene {
     activateGodMode() {
         const godStats = {
             hp: 20, maxHp: 20, stamina: 100, maxStamina: 100, ammo: 999, scrap: 999,
+            credits: 999, materials: 999,
             grenades: CONFIG.GRENADE.MAX_CARRY,
-            hasFlashlight: true, hasShotgun: true, hasSMG: true, currentWeapon: 'shotgun',
+            consumables: [null, null, null],
+            hasFlashlight: true, hasShotgun: true, hasSMG: true, hasCrossbow: true, hasRifle: true, currentWeapon: 'shotgun',
             magazines: {
                 pistol: CONFIG.WEAPONS.PISTOL.MAG_SIZE,
                 shotgun: CONFIG.WEAPONS.SHOTGUN.MAG_SIZE,
-                smg: CONFIG.WEAPONS.SMG.MAG_SIZE
+                smg: CONFIG.WEAPONS.SMG.MAG_SIZE,
+                crossbow: CONFIG.WEAPONS.CROSSBOW.MAG_SIZE,
+                rifle: CONFIG.WEAPONS.RIFLE.MAG_SIZE
             },
             armor: {
                 head: { name: 'GOD HELM', durability: 100, maxDurability: 100 },
@@ -1280,6 +1439,13 @@ class Bullet extends Phaser.Physics.Arcade.Sprite {
         this.hasHit = false;
         this.isEnemyBullet = isEnemy; 
         this.setTint(isEnemy ? 0xff0000 : 0xffff00);
+        
+        // Reset pooled bullet properties
+        this.hitEnemies = new Set();
+        this.isPiercing = false;
+        this.pierceCount = 0;
+        this.crossbowDamage = 0;
+        this.rifleDamage = 0;
         
         if (isEnemy) sfx.shootPistol();
 
@@ -1335,6 +1501,27 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
         } else if (type === 'spitter') {
             this.lastSpit = 0;
             this.setTint(0x00ff00); // Green tint for toxic look
+        } else if (type === 'exploder') {
+            this.setTint(0xff6600); // Orange tint for explosive look
+            this.setScale(1.2); // Slightly bloated
+            // Pulsing effect
+            this.scene.tweens.add({
+                targets: this,
+                scaleX: 1.3,
+                scaleY: 1.3,
+                duration: 500,
+                yoyo: true,
+                repeat: -1,
+                ease: 'Sine.easeInOut'
+            });
+        } else if (type === 'necromancer') {
+            this.setTint(0x8800ff); // Purple tint
+            this.setScale(1.5);
+            this.phase = 'SUMMON'; // SUMMON, VULNERABLE, ATTACK
+            this.phaseTimer = 0;
+            this.lastTeleport = 0;
+            this.summonedMinions = [];
+            this.isInvulnerable = true; // Starts invulnerable
         }
     }
     
@@ -1348,7 +1535,7 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
         this.scene.time.delayedCall(50, () => { if (this.active) this.clearTint(); });
         this.updateHealthBar();
         
-        if (this.enemyType === 'boss') {
+        if (this.enemyType === 'boss' || this.enemyType === 'necromancer') {
             this.scene.updateBossBar(this.hp, this.maxHp);
             this.canTakeDamage = false;
             this.isInvulnerable = true;
@@ -1375,9 +1562,30 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
             // Play death sound
             sfx.enemyDeath();
             
+            // Exploder explosion on death
+            if (this.enemyType === 'exploder') {
+                this.scene.exploderExplosion(this.x, this.y);
+            }
+            
+            // Necromancer special death
+            if (this.enemyType === 'necromancer') {
+                sfx.necroDeath();
+                this.scene.showFloatingText(this.x, this.y, "VANQUISHED!", 0x8800ff);
+                // Kill any remaining minions
+                this.summonedMinions.forEach(m => {
+                    if (m.active) m.takeDamage(100);
+                });
+            }
+            
             if (this.enemyType === 'boss' && this.scene.currentLevel === 5) {
                 this.scene.spawnSwitch(this.x, this.y);
             }
+            
+            // Necromancer on level 7 spawns switch
+            if (this.enemyType === 'necromancer' && this.scene.currentLevel === 7) {
+                this.scene.spawnSwitch(this.x, this.y);
+            }
+            
             this.scene.spawnLootSkull(this.x, this.y, this.enemyType, this.lastDamageSource);
             
             // Check melee master achievement for boss
@@ -1465,6 +1673,8 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
         if (this.enemyType === 'boss') {
             this.scene.physics.moveToObject(this, this.target, this.speed);
         } else if (this.enemyType === 'walker') {
+            // Patrol enemies are handled separately
+            if (this.isPatrol) return;
             if (Phaser.Math.Distance.Between(this.x, this.y, this.target.x, this.target.y) < cfg.AGGRO_RANGE) {
                 this.scene.physics.moveToObject(this, this.target, this.speed);
             }
@@ -1506,7 +1716,105 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
                     if (this.leapTimer <= 0) this.state = 'CHASE';
                     break;
             }
+        } else if (this.enemyType === 'exploder') {
+            // Exploder just charges directly at player at high speed
+            this.scene.physics.moveToObject(this, this.target, this.speed);
+            // Play warning sound periodically
+            if (!this.lastWarning || time - this.lastWarning > 1000) {
+                sfx.exploderWarning();
+                this.lastWarning = time;
+            }
+        } else if (this.enemyType === 'necromancer') {
+            // Necromancer boss phases
+            this.updateNecromancerAI(time, delta);
         }
+    }
+    
+    updateNecromancerAI(time, delta) {
+        const cfg = CONFIG.ENEMIES.NECROMANCER;
+        
+        switch (this.phase) {
+            case 'SUMMON':
+                this.setVelocity(0);
+                if (!this.hasSummoned) {
+                    this.hasSummoned = true;
+                    // Summon minions
+                    for (let i = 0; i < cfg.SUMMON_COUNT; i++) {
+                        const angle = (i / cfg.SUMMON_COUNT) * Math.PI * 2;
+                        const spawnX = this.x + Math.cos(angle) * 100;
+                        const spawnY = this.y + Math.sin(angle) * 100;
+                        const minion = new Enemy(this.scene, spawnX, spawnY, this.target, 'walker');
+                        this.scene.enemies.add(minion);
+                        this.summonedMinions.push(minion);
+                        // Summon visual effect
+                        this.scene.showFloatingText(spawnX, spawnY, "RISE!", 0x8800ff);
+                    }
+                    sfx.necroSummon();
+                    this.isInvulnerable = true;
+                    this.setTint(0x8800ff);
+                }
+                // Check if all minions are dead
+                this.summonedMinions = this.summonedMinions.filter(m => m.active);
+                if (this.summonedMinions.length === 0) {
+                    this.phase = 'VULNERABLE';
+                    this.phaseTimer = cfg.VULNERABLE_TIME;
+                    this.isInvulnerable = false;
+                    this.setTint(0xff00ff); // Bright purple when vulnerable
+                    sfx.necroVulnerable();
+                    this.scene.showFloatingText(this.x, this.y - 40, "VULNERABLE!", 0xff00ff);
+                }
+                break;
+                
+            case 'VULNERABLE':
+                this.phaseTimer -= delta;
+                // Attack while vulnerable
+                if (time - this.lastFired > 1500) {
+                    this.fireNecroProjectile();
+                    this.lastFired = time;
+                }
+                // Teleport periodically
+                if (time - this.lastTeleport > cfg.TELEPORT_COOLDOWN) {
+                    this.teleport();
+                    this.lastTeleport = time;
+                }
+                if (this.phaseTimer <= 0) {
+                    this.phase = 'SUMMON';
+                    this.hasSummoned = false;
+                    this.isInvulnerable = true;
+                    this.setTint(0x8800ff);
+                }
+                break;
+        }
+    }
+    
+    fireNecroProjectile() {
+        const cfg = CONFIG.ENEMIES.NECROMANCER;
+        const angle = Phaser.Math.Angle.Between(this.x, this.y, this.target.x, this.target.y);
+        // Create acid-like projectile
+        this.scene.spawnNecroProjectile(this.x, this.y, this.target.x, this.target.y);
+        sfx.necroProjectile();
+    }
+    
+    teleport() {
+        // Teleport to random position in arena
+        const newX = Phaser.Math.Between(150, 650);
+        const newY = Phaser.Math.Between(100, 300);
+        
+        // Teleport effect
+        this.scene.tweens.add({
+            targets: this,
+            alpha: 0,
+            duration: 200,
+            onComplete: () => {
+                this.setPosition(newX, newY);
+                this.scene.tweens.add({
+                    targets: this,
+                    alpha: 1,
+                    duration: 200
+                });
+            }
+        });
+        sfx.necroTeleport();
     }
     
     destroy(fromScene) {
@@ -1529,9 +1837,17 @@ class HideoutScene extends Phaser.Scene {
             this.stats.magazines = {
                 pistol: CONFIG.WEAPONS.PISTOL.MAG_SIZE,
                 shotgun: CONFIG.WEAPONS.SHOTGUN.MAG_SIZE,
-                smg: CONFIG.WEAPONS.SMG.MAG_SIZE
+                smg: CONFIG.WEAPONS.SMG.MAG_SIZE,
+                crossbow: CONFIG.WEAPONS.CROSSBOW.MAG_SIZE,
+                rifle: CONFIG.WEAPONS.RIFLE.MAG_SIZE
             };
         }
+        // Ensure new weapon magazines exist
+        if (this.stats.magazines.crossbow === undefined) this.stats.magazines.crossbow = CONFIG.WEAPONS.CROSSBOW.MAG_SIZE;
+        if (this.stats.magazines.rifle === undefined) this.stats.magazines.rifle = CONFIG.WEAPONS.RIFLE.MAG_SIZE;
+        // Ensure new weapon flags exist
+        if (this.stats.hasCrossbow === undefined) this.stats.hasCrossbow = false;
+        if (this.stats.hasRifle === undefined) this.stats.hasRifle = false;
         // Ensure grenades exist for old saves
         if (this.stats.grenades === undefined) {
             this.stats.grenades = 0;
@@ -1552,6 +1868,10 @@ class HideoutScene extends Phaser.Scene {
         }
         if (this.stats.consumables === undefined) {
             this.stats.consumables = [null, null, null];
+        }
+        // Ensure nextLevel exists for old saves
+        if (this.stats.nextLevel === undefined) {
+            this.stats.nextLevel = 1;
         }
         
         // Load persistent stats
@@ -1613,7 +1933,8 @@ class HideoutScene extends Phaser.Scene {
         this.createRepairStationCard(270, 375);
 
         const deployBtn = this.add.rectangle(650, 500, 200, 60, 0x008800).setInteractive();
-        this.add.text(650, 500, "DEPLOY", { fontSize: '24px', fill: '#fff' }).setOrigin(0.5);
+        const deployLevel = this.stats.nextLevel || 1;
+        this.add.text(650, 500, deployLevel === 1 ? "DEPLOY" : `DEPLOY LVL ${deployLevel}`, { fontSize: '24px', fill: '#fff' }).setOrigin(0.5);
         deployBtn.on('pointerdown', () => {
             sfx.success();
             if (this.stats.hideout.restAreaLvl > 0) {
@@ -1625,8 +1946,10 @@ class HideoutScene extends Phaser.Scene {
             this.stats.magazines.pistol = CONFIG.WEAPONS.PISTOL.MAG_SIZE;
             this.stats.magazines.shotgun = CONFIG.WEAPONS.SHOTGUN.MAG_SIZE;
             this.stats.magazines.smg = CONFIG.WEAPONS.SMG.MAG_SIZE;
+            this.stats.magazines.crossbow = CONFIG.WEAPONS.CROSSBOW.MAG_SIZE;
+            this.stats.magazines.rifle = CONFIG.WEAPONS.RIFLE.MAG_SIZE;
             this.cameras.main.fade(500, 0, 0, 0);
-            this.time.delayedCall(500, () => { this.scene.start('GameScene', { level: 1, stats: this.stats }); });
+            this.time.delayedCall(500, () => { this.scene.start('GameScene', { level: deployLevel, stats: this.stats }); });
         });
 
         const menuBtn = this.add.rectangle(100, 550, 150, 40, 0x444444).setInteractive();
@@ -1643,9 +1966,9 @@ class HideoutScene extends Phaser.Scene {
         this.add.text(500, 550, "SETTINGS", { fontSize: '14px', fill: '#fff' }).setOrigin(0.5);
         settingsBtn.on('pointerdown', () => { sfx.menuOpen(); this.showSettingsMenu(); });
         
-        // Trader button
-        const traderBtn = this.add.rectangle(500, 375 + 60, 220, 50, 0xffd700).setInteractive();
-        this.add.text(500 + 100, 375 + 60, "TRADER", { fontSize: '20px', fill: '#000', fontStyle: 'bold' }).setOrigin(0.5);
+        // Trader button - positioned to the right of Repair Station
+        const traderBtn = this.add.rectangle(600, 435, 180, 50, 0xffd700).setInteractive();
+        this.add.text(600, 435, "TRADER", { fontSize: '20px', fill: '#000', fontStyle: 'bold' }).setOrigin(0.5);
         traderBtn.on('pointerdown', () => { sfx.menuOpen(); this.showTraderModal(); });
         traderBtn.on('pointerover', () => traderBtn.setAlpha(0.8));
         traderBtn.on('pointerout', () => traderBtn.setAlpha(1));
@@ -2388,9 +2711,17 @@ class GameScene extends Phaser.Scene {
             this.playerStats.magazines = {
                 pistol: CONFIG.WEAPONS.PISTOL.MAG_SIZE,
                 shotgun: CONFIG.WEAPONS.SHOTGUN.MAG_SIZE,
-                smg: CONFIG.WEAPONS.SMG.MAG_SIZE
+                smg: CONFIG.WEAPONS.SMG.MAG_SIZE,
+                crossbow: CONFIG.WEAPONS.CROSSBOW.MAG_SIZE,
+                rifle: CONFIG.WEAPONS.RIFLE.MAG_SIZE
             };
         }
+        // Ensure new weapon magazines exist
+        if (this.playerStats.magazines.crossbow === undefined) this.playerStats.magazines.crossbow = CONFIG.WEAPONS.CROSSBOW.MAG_SIZE;
+        if (this.playerStats.magazines.rifle === undefined) this.playerStats.magazines.rifle = CONFIG.WEAPONS.RIFLE.MAG_SIZE;
+        // Ensure new weapon flags exist
+        if (this.playerStats.hasCrossbow === undefined) this.playerStats.hasCrossbow = false;
+        if (this.playerStats.hasRifle === undefined) this.playerStats.hasRifle = false;
         // Ensure grenades exist for old saves
         if (this.playerStats.grenades === undefined) {
             this.playerStats.grenades = 0;
@@ -2494,12 +2825,31 @@ class GameScene extends Phaser.Scene {
         this.physics.add.overlap(this.bullets, this.enemies, (obj1, obj2) => {
             const bullet = (obj1.texture.key === 'bullet') ? obj1 : obj2;
             const enemy = (obj1.texture.key === 'bullet') ? obj2 : obj1;
-            if (bullet.active && enemy.active && !bullet.hasHit) {
+            if (bullet.active && enemy.active) {
                 if (bullet.isEnemyBullet) return;
-                bullet.hasHit = true;
-                bullet.setActive(false);
-                bullet.setVisible(false);
-                bullet.body.enable = false;
+                
+                // Track which enemies this bullet has hit (for piercing)
+                if (!bullet.hitEnemies) bullet.hitEnemies = new Set();
+                if (bullet.hitEnemies.has(enemy)) return; // Already hit this enemy
+                bullet.hitEnemies.add(enemy);
+                
+                // Piercing bullets can hit multiple enemies but have a limit
+                if (bullet.isPiercing) {
+                    if (!bullet.pierceCount) bullet.pierceCount = 0;
+                    bullet.pierceCount++;
+                    if (bullet.pierceCount > 2) { // Pierce through 2 enemies max
+                        bullet.setActive(false);
+                        bullet.setVisible(false);
+                        bullet.body.enable = false;
+                    }
+                } else {
+                    // Non-piercing bullets stop on first hit
+                    bullet.hasHit = true;
+                    bullet.setActive(false);
+                    bullet.setVisible(false);
+                    bullet.body.enable = false;
+                }
+                
                 // Track hit stats
                 this.persistent.runShotsHit++;
                 this.persistent.totalShotsHit++;
@@ -2507,8 +2857,16 @@ class GameScene extends Phaser.Scene {
                 if (enemy.enemyType === 'boss') {
                     this.persistent.bossHitWithGun = true;
                 }
-                // Apply workbench damage bonus
+                
+                // Calculate damage based on weapon type
                 let damage = 1;
+                if (bullet.crossbowDamage) {
+                    damage = bullet.crossbowDamage; // Crossbow high damage
+                } else if (bullet.rifleDamage) {
+                    damage = bullet.rifleDamage; // Rifle medium damage
+                }
+                
+                // Apply workbench damage bonus
                 if (this.playerStats.hideout.workbenchLvl > 0) {
                     damage = Math.ceil(damage * (1 + CONFIG.HIDEOUT.WORKBENCH_DAMAGE_BONUS));
                 }
@@ -3011,6 +3369,77 @@ class GameScene extends Phaser.Scene {
 
         this.showFloatingText(x, y, "BOOM!", 0xff4500);
     }
+    
+    exploderExplosion(x, y) {
+        const cfg = CONFIG.ENEMIES.EXPLODER;
+        sfx.exploderExplode();
+        if (this.gameSettings.screenShake) this.cameras.main.shake(150, 0.015);
+
+        // Visual explosion - orange
+        const explosion = this.add.circle(x, y, 10, 0xff6600, 1).setDepth(100);
+        this.tweens.add({
+            targets: explosion,
+            radius: cfg.EXPLOSION_RADIUS,
+            alpha: 0,
+            duration: 250,
+            onComplete: () => explosion.destroy()
+        });
+
+        // Spawn flash particles
+        for (let i = 0; i < 6; i++) {
+            const angle = (i / 6) * Math.PI * 2;
+            const dist = 20 + Math.random() * 30;
+            this.particles.spawnMuzzleFlash(
+                x + Math.cos(angle) * dist,
+                y + Math.sin(angle) * dist,
+                angle, 1.2
+            );
+        }
+
+        // Damage player if in range
+        const playerDist = Phaser.Math.Distance.Between(x, y, this.player.x, this.player.y);
+        if (playerDist < cfg.EXPLOSION_RADIUS) {
+            this.hitPlayer(cfg.DAMAGE, x, y);
+        }
+
+        // Damage other enemies in range (chain reactions!)
+        this.enemies.getChildren().forEach(enemy => {
+            if (!enemy.active) return;
+            const dist = Phaser.Math.Distance.Between(x, y, enemy.x, enemy.y);
+            if (dist < cfg.EXPLOSION_RADIUS && dist > 0) { // dist > 0 prevents self-damage
+                const damageMult = 1 - (dist / cfg.EXPLOSION_RADIUS) * 0.5;
+                const damage = Math.ceil(cfg.ENEMY_DAMAGE * damageMult);
+                if (enemy.takeDamage) enemy.takeDamage(damage, 'explosion');
+                
+                // Knockback
+                if (enemy.active && enemy.body) {
+                    const knockAngle = Phaser.Math.Angle.Between(x, y, enemy.x, enemy.y);
+                    this.physics.velocityFromRotation(knockAngle, 200, enemy.body.velocity);
+                }
+            }
+        });
+
+        this.showFloatingText(x, y, "KABOOM!", 0xff6600);
+    }
+    
+    spawnNecroProjectile(fromX, fromY, toX, toY) {
+        const cfg = CONFIG.ENEMIES.NECROMANCER;
+        // Create a slow-moving projectile
+        const proj = this.acidProjectiles.get(fromX, fromY);
+        if (proj) {
+            proj.body.reset(fromX, fromY);
+            proj.body.enable = true;
+            proj.setActive(true);
+            proj.setVisible(true);
+            proj.hasHit = false;
+            proj.setTint(0x8800ff); // Purple for necro
+            proj.setScale(1.5);
+            
+            const angle = Phaser.Math.Angle.Between(fromX, fromY, toX, toY);
+            this.physics.velocityFromRotation(angle, cfg.PROJECTILE_SPEED, proj.body.velocity);
+            proj.setRotation(angle);
+        }
+    }
 
     createInventoryUI() {
         this.invContainer = this.add.container(400, 300).setDepth(300).setVisible(false);
@@ -3118,15 +3547,72 @@ class GameScene extends Phaser.Scene {
             // Water hazard visual (dark area)
             this.add.rectangle(300, 380, 150, 80, 0x003300, 0.5).setDepth(1);
         } else if (level === 5) {
-            // HOSPITAL - Open areas, final extraction
+            // HOSPITAL - Open areas, mini boss
             this.add.tileSprite(400, 300, 800, 600, 'floor_hospital');
-            this.door = this.physics.add.staticSprite(-100, -100, 'door'); // No door - extraction level
+            this.door = this.physics.add.staticSprite(400, 50, 'door').setTint(0xff00ff);
             // Hospital layout - rooms and corridors
             this.walls.create(150, 200, 'wall').setScale(1, 8).refreshBody();
             this.walls.create(650, 200, 'wall').setScale(1, 8).refreshBody();
             this.walls.create(300, 100, 'wall').setScale(4, 1).refreshBody();
             this.walls.create(500, 100, 'wall').setScale(4, 1).refreshBody();
             this.walls.create(400, 350, 'wall').setScale(8, 1).refreshBody();
+        } else if (level === 6) {
+            // MALL - Multi-floor combat with balcony enemies
+            this.add.tileSprite(400, 300, 800, 600, 'floor_apt'); // Reuse apartment floor for mall
+            this.door = this.physics.add.staticSprite(400, 50, 'door').setTint(0xffff00);
+            
+            // Mall structure - ground floor with upper balcony
+            // Ground floor stores (left and right)
+            this.walls.create(100, 450, 'wall').setScale(3, 4).refreshBody();
+            this.walls.create(700, 450, 'wall').setScale(3, 4).refreshBody();
+            
+            // Upper floor balcony walls
+            this.walls.create(100, 150, 'wall').setScale(4, 1).refreshBody();
+            this.walls.create(700, 150, 'wall').setScale(4, 1).refreshBody();
+            
+            // Central escalator area (narrow paths)
+            this.walls.create(300, 250, 'wall').setScale(1, 3).refreshBody();
+            this.walls.create(500, 250, 'wall').setScale(1, 3).refreshBody();
+            
+            // Cover objects (benches, planters)
+            this.crates.create(200, 350, 'crate').setTint(0x8B4513); // Bench
+            this.crates.create(600, 350, 'crate').setTint(0x8B4513); // Bench
+            this.crates.create(400, 500, 'crate').setTint(0x228B22); // Planter
+            
+            // Visual: Balcony indicator
+            this.add.rectangle(400, 100, 600, 80, 0x333333, 0.3).setDepth(1);
+            this.add.text(400, 100, "UPPER FLOOR", { fontSize: '14px', fill: '#666' }).setOrigin(0.5).setDepth(2);
+        } else if (level === 7) {
+            // CEMETERY - Stealth graveyard leading to church boss arena
+            this.add.tileSprite(400, 300, 800, 600, 'floor_grass'); // Dark grass
+            this.add.rectangle(400, 300, 800, 600, 0x001100, 0.5).setDepth(0); // Dark overlay
+            this.door = this.physics.add.staticSprite(-100, -100, 'door'); // No door - boss extraction level
+            
+            // Graveyard tombstones (cover for stealth)
+            const tombPositions = [
+                {x: 150, y: 450}, {x: 250, y: 400}, {x: 350, y: 480},
+                {x: 450, y: 420}, {x: 550, y: 460}, {x: 650, y: 400},
+                {x: 200, y: 300}, {x: 400, y: 320}, {x: 600, y: 280}
+            ];
+            tombPositions.forEach(pos => {
+                const tomb = this.walls.create(pos.x, pos.y, 'wall');
+                tomb.setScale(0.5, 1).refreshBody();
+                tomb.setTint(0x555555); // Gray tombstone
+            });
+            
+            // Church entrance walls
+            this.walls.create(200, 100, 'wall').setScale(4, 1).refreshBody();
+            this.walls.create(600, 100, 'wall').setScale(4, 1).refreshBody();
+            this.walls.create(100, 150, 'wall').setScale(1, 3).refreshBody();
+            this.walls.create(700, 150, 'wall').setScale(1, 3).refreshBody();
+            
+            // Church interior visual
+            this.add.rectangle(400, 100, 400, 150, 0x222222, 0.5).setDepth(1);
+            this.add.text(400, 50, "CHURCH", { fontSize: '18px', fill: '#555' }).setOrigin(0.5).setDepth(2);
+            
+            // Moonlight patches (detection zones - visual only, stealth handles mechanics)
+            this.add.circle(300, 380, 40, 0xffffcc, 0.1).setDepth(1);
+            this.add.circle(500, 350, 50, 0xffffcc, 0.1).setDepth(1);
         }
     }
 
@@ -3166,7 +3652,7 @@ class GameScene extends Phaser.Scene {
             this.spawnEnemy('walker', 650, 500);
             this.spawnEnemy('leaper', 400, 200);
         } else if (level === 5) {
-            // HOSPITAL - Boss fight + extraction
+            // HOSPITAL - Boss fight
             loot = ['ammo', 'ammo', 'ammo', 'meds', 'meds', 'grenade', 'scrap', 'scrap'];
             cratePos = [{x:100,y:450}, {x:700,y:450}, {x:100,y:550}, {x:700,y:550}, {x:300,y:550}, {x:500,y:550}, {x:250,y:250}, {x:550,y:250}];
             // Hospital Boss
@@ -3182,6 +3668,78 @@ class GameScene extends Phaser.Scene {
             this.spawnEnemy('spitter', 600, 200);
             this.spawnEnemy('walker', 100, 400);
             this.spawnEnemy('walker', 700, 400);
+        } else if (level === 6) {
+            // MALL - Multi-floor combat with exploders
+            loot = ['key', 'rifle', 'ammo', 'ammo', 'ammo', 'meds', 'grenade', 'grenade', 'scrap', 'helmet'];
+            cratePos = [
+                {x:100,y:550}, {x:700,y:550}, {x:100,y:350}, {x:700,y:350},
+                {x:250,y:150}, {x:550,y:150}, {x:400,y:450}, {x:150,y:200},
+                {x:650,y:200}, {x:400,y:250}
+            ];
+            
+            // Ground floor enemies
+            this.spawnEnemy('exploder', 150, 400);
+            this.spawnEnemy('exploder', 650, 400);
+            this.spawnEnemy('walker', 300, 500);
+            this.spawnEnemy('walker', 500, 500);
+            
+            // Upper floor bandits (shooting down)
+            this.spawnEnemy('bandit', 200, 100);
+            this.spawnEnemy('bandit', 600, 100);
+            
+            // Spitters in strategic positions
+            this.spawnEnemy('spitter', 400, 200);
+            
+            // Store spawn waves (delayed)
+            this.time.delayedCall(5000, () => {
+                if (this.currentLevel === 6) {
+                    this.showFloatingText(100, 400, "STORE BREACH!", 0xff0000);
+                    this.spawnEnemy('exploder', 80, 450);
+                    this.spawnEnemy('walker', 80, 480);
+                }
+            });
+            this.time.delayedCall(10000, () => {
+                if (this.currentLevel === 6) {
+                    this.showFloatingText(700, 400, "STORE BREACH!", 0xff0000);
+                    this.spawnEnemy('exploder', 720, 450);
+                    this.spawnEnemy('walker', 720, 480);
+                }
+            });
+        } else if (level === 7) {
+            // CEMETERY - Stealth section + Necromancer boss
+            loot = ['key', 'crossbow', 'ammo', 'ammo', 'meds', 'meds', 'grenade', 'scrap', 'materials'];
+            cratePos = [
+                {x:100,y:550}, {x:700,y:550}, {x:200,y:350}, {x:600,y:350},
+                {x:150,y:250}, {x:650,y:250}, {x:400,y:400}, {x:300,y:500},
+                {x:500,y:500}
+            ];
+            
+            // Initialize stealth system for this level
+            this.isStealthLevel = true;
+            this.detectionMeter = 0;
+            this.maxDetection = 100;
+            this.detectionRate = 20; // Per second when spotted
+            this.detectionDecay = 10; // Per second when hidden
+            this.stealthAlerted = false;
+            
+            // Create detection UI
+            this.detectionBar = this.add.graphics().setDepth(150);
+            this.detectionText = this.add.text(400, 40, "STEALTH", { fontSize: '16px', fill: '#fff' }).setOrigin(0.5).setDepth(150);
+            
+            // Graveyard patrol enemies (stealth section)
+            this.patrolEnemies = [];
+            const patrol1 = this.spawnPatrolEnemy('walker', 200, 400, [{x:200,y:400}, {x:200,y:300}, {x:300,y:300}, {x:300,y:400}]);
+            const patrol2 = this.spawnPatrolEnemy('walker', 500, 350, [{x:500,y:350}, {x:600,y:350}, {x:600,y:450}, {x:500,y:450}]);
+            const patrol3 = this.spawnPatrolEnemy('walker', 350, 450, [{x:350,y:450}, {x:450,y:450}]);
+            
+            // Necromancer boss in church area
+            this.spawnEnemy('necromancer', 400, 80);
+            this.bossBar.setVisible(true);
+            this.bossText.setVisible(true);
+            this.bossText.setText("THE NECROMANCER");
+            this.updateBossBar(CONFIG.ENEMIES.NECROMANCER.HP, CONFIG.ENEMIES.NECROMANCER.HP);
+            // Boss entrance
+            this.time.delayedCall(500, () => sfx.necroSummon());
         }
         Phaser.Utils.Array.Shuffle(loot);
         cratePos.forEach((p, i) => {
@@ -3191,6 +3749,146 @@ class GameScene extends Phaser.Scene {
 
     spawnEnemy(type, x, y) {
         this.enemies.add(new Enemy(this, x, y, this.player, type));
+    }
+    
+    spawnPatrolEnemy(type, x, y, waypoints) {
+        const enemy = new Enemy(this, x, y, this.player, type);
+        enemy.isPatrol = true;
+        enemy.waypoints = waypoints;
+        enemy.currentWaypoint = 0;
+        enemy.patrolSpeed = 30; // Slower patrol speed
+        enemy.visionRange = 150;
+        enemy.visionAngle = Math.PI / 3; // 60 degree cone
+        this.enemies.add(enemy);
+        if (!this.patrolEnemies) this.patrolEnemies = [];
+        this.patrolEnemies.push(enemy);
+        return enemy;
+    }
+    
+    updatePatrolEnemies(time, delta) {
+        if (!this.patrolEnemies) return;
+        
+        this.patrolEnemies.forEach(enemy => {
+            if (!enemy.active || !enemy.isPatrol) return;
+            
+            // If alerted, chase player instead of patrolling
+            if (this.stealthAlerted) {
+                enemy.isPatrol = false;
+                return;
+            }
+            
+            // Move to current waypoint
+            const wp = enemy.waypoints[enemy.currentWaypoint];
+            const dist = Phaser.Math.Distance.Between(enemy.x, enemy.y, wp.x, wp.y);
+            
+            if (dist < 10) {
+                // Reached waypoint, move to next
+                enemy.currentWaypoint = (enemy.currentWaypoint + 1) % enemy.waypoints.length;
+            } else {
+                // Move toward waypoint
+                this.physics.moveToObject(enemy, wp, enemy.patrolSpeed);
+            }
+        });
+    }
+    
+    updateStealthMechanics(time, delta) {
+        let isDetected = false;
+        
+        // Check if any patrol enemy can see the player
+        if (this.patrolEnemies) {
+            this.patrolEnemies.forEach(enemy => {
+                if (!enemy.active) return;
+                
+                const dist = Phaser.Math.Distance.Between(enemy.x, enemy.y, this.player.x, this.player.y);
+                if (dist > enemy.visionRange) return;
+                
+                // Check vision cone
+                const angleToPlayer = Phaser.Math.Angle.Between(enemy.x, enemy.y, this.player.x, this.player.y);
+                const enemyFacing = Math.atan2(enemy.body.velocity.y, enemy.body.velocity.x);
+                let angleDiff = Math.abs(angleToPlayer - enemyFacing);
+                if (angleDiff > Math.PI) angleDiff = Math.PI * 2 - angleDiff;
+                
+                if (angleDiff < enemy.visionAngle) {
+                    // Player is in vision cone - check line of sight (simplified)
+                    isDetected = true;
+                }
+            });
+        }
+        
+        // Update detection meter
+        const deltaSeconds = delta / 1000;
+        if (isDetected) {
+            this.detectionMeter += this.detectionRate * deltaSeconds;
+            // Play ping sound periodically
+            if (Math.floor(this.detectionMeter / 25) !== Math.floor((this.detectionMeter - this.detectionRate * deltaSeconds) / 25)) {
+                sfx.detectionPing();
+            }
+        } else {
+            this.detectionMeter -= this.detectionDecay * deltaSeconds;
+        }
+        this.detectionMeter = Phaser.Math.Clamp(this.detectionMeter, 0, this.maxDetection);
+        
+        // Update detection UI
+        if (this.detectionBar) {
+            this.detectionBar.clear();
+            // Background
+            this.detectionBar.fillStyle(0x333333);
+            this.detectionBar.fillRect(300, 55, 200, 15);
+            // Fill based on detection
+            const fillColor = this.detectionMeter < 50 ? 0x00ff00 : (this.detectionMeter < 80 ? 0xffff00 : 0xff0000);
+            this.detectionBar.fillStyle(fillColor);
+            this.detectionBar.fillRect(300, 55, 200 * (this.detectionMeter / this.maxDetection), 15);
+            // Border
+            this.detectionBar.lineStyle(2, 0xffffff);
+            this.detectionBar.strokeRect(300, 55, 200, 15);
+        }
+        
+        // Check for full detection
+        if (this.detectionMeter >= this.maxDetection && !this.stealthAlerted) {
+            this.triggerStealthAlert();
+        }
+    }
+    
+    triggerStealthAlert() {
+        this.stealthAlerted = true;
+        sfx.detectionMax();
+        this.showFloatingText(400, 200, "DETECTED!", 0xff0000);
+        
+        // Update detection text
+        if (this.detectionText) {
+            this.detectionText.setText("ALERTED!");
+            this.detectionText.setColor('#ff0000');
+        }
+        
+        // All patrol enemies become aggressive
+        if (this.patrolEnemies) {
+            this.patrolEnemies.forEach(enemy => {
+                if (enemy.active) {
+                    enemy.isPatrol = false;
+                }
+            });
+        }
+        
+        // Spawn reinforcement horde
+        this.showFloatingText(400, 300, "HORDE INCOMING!", 0xff0000);
+        this.time.delayedCall(500, () => {
+            this.spawnEnemy('walker', 100, 500);
+            this.spawnEnemy('walker', 700, 500);
+            this.spawnEnemy('walker', 200, 550);
+            this.spawnEnemy('walker', 600, 550);
+            this.spawnEnemy('leaper', 400, 580);
+        });
+    }
+    
+    // Check if player is in shadow (behind tombstone/cover)
+    isPlayerInShadow() {
+        // Simplified: player is "in shadow" if near a wall/tombstone
+        let inShadow = false;
+        this.walls.getChildren().forEach(wall => {
+            const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, wall.x, wall.y);
+            if (dist < 50) inShadow = true;
+        });
+        return inShadow;
     }
 
     spawnSwitch(x, y) {
@@ -3271,6 +3969,16 @@ class GameScene extends Phaser.Scene {
         this.drawUI();
         this.drawVignette();
         this.enemies.getChildren().forEach(e => e.update(time, delta));
+        
+        // Update stealth mechanics for Cemetery level
+        if (this.isStealthLevel && !this.stealthAlerted) {
+            this.updateStealthMechanics(time, delta);
+        }
+        
+        // Update patrol enemies
+        if (this.patrolEnemies) {
+            this.updatePatrolEnemies(time, delta);
+        }
 
         // Update lighting (with safety check for scene transitions)
         if (this.lightShape && this.lightShape.scene) {
@@ -3349,7 +4057,7 @@ class GameScene extends Phaser.Scene {
             if (Phaser.Input.Keyboard.JustDown(this.keys.switch)) this.switchWeapon();
             if (Phaser.Input.Keyboard.JustDown(this.keys.interact)) {
                 if (this.currentLevel === 2 && this.checkDebris()) return;
-                if (this.currentLevel === 5 && this.checkSwitch()) return;
+                if ((this.currentLevel === 5 || this.currentLevel === 7) && this.checkSwitch()) return;
                 if (this.checkDoor()) return;
                 this.tryInteract();
             }
@@ -3369,6 +4077,8 @@ class GameScene extends Phaser.Scene {
         const weapons = ['pistol'];
         if (this.playerStats.hasShotgun) weapons.push('shotgun');
         if (this.playerStats.hasSMG) weapons.push('smg');
+        if (this.playerStats.hasCrossbow) weapons.push('crossbow');
+        if (this.playerStats.hasRifle) weapons.push('rifle');
         
         if (weapons.length === 1) return;
         
@@ -3458,6 +4168,51 @@ class GameScene extends Phaser.Scene {
             const spread = Phaser.Math.Between(-wpnConfig.SPREAD, wpnConfig.SPREAD);
             const b = this.bullets.get(this.player.x, this.player.y);
             if (b) b.fire(this.player.x, this.player.y, pointer.x, pointer.y, spread, false);
+            this.playerStats.magazines[weapon] -= wpnConfig.AMMO_COST;
+            this.lastFired = now;
+            // Track shots
+            this.persistent.runShotsFired++;
+            this.persistent.totalShotsFired++;
+        } else if (weapon === 'crossbow') {
+            // Crossbow - Silent, piercing, high damage
+            if (now - this.lastFired < wpnConfig.FIRE_RATE) return;
+
+            sfx.shootCrossbow();
+            // No muzzle flash for crossbow - it's silent
+            
+            const b = this.bullets.get(this.player.x, this.player.y);
+            if (b) {
+                b.fire(this.player.x, this.player.y, pointer.x, pointer.y, 0, false);
+                b.setTint(0x8B4513); // Brown bolt color
+                b.isPiercing = true; // Mark as piercing
+                b.isSilent = true;   // Mark as silent (won't aggro enemies)
+                b.crossbowDamage = wpnConfig.DAMAGE; // Store crossbow's high damage
+            }
+            this.playerStats.magazines[weapon] -= wpnConfig.AMMO_COST;
+            this.lastFired = now;
+            // Track shots
+            this.persistent.runShotsFired++;
+            this.persistent.totalShotsFired++;
+            // Auto-reload since mag size is 1
+            this.startReload();
+        } else if (weapon === 'rifle') {
+            // Assault Rifle - Accurate, medium fire rate
+            if (now - this.lastFired < wpnConfig.FIRE_RATE) return;
+
+            sfx.shootRifle();
+            this.particles.spawnMuzzleFlash(this.player.x, this.player.y, angle, 1.2);
+            
+            // First shot accuracy bonus when stationary
+            let spread = Phaser.Math.Between(-wpnConfig.SPREAD, wpnConfig.SPREAD);
+            if (wpnConfig.FIRST_SHOT_BONUS && this.player.body.velocity.length() < 10) {
+                spread = 0; // Perfect accuracy when stationary
+            }
+            
+            const b = this.bullets.get(this.player.x, this.player.y);
+            if (b) {
+                b.fire(this.player.x, this.player.y, pointer.x, pointer.y, spread, false);
+                b.rifleDamage = wpnConfig.DAMAGE; // Store rifle's damage multiplier
+            }
             this.playerStats.magazines[weapon] -= wpnConfig.AMMO_COST;
             this.lastFired = now;
             // Track shots
@@ -3589,7 +4344,8 @@ class GameScene extends Phaser.Scene {
     }
 
     checkSwitch() {
-        if (this.currentLevel !== 5) return false; // Extraction only on level 5
+        // Extraction switches on boss levels (5 and 7)
+        if (this.currentLevel !== 5 && this.currentLevel !== 7) return false;
         const s = this.switches.getFirstAlive();
         if (s && Phaser.Math.Distance.Between(this.player.x, this.player.y, s.x, s.y) < CONFIG.DISTANCES.INTERACT) {
             this.activateExtraction();
@@ -3600,7 +4356,7 @@ class GameScene extends Phaser.Scene {
     }
 
     checkDoor() {
-        if (this.currentLevel === 5) return false; // Hospital is extraction-only
+        if (this.currentLevel === 7) return false; // Cemetery is extraction-only (final level)
         if (Phaser.Math.Distance.Between(this.player.x, this.player.y, this.door.x, this.door.y) < CONFIG.DISTANCES.DOOR) {
             if (this.currentLevel === 1) {
                 if (this.hasKey) this.nextLevel();
@@ -3611,6 +4367,18 @@ class GameScene extends Phaser.Scene {
                 if (this.hasKey) this.nextLevel();
                 else this.showFloatingText(this.door.x, this.door.y - 40, "Need Key!", 0xffffff);
             } else if (this.currentLevel === 4) {
+                if (this.hasKey) this.nextLevel();
+                else this.showFloatingText(this.door.x, this.door.y - 40, "Need Key!", 0xffffff);
+            } else if (this.currentLevel === 5) {
+                // Hospital - need to defeat boss first (switch drops)
+                if (this.switchDropped) {
+                    this.showFloatingText(this.door.x, this.door.y - 40, "Use switch first!", 0xffffff);
+                } else {
+                    if (this.hasKey) this.nextLevel();
+                    else this.showFloatingText(this.door.x, this.door.y - 40, "Need Key!", 0xffffff);
+                }
+            } else if (this.currentLevel === 6) {
+                // Mall - key required
                 if (this.hasKey) this.nextLevel();
                 else this.showFloatingText(this.door.x, this.door.y - 40, "Need Key!", 0xffffff);
             }
@@ -3659,6 +4427,14 @@ class GameScene extends Phaser.Scene {
         
         // Track run completion
         this.persistent.runsCompleted++;
+        
+        // Update next level for progression (after level 5 go to 6, after level 7 reset to 1)
+        if (this.currentLevel === 7) {
+            this.playerStats.nextLevel = 1; // Game complete, reset
+            this.showFloatingText(400, 200, "GAME COMPLETE!", 0x00ff00);
+        } else {
+            this.playerStats.nextLevel = this.currentLevel + 1;
+        }
         
         // Check achievements
         const newAchievements = checkAchievements(this.persistent, {
@@ -3754,6 +4530,16 @@ class GameScene extends Phaser.Scene {
                 sfx.lootWeapon();
                 this.playerStats.hasSMG = true;
                 txt = "SMG!"; col = 0x00ffff;
+                break;
+            case 'crossbow':
+                sfx.lootWeapon();
+                this.playerStats.hasCrossbow = true;
+                txt = "CROSSBOW!"; col = 0x8B4513;
+                break;
+            case 'rifle':
+                sfx.lootWeapon();
+                this.playerStats.hasRifle = true;
+                txt = "ASSAULT RIFLE!"; col = 0x556B2F;
                 break;
             case 'scrap':
                 sfx.loot();
