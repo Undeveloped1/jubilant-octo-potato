@@ -1845,6 +1845,13 @@ class HideoutScene extends Phaser.Scene {
     constructor() { super('HideoutScene'); }
     
     create(data) {
+        // Clean up any lingering references from previous scene
+        this.mapNodes = null;
+        this.mapElements = null;
+        this.mapInfoText = null;
+        this.mapStatusText = null;
+        this.selectedLevel = null;
+        
         this.stats = data.stats;
         // Ensure magazines exist
         if (!this.stats.magazines) {
@@ -2387,7 +2394,8 @@ class HideoutScene extends Phaser.Scene {
     }
     
     updateMapNodeColor(levelNum) {
-        if (!this.mapNodes || !this.mapNodes[levelNum]) return;
+        if (!this.mapNodes || !this.mapNodes[levelNum] || !this.mapNodes[levelNum].node) return;
+        if (!this.mapNodes[levelNum].node.active) return;
         
         const isUnlocked = levelNum <= this.stats.highestLevelUnlocked;
         const isCleared = levelNum < this.stats.highestLevelUnlocked;
@@ -2403,6 +2411,9 @@ class HideoutScene extends Phaser.Scene {
     }
     
     updateMapSelection() {
+        // Guard against destroyed UI
+        if (!this.mapInfoText || !this.mapStatusText) return;
+        
         const LEVEL_NAMES = ['', 'Street', 'Apartment', 'Rooftop', 'Sewers', 'Hospital', 'Mall', 'Cemetery'];
         const LEVEL_DESC = [
             '',
@@ -2421,12 +2432,16 @@ class HideoutScene extends Phaser.Scene {
         }
         
         // Update info panel
-        const levelName = LEVEL_NAMES[this.selectedLevel];
-        const levelDesc = LEVEL_DESC[this.selectedLevel];
+        const levelName = LEVEL_NAMES[this.selectedLevel] || '';
+        const levelDesc = LEVEL_DESC[this.selectedLevel] || '';
         const isCleared = this.selectedLevel < this.stats.highestLevelUnlocked;
         
-        this.mapInfoText.setText(`${this.selectedLevel}. ${levelName}`);
-        this.mapStatusText.setText(isCleared ? `CLEARED - ${levelDesc}` : levelDesc);
+        if (this.mapInfoText.active) {
+            this.mapInfoText.setText(`${this.selectedLevel}. ${levelName}`);
+        }
+        if (this.mapStatusText.active) {
+            this.mapStatusText.setText(isCleared ? `CLEARED - ${levelDesc}` : levelDesc);
+        }
     }
     
     showStatsPanel() {
@@ -2939,6 +2954,18 @@ class GameScene extends Phaser.Scene {
     }
     
     create(data = {}) {
+        // Clean up any lingering handlers from previous scene
+        if (this.levelChoiceEnterHandler) {
+            this.input.keyboard.off('keydown-ENTER', this.levelChoiceEnterHandler);
+            this.levelChoiceEnterHandler = null;
+        }
+        if (this.levelChoiceEscHandler) {
+            this.input.keyboard.off('keydown-ESC', this.levelChoiceEscHandler);
+            this.levelChoiceEscHandler = null;
+        }
+        this.levelChoiceMade = false;
+        this.consumableSlotTexts = null;
+        
         this.currentLevel = data.level || 1;
         this.playerStats = data.stats ? JSON.parse(JSON.stringify(data.stats)) : JSON.parse(JSON.stringify(DEFAULT_STATS));
         // Ensure magazines exist
@@ -4672,6 +4699,23 @@ class GameScene extends Phaser.Scene {
         const currentName = LEVEL_NAMES[this.currentLevel];
         const nextName = LEVEL_NAMES[this.currentLevel + 1] || 'Unknown';
         
+        // Flag to prevent double-triggering
+        this.levelChoiceMade = false;
+        
+        const doTransition = (toHideout) => {
+            if (this.levelChoiceMade) return;
+            this.levelChoiceMade = true;
+            sfx.click();
+            this.cameras.main.fade(CONFIG.TIMINGS.LEVEL_TRANSITION, 0, 0, 0);
+            this.time.delayedCall(CONFIG.TIMINGS.LEVEL_TRANSITION, () => {
+                if (toHideout) {
+                    this.scene.start('HideoutScene', { stats: this.playerStats });
+                } else {
+                    this.scene.restart({ level: this.currentLevel + 1, stats: this.playerStats, levelDamageTaken: 0 });
+                }
+            });
+        };
+        
         // Create overlay
         const overlay = this.add.rectangle(400, 300, 800, 600, 0x000000, 0.85).setDepth(500);
         
@@ -4697,15 +4741,9 @@ class GameScene extends Phaser.Scene {
             fontSize: '24px', fill: '#ffffff' 
         }).setOrigin(0.5).setDepth(502);
         
-        continueBtn.on('pointerover', () => continueBtn.setFillStyle(0x00aa00));
-        continueBtn.on('pointerout', () => continueBtn.setFillStyle(0x008800));
-        continueBtn.on('pointerdown', () => {
-            sfx.click();
-            this.cameras.main.fade(CONFIG.TIMINGS.LEVEL_TRANSITION, 0, 0, 0);
-            this.time.delayedCall(CONFIG.TIMINGS.LEVEL_TRANSITION, () => {
-                this.scene.restart({ level: this.currentLevel + 1, stats: this.playerStats, levelDamageTaken: 0 });
-            });
-        });
+        continueBtn.on('pointerover', () => { if (!this.levelChoiceMade) continueBtn.setFillStyle(0x00aa00); });
+        continueBtn.on('pointerout', () => { if (!this.levelChoiceMade) continueBtn.setFillStyle(0x008800); });
+        continueBtn.on('pointerdown', () => doTransition(false));
         
         // Return to hideout button
         const hideoutBtn = this.add.rectangle(500, 400, 200, 60, 0x444488).setInteractive().setDepth(501);
@@ -4713,35 +4751,16 @@ class GameScene extends Phaser.Scene {
             fontSize: '24px', fill: '#ffffff' 
         }).setOrigin(0.5).setDepth(502);
         
-        hideoutBtn.on('pointerover', () => hideoutBtn.setFillStyle(0x5555aa));
-        hideoutBtn.on('pointerout', () => hideoutBtn.setFillStyle(0x444488));
-        hideoutBtn.on('pointerdown', () => {
-            sfx.click();
-            this.cameras.main.fade(CONFIG.TIMINGS.LEVEL_TRANSITION, 0, 0, 0);
-            this.time.delayedCall(CONFIG.TIMINGS.LEVEL_TRANSITION, () => {
-                this.scene.start('HideoutScene', { stats: this.playerStats });
-            });
-        });
+        hideoutBtn.on('pointerover', () => { if (!this.levelChoiceMade) hideoutBtn.setFillStyle(0x5555aa); });
+        hideoutBtn.on('pointerout', () => { if (!this.levelChoiceMade) hideoutBtn.setFillStyle(0x444488); });
+        hideoutBtn.on('pointerdown', () => doTransition(true));
         
-        // Keyboard shortcuts
-        const enterKey = this.input.keyboard.addKey('ENTER');
-        const escKey = this.input.keyboard.addKey('ESC');
+        // Keyboard shortcuts - use existing keys system instead of adding new ones
+        this.levelChoiceEnterHandler = () => doTransition(false);
+        this.levelChoiceEscHandler = () => doTransition(true);
         
-        enterKey.once('down', () => {
-            sfx.click();
-            this.cameras.main.fade(CONFIG.TIMINGS.LEVEL_TRANSITION, 0, 0, 0);
-            this.time.delayedCall(CONFIG.TIMINGS.LEVEL_TRANSITION, () => {
-                this.scene.restart({ level: this.currentLevel + 1, stats: this.playerStats, levelDamageTaken: 0 });
-            });
-        });
-        
-        escKey.once('down', () => {
-            sfx.click();
-            this.cameras.main.fade(CONFIG.TIMINGS.LEVEL_TRANSITION, 0, 0, 0);
-            this.time.delayedCall(CONFIG.TIMINGS.LEVEL_TRANSITION, () => {
-                this.scene.start('HideoutScene', { stats: this.playerStats });
-            });
-        });
+        this.input.keyboard.on('keydown-ENTER', this.levelChoiceEnterHandler);
+        this.input.keyboard.on('keydown-ESC', this.levelChoiceEscHandler);
         
         // Hint text
         const hintText = this.add.text(400, 480, 'ENTER = Continue  |  ESC = Hideout', { 
@@ -5053,6 +5072,24 @@ class GameScene extends Phaser.Scene {
                 }
             }
         }
+    }
+    
+    shutdown() {
+        // Clean up keyboard handlers from level complete choice
+        if (this.levelChoiceEnterHandler) {
+            this.input.keyboard.off('keydown-ENTER', this.levelChoiceEnterHandler);
+            this.levelChoiceEnterHandler = null;
+        }
+        if (this.levelChoiceEscHandler) {
+            this.input.keyboard.off('keydown-ESC', this.levelChoiceEscHandler);
+            this.levelChoiceEscHandler = null;
+        }
+        
+        // Clean up timer events
+        this.cleanupTimerEvents();
+        
+        // Clear consumable slot texts reference
+        this.consumableSlotTexts = null;
     }
 }
 
