@@ -278,6 +278,7 @@ const DEFAULT_STATS = {
     materials: 0,
     grenades: 0,
     nextLevel: 1,  // Track which level to start on after extraction
+    highestLevelUnlocked: 1,  // Track progression (1-7) for mission map
     consumables: [null, null, null],  // 3 slots for hotkeys 1, 2, 3
     hasFlashlight: false, hasShotgun: false, hasSMG: false, hasCrossbow: false, hasRifle: false, currentWeapon: 'pistol',
     // Magazine tracking - current rounds in each weapon's magazine
@@ -1089,7 +1090,7 @@ class MainMenuScene extends Phaser.Scene {
         this.add.rectangle(400, 300, 800, 600, 0x111111);
         this.add.grid(400, 300, 800, 600, 64, 64, 0x222222).setAlpha(0.2);
         this.add.text(400, 100, "ZOMBIE EXTRACTION", { fontSize: '64px', fill: '#00ff00', fontStyle: 'bold' }).setOrigin(0.5);
-        this.add.text(400, 160, "BUILD 17.0 (LEVEL PROGRESSION)", { fontSize: '24px', fill: '#555' }).setOrigin(0.5);
+        this.add.text(400, 160, "BUILD 18.0 (MISSION MAP)", { fontSize: '24px', fill: '#555' }).setOrigin(0.5);
 
         this.createButton(400, 240, "NEW RUN", 0x880000, () => {
             if(confirm("Start a new run? This overwrites current auto-save.")) {
@@ -1128,8 +1129,17 @@ class MainMenuScene extends Phaser.Scene {
                     if (!stats.currentWeapon) stats.currentWeapon = 'pistol';
                     // Ensure nextLevel exists
                     if (stats.nextLevel === undefined) stats.nextLevel = 1;
-                    // Ensure consumables array exists
-                    if (!stats.consumables) stats.consumables = [null, null, null];
+                    // Ensure highestLevelUnlocked exists (default to nextLevel for old saves)
+                    if (stats.highestLevelUnlocked === undefined) {
+                        stats.highestLevelUnlocked = stats.nextLevel || 1;
+                    }
+                    // Ensure consumables is a valid array
+                    if (!stats.consumables || !Array.isArray(stats.consumables)) {
+                        stats.consumables = [null, null, null];
+                    }
+                    while (stats.consumables.length < 3) {
+                        stats.consumables.push(null);
+                    }
                     sfx.menuOpen();
                     this.scene.start('HideoutScene', { stats });
                 } catch (e) {
@@ -1359,7 +1369,9 @@ class MainMenuScene extends Phaser.Scene {
             hp: 20, maxHp: 20, stamina: 100, maxStamina: 100, ammo: 200, scrap: 50,
             credits: 100, materials: 50,
             grenades: CONFIG.GRENADE.MAX_CARRY,
-            consumables: [null, null, null],
+            nextLevel: level,
+            highestLevelUnlocked: 7,  // All levels unlocked for testing
+            consumables: ['adrenaline', 'armor_patch', null],  // Include test consumables
             hasFlashlight: true, hasShotgun: true, hasSMG: true, hasCrossbow: true, hasRifle: true, currentWeapon: 'shotgun',
             magazines: {
                 pistol: CONFIG.WEAPONS.PISTOL.MAG_SIZE,
@@ -1396,7 +1408,9 @@ class MainMenuScene extends Phaser.Scene {
             hp: 20, maxHp: 20, stamina: 100, maxStamina: 100, ammo: 999, scrap: 999,
             credits: 999, materials: 999,
             grenades: CONFIG.GRENADE.MAX_CARRY,
-            consumables: [null, null, null],
+            nextLevel: 1,
+            highestLevelUnlocked: 7,  // All levels unlocked in god mode
+            consumables: ['adrenaline', 'armor_patch', 'adrenaline'],  // Full consumables
             hasFlashlight: true, hasShotgun: true, hasSMG: true, hasCrossbow: true, hasRifle: true, currentWeapon: 'shotgun',
             magazines: {
                 pistol: CONFIG.WEAPONS.PISTOL.MAG_SIZE,
@@ -1866,12 +1880,20 @@ class HideoutScene extends Phaser.Scene {
         if (this.stats.materials === undefined) {
             this.stats.materials = 0;
         }
-        if (this.stats.consumables === undefined) {
+        // Ensure consumables is a valid array
+        if (!this.stats.consumables || !Array.isArray(this.stats.consumables)) {
             this.stats.consumables = [null, null, null];
+        }
+        while (this.stats.consumables.length < 3) {
+            this.stats.consumables.push(null);
         }
         // Ensure nextLevel exists for old saves
         if (this.stats.nextLevel === undefined) {
             this.stats.nextLevel = 1;
+        }
+        // Ensure highestLevelUnlocked exists (default to nextLevel for old saves)
+        if (this.stats.highestLevelUnlocked === undefined) {
+            this.stats.highestLevelUnlocked = this.stats.nextLevel || 1;
         }
         
         // Load persistent stats
@@ -1932,25 +1954,12 @@ class HideoutScene extends Phaser.Scene {
         this.createWorkbenchCard(40, 375);
         this.createRepairStationCard(270, 375);
 
-        const deployBtn = this.add.rectangle(650, 500, 200, 60, 0x008800).setInteractive();
-        const deployLevel = this.stats.nextLevel || 1;
-        this.add.text(650, 500, deployLevel === 1 ? "DEPLOY" : `DEPLOY LVL ${deployLevel}`, { fontSize: '24px', fill: '#fff' }).setOrigin(0.5);
-        deployBtn.on('pointerdown', () => {
-            sfx.success();
-            if (this.stats.hideout.restAreaLvl > 0) {
-                const heal = this.stats.hideout.restAreaLvl >= 2 ? this.stats.maxHp : Math.floor(this.stats.maxHp / 2);
-                this.stats.hp = Math.min(this.stats.hp + heal, this.stats.maxHp);
-            }
-            if (this.stats.hideout.generatorLvl > 0) this.stats.hasFlashlight = true;
-            // Refill magazines on deploy
-            this.stats.magazines.pistol = CONFIG.WEAPONS.PISTOL.MAG_SIZE;
-            this.stats.magazines.shotgun = CONFIG.WEAPONS.SHOTGUN.MAG_SIZE;
-            this.stats.magazines.smg = CONFIG.WEAPONS.SMG.MAG_SIZE;
-            this.stats.magazines.crossbow = CONFIG.WEAPONS.CROSSBOW.MAG_SIZE;
-            this.stats.magazines.rifle = CONFIG.WEAPONS.RIFLE.MAG_SIZE;
-            this.cameras.main.fade(500, 0, 0, 0);
-            this.time.delayedCall(500, () => { this.scene.start('GameScene', { level: deployLevel, stats: this.stats }); });
-        });
+        // Mission Map button (replaces old Deploy)
+        const missionBtn = this.add.rectangle(650, 500, 200, 60, 0x006688).setInteractive();
+        this.add.text(650, 500, "MISSION MAP", { fontSize: '22px', fill: '#fff', fontStyle: 'bold' }).setOrigin(0.5);
+        missionBtn.on('pointerdown', () => { sfx.menuOpen(); this.showMissionMap(); });
+        missionBtn.on('pointerover', () => missionBtn.setFillStyle(0x0088aa));
+        missionBtn.on('pointerout', () => missionBtn.setFillStyle(0x006688));
 
         const menuBtn = this.add.rectangle(100, 550, 150, 40, 0x444444).setInteractive();
         this.add.text(100, 550, "MAIN MENU", { fontSize: '16px', fill: '#fff' }).setOrigin(0.5);
@@ -2192,6 +2201,232 @@ class HideoutScene extends Phaser.Scene {
                 this.repairBtnText.setText("NO REPAIRS NEEDED");
             }
         }
+    }
+    
+    showMissionMap() {
+        const elements = [];
+        this.selectedLevel = this.stats.nextLevel || 1;
+        
+        // Level configuration
+        const LEVELS = {
+            1: { x: 150, y: 140, name: "Street", color: 0x2d5a27 },
+            2: { x: 300, y: 100, name: "Apartment", color: 0x666666 },
+            3: { x: 450, y: 140, name: "Rooftop", color: 0x334455 },
+            4: { x: 180, y: 240, name: "Sewers", color: 0x2a3a2a },
+            5: { x: 350, y: 220, name: "Hospital", color: 0xdddddd },
+            6: { x: 450, y: 320, name: "Mall", color: 0x8B4513 },
+            7: { x: 600, y: 360, name: "Cemetery", color: 0x1a1a1a }
+        };
+        
+        // Road connections
+        const ROADS = [[1,2], [2,3], [1,4], [4,5], [3,5], [5,6], [6,7]];
+        
+        // Dark overlay
+        const overlay = this.add.rectangle(400, 300, 800, 600, 0x000000, 0.9).setDepth(500);
+        elements.push(overlay);
+        
+        // Title
+        const title = this.add.text(400, 40, "MISSION SELECT", { 
+            fontSize: '36px', fill: '#00ff00', fontStyle: 'bold' 
+        }).setOrigin(0.5).setDepth(501);
+        elements.push(title);
+        
+        // City grid background
+        const mapBg = this.add.rectangle(400, 250, 700, 350, 0x111122).setDepth(501);
+        elements.push(mapBg);
+        
+        // Grid lines
+        const graphics = this.add.graphics().setDepth(502);
+        graphics.lineStyle(1, 0x222233, 0.5);
+        for (let x = 50; x <= 750; x += 40) {
+            graphics.moveTo(x, 75);
+            graphics.lineTo(x, 425);
+        }
+        for (let y = 75; y <= 425; y += 35) {
+            graphics.moveTo(50, y);
+            graphics.lineTo(750, y);
+        }
+        graphics.strokePath();
+        elements.push(graphics);
+        
+        // Draw roads first (under nodes)
+        const roadGraphics = this.add.graphics().setDepth(503);
+        roadGraphics.lineStyle(4, 0x444444);
+        ROADS.forEach(([from, to]) => {
+            const fromLevel = LEVELS[from];
+            const toLevel = LEVELS[to];
+            roadGraphics.moveTo(fromLevel.x, fromLevel.y);
+            roadGraphics.lineTo(toLevel.x, toLevel.y);
+        });
+        roadGraphics.strokePath();
+        elements.push(roadGraphics);
+        
+        // Store node references for updates
+        this.mapNodes = {};
+        
+        // Draw level nodes
+        for (let i = 1; i <= 7; i++) {
+            const level = LEVELS[i];
+            const isUnlocked = i <= this.stats.highestLevelUnlocked;
+            const isCleared = i < this.stats.highestLevelUnlocked;
+            const isSelected = i === this.selectedLevel;
+            const isNext = i === this.stats.nextLevel;
+            
+            // Node background
+            let nodeColor = 0x333333; // Locked
+            if (isCleared) nodeColor = 0x006600; // Cleared
+            if (isNext && !isCleared) nodeColor = 0xaa6600; // Current target
+            if (isSelected) nodeColor = 0x0066aa; // Selected
+            
+            const node = this.add.circle(level.x, level.y, 28, nodeColor).setDepth(504);
+            if (isUnlocked) {
+                node.setInteractive({ useHandCursor: true });
+                node.on('pointerover', () => {
+                    if (this.selectedLevel !== i) node.setFillStyle(0x0088cc);
+                });
+                node.on('pointerout', () => {
+                    this.updateMapNodeColor(i);
+                });
+                node.on('pointerdown', () => {
+                    sfx.click();
+                    this.selectedLevel = i;
+                    this.updateMapSelection();
+                });
+            }
+            
+            // Level number
+            const numText = this.add.text(level.x, level.y, `${i}`, { 
+                fontSize: '20px', fill: isUnlocked ? '#ffffff' : '#555555', fontStyle: 'bold' 
+            }).setOrigin(0.5).setDepth(505);
+            
+            // Status icon
+            let icon = '';
+            if (!isUnlocked) icon = '🔒';
+            else if (isCleared) icon = '✓';
+            else if (isNext) icon = '→';
+            
+            const iconText = this.add.text(level.x + 20, level.y - 20, icon, { 
+                fontSize: '14px' 
+            }).setOrigin(0.5).setDepth(506);
+            
+            // Level name
+            const nameText = this.add.text(level.x, level.y + 40, level.name, { 
+                fontSize: '12px', fill: isUnlocked ? '#cccccc' : '#555555' 
+            }).setOrigin(0.5).setDepth(505);
+            
+            this.mapNodes[i] = { node, numText, iconText, nameText };
+            elements.push(node, numText, iconText, nameText);
+        }
+        
+        // Selected level info panel
+        const infoPanel = this.add.rectangle(400, 480, 400, 80, 0x222233).setDepth(501);
+        elements.push(infoPanel);
+        
+        this.mapInfoText = this.add.text(400, 465, '', { 
+            fontSize: '18px', fill: '#ffffff', align: 'center' 
+        }).setOrigin(0.5).setDepth(502);
+        elements.push(this.mapInfoText);
+        
+        this.mapStatusText = this.add.text(400, 490, '', { 
+            fontSize: '14px', fill: '#888888', align: 'center' 
+        }).setOrigin(0.5).setDepth(502);
+        elements.push(this.mapStatusText);
+        
+        // Deploy button
+        const deployBtn = this.add.rectangle(550, 540, 150, 45, 0x008800).setInteractive().setDepth(501);
+        const deployTxt = this.add.text(550, 540, "DEPLOY", { 
+            fontSize: '20px', fill: '#ffffff', fontStyle: 'bold' 
+        }).setOrigin(0.5).setDepth(502);
+        elements.push(deployBtn, deployTxt);
+        
+        deployBtn.on('pointerover', () => deployBtn.setFillStyle(0x00aa00));
+        deployBtn.on('pointerout', () => deployBtn.setFillStyle(0x008800));
+        deployBtn.on('pointerdown', () => {
+            sfx.success();
+            // Apply hideout bonuses before deploying
+            if (this.stats.hideout.restAreaLvl > 0) {
+                const heal = this.stats.hideout.restAreaLvl >= 2 ? this.stats.maxHp : Math.floor(this.stats.maxHp / 2);
+                this.stats.hp = Math.min(this.stats.hp + heal, this.stats.maxHp);
+            }
+            if (this.stats.hideout.generatorLvl > 0) this.stats.hasFlashlight = true;
+            // Refill magazines
+            this.stats.magazines.pistol = CONFIG.WEAPONS.PISTOL.MAG_SIZE;
+            this.stats.magazines.shotgun = CONFIG.WEAPONS.SHOTGUN.MAG_SIZE;
+            this.stats.magazines.smg = CONFIG.WEAPONS.SMG.MAG_SIZE;
+            this.stats.magazines.crossbow = CONFIG.WEAPONS.CROSSBOW.MAG_SIZE;
+            this.stats.magazines.rifle = CONFIG.WEAPONS.RIFLE.MAG_SIZE;
+            // Update nextLevel to selected level
+            this.stats.nextLevel = this.selectedLevel;
+            localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(this.stats));
+            
+            this.cameras.main.fade(500, 0, 0, 0);
+            this.time.delayedCall(500, () => { 
+                this.scene.start('GameScene', { level: this.selectedLevel, stats: this.stats }); 
+            });
+        });
+        
+        // Close button
+        const closeBtn = this.add.rectangle(250, 540, 150, 45, 0x444444).setInteractive().setDepth(501);
+        const closeTxt = this.add.text(250, 540, "BACK", { 
+            fontSize: '20px', fill: '#ffffff' 
+        }).setOrigin(0.5).setDepth(502);
+        elements.push(closeBtn, closeTxt);
+        
+        closeBtn.on('pointerover', () => closeBtn.setFillStyle(0x555555));
+        closeBtn.on('pointerout', () => closeBtn.setFillStyle(0x444444));
+        closeBtn.on('pointerdown', () => {
+            sfx.menuClose();
+            elements.forEach(e => e.destroy());
+        });
+        
+        // Store elements for cleanup
+        this.mapElements = elements;
+        
+        // Initial selection update
+        this.updateMapSelection();
+    }
+    
+    updateMapNodeColor(levelNum) {
+        if (!this.mapNodes || !this.mapNodes[levelNum]) return;
+        
+        const isUnlocked = levelNum <= this.stats.highestLevelUnlocked;
+        const isCleared = levelNum < this.stats.highestLevelUnlocked;
+        const isSelected = levelNum === this.selectedLevel;
+        const isNext = levelNum === this.stats.nextLevel;
+        
+        let nodeColor = 0x333333; // Locked
+        if (isCleared) nodeColor = 0x006600; // Cleared
+        if (isNext && !isCleared) nodeColor = 0xaa6600; // Current target
+        if (isSelected) nodeColor = 0x0066aa; // Selected
+        
+        this.mapNodes[levelNum].node.setFillStyle(nodeColor);
+    }
+    
+    updateMapSelection() {
+        const LEVEL_NAMES = ['', 'Street', 'Apartment', 'Rooftop', 'Sewers', 'Hospital', 'Mall', 'Cemetery'];
+        const LEVEL_DESC = [
+            '',
+            'Urban streets with scattered zombies',
+            'Multi-floor building, find the key',
+            'Night sky, collect molotov, burn debris',
+            'Dark tunnels, need flashlight',
+            'BOSS FIGHT - Heavy zombie',
+            'Shopping center with breach waves',
+            'FINAL BOSS - Necromancer awaits'
+        ];
+        
+        // Update all node colors
+        for (let i = 1; i <= 7; i++) {
+            this.updateMapNodeColor(i);
+        }
+        
+        // Update info panel
+        const levelName = LEVEL_NAMES[this.selectedLevel];
+        const levelDesc = LEVEL_DESC[this.selectedLevel];
+        const isCleared = this.selectedLevel < this.stats.highestLevelUnlocked;
+        
+        this.mapInfoText.setText(`${this.selectedLevel}. ${levelName}`);
+        this.mapStatusText.setText(isCleared ? `CLEARED - ${levelDesc}` : levelDesc);
     }
     
     showStatsPanel() {
@@ -2733,8 +2968,17 @@ class GameScene extends Phaser.Scene {
         if (this.playerStats.materials === undefined) {
             this.playerStats.materials = 0;
         }
-        if (this.playerStats.consumables === undefined) {
+        // Ensure consumables is a valid array (handle null, undefined, or corrupted data)
+        if (!this.playerStats.consumables || !Array.isArray(this.playerStats.consumables)) {
             this.playerStats.consumables = [null, null, null];
+        }
+        // Ensure consumables array has exactly 3 slots
+        while (this.playerStats.consumables.length < 3) {
+            this.playerStats.consumables.push(null);
+        }
+        // Ensure highestLevelUnlocked exists
+        if (this.playerStats.highestLevelUnlocked === undefined) {
+            this.playerStats.highestLevelUnlocked = this.playerStats.nextLevel || 1;
         }
         this.checkpointStats = JSON.parse(JSON.stringify(this.playerStats));
 
@@ -3248,6 +3492,11 @@ class GameScene extends Phaser.Scene {
     // ==================== CONSUMABLE SYSTEM ====================
     useConsumable(slot) {
         if (this.isPaused || this.isInventoryOpen || this.isDodging || this.isPinned) return;
+        
+        // Defensive check for corrupted consumables array
+        if (!this.playerStats.consumables || !Array.isArray(this.playerStats.consumables)) {
+            this.playerStats.consumables = [null, null, null];
+        }
         
         const consumable = this.playerStats.consumables[slot];
         if (!consumable) {
@@ -4404,13 +4653,100 @@ class GameScene extends Phaser.Scene {
                 this.showFloatingText(400, 200, `${a.icon} ${a.name}!`, 0xffd700);
             });
         }
-        savePersistent(this.persistent);
         
-        this.cameras.main.fade(CONFIG.TIMINGS.LEVEL_TRANSITION, 0, 0, 0);
-        this.time.delayedCall(CONFIG.TIMINGS.LEVEL_TRANSITION, () => {
-            // Pass levelDamageTaken reset for next level
-            this.scene.restart({ level: this.currentLevel + 1, stats: this.playerStats, levelDamageTaken: 0 });
+        // Unlock the next level
+        if (this.playerStats.highestLevelUnlocked < this.currentLevel + 1) {
+            this.playerStats.highestLevelUnlocked = this.currentLevel + 1;
+        }
+        this.playerStats.nextLevel = this.currentLevel + 1;
+        
+        savePersistent(this.persistent);
+        localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(this.playerStats));
+        
+        // Show level complete choice screen
+        this.showLevelCompleteChoice();
+    }
+    
+    showLevelCompleteChoice() {
+        const LEVEL_NAMES = ['', 'Street', 'Apartment', 'Rooftop', 'Sewers', 'Hospital', 'Mall', 'Cemetery'];
+        const currentName = LEVEL_NAMES[this.currentLevel];
+        const nextName = LEVEL_NAMES[this.currentLevel + 1] || 'Unknown';
+        
+        // Create overlay
+        const overlay = this.add.rectangle(400, 300, 800, 600, 0x000000, 0.85).setDepth(500);
+        
+        // Title
+        const title = this.add.text(400, 180, 'LEVEL COMPLETE!', { 
+            fontSize: '48px', fill: '#00ff00', fontStyle: 'bold' 
+        }).setOrigin(0.5).setDepth(501);
+        
+        // Level transition text
+        const transitionText = this.add.text(400, 250, `${currentName} -> ${nextName}`, { 
+            fontSize: '24px', fill: '#ffffff' 
+        }).setOrigin(0.5).setDepth(501);
+        
+        // Stats summary
+        const statsText = this.add.text(400, 300, 
+            `HP: ${this.playerStats.hp}/${this.playerStats.maxHp}  |  Ammo: ${this.playerStats.ammo}  |  Scrap: ${this.playerStats.scrap}`, 
+            { fontSize: '16px', fill: '#888888' }
+        ).setOrigin(0.5).setDepth(501);
+        
+        // Continue button
+        const continueBtn = this.add.rectangle(300, 400, 200, 60, 0x008800).setInteractive().setDepth(501);
+        const continueTxt = this.add.text(300, 400, 'CONTINUE', { 
+            fontSize: '24px', fill: '#ffffff' 
+        }).setOrigin(0.5).setDepth(502);
+        
+        continueBtn.on('pointerover', () => continueBtn.setFillStyle(0x00aa00));
+        continueBtn.on('pointerout', () => continueBtn.setFillStyle(0x008800));
+        continueBtn.on('pointerdown', () => {
+            sfx.click();
+            this.cameras.main.fade(CONFIG.TIMINGS.LEVEL_TRANSITION, 0, 0, 0);
+            this.time.delayedCall(CONFIG.TIMINGS.LEVEL_TRANSITION, () => {
+                this.scene.restart({ level: this.currentLevel + 1, stats: this.playerStats, levelDamageTaken: 0 });
+            });
         });
+        
+        // Return to hideout button
+        const hideoutBtn = this.add.rectangle(500, 400, 200, 60, 0x444488).setInteractive().setDepth(501);
+        const hideoutTxt = this.add.text(500, 400, 'HIDEOUT', { 
+            fontSize: '24px', fill: '#ffffff' 
+        }).setOrigin(0.5).setDepth(502);
+        
+        hideoutBtn.on('pointerover', () => hideoutBtn.setFillStyle(0x5555aa));
+        hideoutBtn.on('pointerout', () => hideoutBtn.setFillStyle(0x444488));
+        hideoutBtn.on('pointerdown', () => {
+            sfx.click();
+            this.cameras.main.fade(CONFIG.TIMINGS.LEVEL_TRANSITION, 0, 0, 0);
+            this.time.delayedCall(CONFIG.TIMINGS.LEVEL_TRANSITION, () => {
+                this.scene.start('HideoutScene', { stats: this.playerStats });
+            });
+        });
+        
+        // Keyboard shortcuts
+        const enterKey = this.input.keyboard.addKey('ENTER');
+        const escKey = this.input.keyboard.addKey('ESC');
+        
+        enterKey.once('down', () => {
+            sfx.click();
+            this.cameras.main.fade(CONFIG.TIMINGS.LEVEL_TRANSITION, 0, 0, 0);
+            this.time.delayedCall(CONFIG.TIMINGS.LEVEL_TRANSITION, () => {
+                this.scene.restart({ level: this.currentLevel + 1, stats: this.playerStats, levelDamageTaken: 0 });
+            });
+        });
+        
+        escKey.once('down', () => {
+            sfx.click();
+            this.cameras.main.fade(CONFIG.TIMINGS.LEVEL_TRANSITION, 0, 0, 0);
+            this.time.delayedCall(CONFIG.TIMINGS.LEVEL_TRANSITION, () => {
+                this.scene.start('HideoutScene', { stats: this.playerStats });
+            });
+        });
+        
+        // Hint text
+        const hintText = this.add.text(400, 480, 'ENTER = Continue  |  ESC = Hideout', { 
+            fontSize: '14px', fill: '#666666' 
+        }).setOrigin(0.5).setDepth(501);
     }
 
     winGame() {
@@ -4431,9 +4767,14 @@ class GameScene extends Phaser.Scene {
         // Update next level for progression (after level 5 go to 6, after level 7 reset to 1)
         if (this.currentLevel === 7) {
             this.playerStats.nextLevel = 1; // Game complete, reset
+            this.playerStats.highestLevelUnlocked = 7; // All levels stay unlocked
             this.showFloatingText(400, 200, "GAME COMPLETE!", 0x00ff00);
         } else {
             this.playerStats.nextLevel = this.currentLevel + 1;
+            // Unlock the next level if not already unlocked
+            if (this.playerStats.highestLevelUnlocked < this.currentLevel + 1) {
+                this.playerStats.highestLevelUnlocked = this.currentLevel + 1;
+            }
         }
         
         // Check achievements
@@ -4673,6 +5014,11 @@ class GameScene extends Phaser.Scene {
         const slotSize = 35;
         const slotSpacing = 5;
         const slotY = 560;
+        // Defensive check for consumables array
+        if (!this.playerStats.consumables || !Array.isArray(this.playerStats.consumables)) {
+            this.playerStats.consumables = [null, null, null];
+        }
+        
         for (let i = 0; i < 3; i++) {
             const slotX = 15 + i * (slotSize + slotSpacing);
             const consumable = this.playerStats.consumables[i];
