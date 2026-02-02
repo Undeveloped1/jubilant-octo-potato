@@ -1,0 +1,298 @@
+# Zombie Extraction Game - AI Instructions
+
+## Project Context
+
+This is a **single-file Phaser 3 game** (`game.html`, ~9200 lines). All game logic, configuration, and scenes are contained in one HTML file with embedded JavaScript.
+
+**Current Build**: v0.6.0 (Multiplayer)  
+**Save Version**: v17
+
+## Current Status
+
+### Completed Features
+- **7 Levels**: Street → Apartment → Rooftop → Sewers → Hospital → Mall → Cemetery
+- **7 Enemy Types**: Walker, Leaper, Bandit, Spitter, Boss, Exploder, Necromancer
+- **5 Weapons**: Pistol, Shotgun, SMG, Crossbow, Assault Rifle
+- **5 Weapon Mods**: Extended Mag, Suppressor, Laser Sight, Damage Barrel, Rapid Fire
+- **4 Character Classes**: Survivor, Scout, Medic, Scavenger
+- **15 Skills** across 3 branches (Survival, Stealth, Utility)
+- **Challenge System**: Daily (3), Weekly (5), Permanent with rewards
+- **Roguelike Rooms**: Procedural grids (2x2 to 3x2), risk rooms (25% chance)
+- **14 Permanent Upgrades**: Starting gear, stat boosts, cosmetics
+- **Tabbed Hideout UI**: FACILITIES, CHARACTER, SHOP tabs
+- **Mission Map**: Visual city overview with level selection
+- **2-Player Co-op**: WebSocket multiplayer, host authority, revive mechanic
+
+### Milestone Status
+| Milestone | Status |
+|-----------|--------|
+| 5 - Trader & Loot | ✅ Complete |
+| 6 - Content Expansion | ✅ Complete |
+| 7 - Character Classes | ✅ Complete |
+| 7b - Permanent Upgrades | ✅ Complete |
+| 8a - Skill Tree & Challenges | ✅ Complete |
+| 8b - Weapon Mods | ✅ Complete |
+| 8c - Roguelike Elements | ✅ Complete |
+| 9 - Multiplayer Co-op | ✅ Complete |
+
+### Multiplayer Architecture
+- WebSocket server in `server/` folder (Node.js + ws)
+- Host-authority model: host runs game, guest receives state
+- Room codes for matchmaking (4 alphanumeric characters)
+- Downed/revive mechanic (30s bleedout, 3s revive)
+- Difficulty scaling: +25% enemies, +30% enemy HP
+
+**Separate Files:**
+- `game.html` - Single-player version (v0.5.1)
+- `game_multiplayer.html` - Multiplayer version (v0.6)
+
+### Next Steps Options
+1. **New Content** - More levels, enemies, weapons, boss mechanics
+2. **Polish** - Audio/visual improvements, balancing, accessibility
+3. **New Systems** - Run modifiers, endless mode, prestige, etc.
+4. **Async Challenges** - "Beat my time/score" sharing between friends
+
+### Reference Documents
+- `ROADMAP.md` - Full feature history and specifications
+- `PROJECT_GUIDE.md` - Technical patterns and implementation guides
+
+## Workflow Rules
+
+### ALWAYS Plan First
+- For non-trivial features, **switch to planning mode** before implementation
+- Clarify design decisions upfront:
+  - Persistence (per-run vs permanent)
+  - Acquisition method (loot, trader, crafting)
+  - UI location (hideout vs in-game)
+- Create plans with specific line numbers and code snippets
+
+### Before Coding
+1. Read the relevant CONFIG section to understand existing patterns
+2. Check ROADMAP.md for feature specifications
+3. Look at similar implemented features for patterns
+
+### After Implementation
+- Update ROADMAP.md when completing milestones
+- Test with god mode and level select
+- Verify save/load works with new fields
+
+## Key File Locations
+
+### Configuration (CONFIG object at top of game.html)
+```
+CONFIG.WEAPONS      - Weapon stats (damage, fire rate, mag size, reload time)
+CONFIG.ENEMIES      - Enemy types, HP, damage, behaviors
+CONFIG.CURRENCIES   - Scrap, Credits, Materials definitions
+CONFIG.TRADER       - Shop inventory and prices
+CONFIG.CONSUMABLES  - Consumable effects and durations
+CONFIG.CLASSES      - Character classes with passives
+CONFIG.UPGRADES     - Permanent progression unlocks (14 upgrades)
+CONFIG.SKILLS       - Skill tree (15 skills, 3 branches)
+CONFIG.CHALLENGES   - Daily/Weekly/Permanent challenge templates
+CONFIG.MODS         - Weapon mods with effects and compatibility
+CONFIG.LEVEL_GRIDS  - Room grid dimensions per level (cols, rows, theme)
+CONFIG.ROOM_CHUNKS  - Room templates (walls, spawns, crates, doors)
+CONFIG.RISK_ROOM    - Risk room spawn chance, enemy/loot multipliers
+```
+
+### Save Data Structures
+- `DEFAULT_STATS` - Current run state (HP, ammo, weapons, hideout upgrades, consumables, equippedMods)
+- `DEFAULT_PERSISTENT` - Cross-run progression (kills, achievements, unlocks, skills, challenges, modInventory)
+- Save keys: `zombie_save_v17`, `zombie_persistent_v17`, `zombie_settings_v17`
+
+### Scene Classes
+- `MainMenuScene` - Title screen, new game, continue, settings
+- `HideoutScene` (~line 2400) - Hub with upgrades, trader, mission map, class/skill/challenge panels
+- `GameScene` (~line 3800) - Core gameplay loop
+
+## Common Implementation Patterns
+
+### Adding a New Feature
+1. Add config to appropriate `CONFIG` section
+2. Add persistent fields to `DEFAULT_PERSISTENT` if data survives runs
+3. Add migration code in `loadPersistent()` for old saves
+4. Add UI button + modal in `HideoutScene`
+5. Apply effects in `GameScene.create()` or relevant methods
+6. Call `savePersistent()` when data changes
+
+### Level Completion Tracking
+**CRITICAL**: Track stats in BOTH places:
+- `nextLevel()` - Called when completing levels 1-6 (door exit)
+- `winGame()` - Called for final extraction (levels 5 and 7)
+
+### Modal Pattern (HideoutScene)
+```javascript
+showXxxPanel() {
+    const elements = [];
+    this.persistent = loadPersistent(); // Reload fresh data
+    
+    // Create overlay, modal background, content...
+    
+    // Close button - MUST restart scene to refresh button labels
+    closeBtn.on('pointerdown', () => {
+        sfx.menuClose();
+        elements.forEach(e => e.destroy());
+        this.scene.restart({ stats: this.stats });
+    });
+}
+```
+
+### Save Data Migration
+```javascript
+// In loadPersistent(), after merging with defaults:
+if (merged.newField === undefined) {
+    merged.newField = defaultValue;
+}
+if (!merged.newArray || !Array.isArray(merged.newArray)) {
+    merged.newArray = [];
+}
+```
+
+## Testing
+
+- **Level Select**: Bottom-right button on main menu (all levels unlocked)
+- **God Mode**: Enter "god mode" at the cheat code prompt
+- **Console**: Check for save/load errors, undefined property access
+
+## Known Gotchas
+
+1. **Button labels are static** - Scene must restart to update them after modal changes
+2. **Challenge initialization** - Must call `checkChallengeReset()` in both HideoutScene AND GameScene
+3. **Skill effects** - Apply in `GameScene.create()` after loading persistent data
+4. **Crossbow kills** - Pass 'crossbow' as killSource to track for challenges
+
+---
+
+## Multiplayer Technical Reference (game_multiplayer.html)
+
+### Server Setup (`server/` folder)
+```
+server/
+├── server.js      - WebSocket server (Node.js + ws library)
+├── package.json   - Dependencies
+├── Dockerfile     - Docker deployment
+├── railway.json   - Railway deployment
+└── render.yaml    - Render deployment
+```
+
+**Run locally:** `cd server && npm install && npm start`  
+**Default port:** 3000 (or process.env.PORT)
+
+### Core Classes & Functions
+
+#### MultiplayerManager (~line 2085-2350)
+```javascript
+// Create/join rooms
+mp.createRoom()              // Host creates room, gets roomCode
+mp.joinRoom(code)            // Guest joins with code
+
+// Communication
+mp.sendGameState(state)      // Host broadcasts state
+mp.sendInput(input)          // Guest sends input to host
+mp.sendGameEvent(event)      // Both - generic events
+
+// Callbacks (set these before use)
+mp.onRoomCreated = (roomCode) => {}
+mp.onRoomJoined = () => {}
+mp.onPlayerJoined = () => {}
+mp.onGameState = (state) => {}
+mp.onPlayerInput = (input) => {}
+mp.onGameEvent = (event) => {}
+mp.onHostDisconnected = () => {}
+mp.onPlayerDisconnected = () => {}
+```
+
+#### SeededRandom (~line 1064-1083)
+```javascript
+mpRandom = new SeededRandom(seed)  // Initialize with level number
+mpRandom.next()                    // Returns 0-1 float
+mpRandom.nextInt(max)              // Returns 0 to max-1 integer
+```
+
+### State Synchronization
+
+#### Host Sends (serializeGameState)
+```javascript
+{
+  players: [
+    { id, x, y, hp, maxHp, weapon, isDowned, isReloading },  // Host
+    { id, x, y, hp, maxHp, weapon, isDowned, isReloading }   // Guest
+  ],
+  enemies: [{ id, x, y, hp, type, vx, vy }],
+  bullets: [{ id, x, y, vx, vy, isEnemy, isP2 }],
+  loot: [{ id, x, y, type }],
+  crates: [{ id, x, y }],
+  level: number,
+  roomId: number
+}
+```
+
+#### Guest Sends (serializeLocalInput)
+```javascript
+{
+  keys: { up, down, left, right, sprint },
+  mouse: { x, y, down },
+  actions: ['reload', 'grenade', 'interact', 'melee', 'switch']
+}
+```
+
+### Player 2 Functions (Host Only)
+```javascript
+firePlayer2Bullet(targetX, targetY)  // Weapon-specific with fire rate
+reloadPlayer2()                       // Reload with ammo consumption
+hitPlayer2(damage, fromX, fromY)     // Damage with downed state
+meleePlayer2(targetX, targetY)       // Melee attack
+throwPlayer2Grenade(targetX, targetY) // Full grenade throw
+interactPlayer2()                     // Crate/item interaction
+openCratePlayer2(crate)              // Open crate
+switchWeaponPlayer2()                // Cycle weapons
+handlePlayer2Death()                  // Death handling
+```
+
+### Host-Only Game Logic
+These run ONLY on host (guest receives results via state sync):
+- Enemy spawning (`spawnRoomEntities` - enemies only)
+- Enemy AI (`enemies.getChildren().forEach(e => e.update())`)
+- Collision damage (bullet-enemy, bullet-player, enemy-player, acid-player)
+- Loot spawning (`spawnLootSkull`)
+
+### Guest Receives (applyHostState)
+- Updates both player positions (P2 uses interpolation)
+- Creates/updates/removes enemies dynamically
+- Creates/updates/removes bullets
+- Creates/removes loot skulls
+- Destroys crates that host destroyed
+- Room sync via `guestRoomSync()`
+
+### Key Multiplayer Flags
+```javascript
+this.isMultiplayer  // True if in multiplayer mode
+this.isHost         // True for host, false for guest
+```
+
+### Player 2 Stats Object
+```javascript
+this.player2Stats = {
+  hp, maxHp, ammo, currentWeapon,
+  scrap, credits, materials, grenades,
+  hasShotgun, hasSMG, hasCrossbow, hasRifle,
+  magazines: { pistol, shotgun, smg, crossbow, rifle },
+  isReloading, isDowned, downedTimer,
+  selectedClass, unlockedSkills, collectedMods
+}
+```
+
+### Scene Flow (Multiplayer)
+1. **MainMenuScene**: Host creates room, guest joins with code
+2. Guest sends loadout → Host receives and stores in `window.guestLoadout`
+3. Host sends `start_game` event → Both transition to HideoutScene
+4. **HideoutScene**: Host selects level, sends `start_level` event
+5. Both transition to GameScene with `isMultiplayer` and `isHost` flags
+6. **GameScene**: Host runs game, broadcasts state; Guest renders and sends input
+
+### Testing Multiplayer
+1. Start server: `cd server && npm start`
+2. Open two browser tabs to `http://localhost:8080/game_multiplayer.html`
+3. Tab 1: Click "Host Game" - note the room code
+4. Tab 2: Click "Join Game" - enter room code
+5. Host selects level and deploys - both should enter game together

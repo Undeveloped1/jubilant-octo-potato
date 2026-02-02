@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: zombie-game-server
+    env: node
+    buildCommand: npm install
+    startCommand: node index.js
+    healthCheckPath: /
+    envVars:
+      - key: NODE_ENV
+        value: production
