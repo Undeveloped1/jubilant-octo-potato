@@ -1,18 +1,3 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Zombies - Build 24.1 (Streamlined UI)</title>
-    <style>
-        body { margin: 0; padding: 0; background-color: #000000; overflow: hidden; }
-        canvas { display: block; margin: 0 auto; }
-    </style>
-    <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
-</head>
-<body>
-<div id="game-container"></div>
-<script>
 
 // =============================================================================
 // CONFIGURATION - All magic numbers centralized here
@@ -21,6 +6,17 @@ const CONFIG = {
     // Save system
     SAVE_KEY: 'zombie_save_v17',
     SETTINGS_KEY: 'zombie_settings_v17',
+    WALKER_AI_TEST_MODE: true,
+    
+    // Enemy composition per level (predefined count; 100/0 = walkers only for now)
+    ENEMIES_PER_LEVEL: { 1: 4, 2: 4, 3: 5, 4: 5, 5: 12, 6: 6, 7: 10 },
+    ZOMBIE_PCT: 100,
+    BANDIT_PCT: 0,
+    WALKERS_ONLY_SPAWN: false,
+    SPAWN_MIN_DISTANCE: 100,
+    // Enemies wander in from off-screen over time
+    EDGE_SPAWN_ENABLED: true,
+    EDGE_SPAWN_INTERVAL_MS: 20000,
     
     // Player settings
     PLAYER: {
@@ -40,6 +36,8 @@ const CONFIG = {
         DODGE_DURATION: 200,
         DODGE_COOLDOWN: 800,
         DODGE_STAMINA_COST: 20,
+        // Crouch: slow movement, no footstep noise (leapers won't detect you)
+        CROUCH_SPEED: 70,
         // Low HP threshold for vignette
         LOW_HP_THRESHOLD: 0.3
     },
@@ -55,9 +53,9 @@ const CONFIG = {
         },
         SHOTGUN: {
             FIRE_RATE: 1000,
-            AMMO_COST: 2,
-            PELLETS: 5,
-            SPREAD_STEP: 5,
+            AMMO_COST: 1,
+            PELLETS: 3,
+            SPREAD_STEP: 10,
             MAG_SIZE: 6,
             RELOAD_TIME: 1500
         },
@@ -93,33 +91,84 @@ const CONFIG = {
     ENEMIES: {
         WALKER: {
             HP: 2,
-            SPEED: 60,
+            SPEED: 30,           // 50% of original 60 for roomba-style patrol
             DAMAGE: 2,
             AGGRO_RANGE: 300,
+            PERCEPTION_RADIUS: 280,
+            VISION_ANGLE: (Math.PI / 3) * 0.4,
+            HUNT_SPEED_MULTIPLIER: 2.366,
+            HEARING_RADIUS: 626,
+            CLOSE_AGGRO_RADIUS: 80,
+            CLOSE_AGGRO_CHANCE_FIRST: 0.8,
+            CLOSE_AGGRO_CHANCE_FLOOR: 0.5,
+            CLOSE_AGGRO_CHANCE_DECAY: 0.05,
+            CLOSE_AGGRO_ROLL_INTERVAL_MS: 2000,
+            SOUND_RADIUS: 180,
+            GUNSHOT_ALERT_DURATION: 3000,
+            SEARCH_RADIUS: 80,
+            SEARCH_DURATION: 4000,
+            PATROL_SPEED: 20,
+            STUCK_TIME_MS: 400,
+            TURN_INCREMENT: (15 * Math.PI) / 180,
+            GO_AROUND_STUCK_TIME_MS: 350,
+            GO_AROUND_DURATION_MS: 700,
+            GO_AROUND_DISTANCE_MULTIPLIER: 1.15,
             TEXTURE: 'zombie'
         },
         LEAPER: {
             HP: 1,
-            SPEED: 110,
+            SPEED: 150,
             DAMAGE: 2,
             LEAP_RANGE: 180,
-            LEAP_SPEED: 450,
-            PREPARE_TIME: 500,
+            LEAP_SPEED: 900,
+            PREPARE_TIME: 50,
             LEAP_DURATION: 600,
             COOLDOWN_TIME: 1500,
             KNOCKBACK_SPEED: 250,
-            TEXTURE: 'leaper_idle_0'
+            PLAYER_BREAKFREE_KNOCKBACK_MULTIPLIER: 1.5,
+            PLAYER_BREAKFREE_COOLDOWN_MS: 8000,
+            PLAYER_BREAKFREE_STUN_MS: 3000,
+            TEXTURE: 'leaper_idle_0',
+            HEARING_RADIUS: 626,
+            SOUND_RADIUS: 180,
+            GUNSHOT_ALERT_DURATION: 3000,
+            PIN_DAMAGE_INTERVAL_MS: 1000,
+            PIN_DAMAGE_FIRST_PCT: 0.1,
+            PIN_DAMAGE_FIRST_HITS: 3,
+            PIN_DAMAGE_AFTER_PCT: 0.2,
+            LEAP_TRIGGER_RADIUS: 180,
+            LOSE_PLAYER_MS: 3000,
+            PATROL_SPEED: 58,
+            WANDER_CHANGE_MS: 2800
         },
         BANDIT: {
             HP: 3,
             SPEED: 90,
             DAMAGE: 1,
             AMMO: 10,
+            CAN_SHOOT: true,
             FIRE_RANGE: 350,
             FIRE_RATE: 2000,
             MELEE_SPEED: 120,
             SPREAD: 5,
-            TEXTURE: 'bandit'
+            TEXTURE: 'bandit',
+            PERCEPTION_RADIUS: 160,
+            VISION_ANGLE: (Math.PI / 3) * 0.4,
+            HEARING_RADIUS: 250,
+            SOUND_RADIUS: 100,
+            GUNSHOT_ALERT_DURATION: 3000,
+            SEARCH_RADIUS: 100,
+            SEARCH_DURATION: 4000,
+            PATROL_SPEED: 35,
+            HUNT_SPEED_MULTIPLIER: 1.2,
+            CLOSE_AGGRO_RADIUS: 100,
+            CLOSE_AGGRO_CHANCE_FIRST: 0.8,
+            CLOSE_AGGRO_CHANCE_FLOOR: 0.5,
+            CLOSE_AGGRO_CHANCE_DECAY: 0.05,
+            CLOSE_AGGRO_ROLL_INTERVAL_MS: 2000,
+            GO_AROUND_STUCK_TIME_MS: 350,
+            GO_AROUND_DURATION_MS: 700,
+            GO_AROUND_DISTANCE_MULTIPLIER: 1.15
         },
         BOSS: {
             HP: 5,
@@ -151,6 +200,7 @@ const CONFIG = {
             SPEED: 60,
             DAMAGE: 2,
             SUMMON_COUNT: 4,        // Zombies per summon
+            MINION_LEASH_RADIUS: 220, // Minions stay within this distance of the boss
             VULNERABLE_TIME: 10000, // 10 sec window
             PROJECTILE_SPEED: 150,
             PROJECTILE_DAMAGE: 2,
@@ -179,6 +229,7 @@ const CONFIG = {
     // Timings (in ms)
     TIMINGS: {
         CRATE_OPEN: 1000,
+        BODY_SEARCH: 500,
         DEBRIS_BURN: 5000,
         EXTRACTION: 15000,
         DEATH_RESTART: 2000,
@@ -202,11 +253,54 @@ const CONFIG = {
     
     // Loot tables
     LOOT: {
+        // Deprecated: enemy kill drops use CONFIG.ENEMY_DROPS instead. These arrays are unused.
         BANDIT: ['ammo', 'ammo', 'scrap', 'meds', 'helmet', 'vest', 'grenade'],
         ZOMBIE: ['ammo', 'scrap', 'meds', 'ammo'],
         SPITTER: ['ammo', 'scrap', 'meds', 'grenade'],
         EXPLODER: ['ammo', 'scrap', 'grenade'],
-        NECROMANCER: ['materials', 'materials', 'grenade', 'meds']
+        NECROMANCER: ['materials', 'materials', 'grenade', 'meds'],
+        // Single source of truth for level crate loot pools (used by procedural rooms and spawnLevelEntities)
+        LEVEL_POOLS: {
+            1: ['map', 'key', 'flashlight', 'shotgun', 'ammo', 'ammo', 'helmet', 'vest', 'scrap', 'cigarettes'],
+            2: ['map', 'molotov', 'shotgun', 'ammo', 'ammo', 'scrap', 'helmet', 'vest', 'plug', 'cigarettes'],
+            3: ['map', 'key', 'ammo', 'ammo', 'meds', 'meds', 'scrap', 'grenade', 'cigarettes'],
+            4: ['map', 'key', 'smg', 'ammo', 'ammo', 'ammo', 'grenade', 'grenade', 'meds', 'scrap', 'plug'],
+            5: ['map', 'ammo', 'ammo', 'ammo', 'meds', 'meds', 'grenade', 'scrap', 'extended_mag'],
+            6: ['map', 'key', 'rifle', 'ammo', 'ammo', 'ammo', 'meds', 'grenade', 'grenade', 'suppressor', 'rapid_fire'],
+            7: ['map', 'key', 'crossbow', 'ammo', 'ammo', 'meds', 'meds', 'laser_sight', 'damage_barrel', 'materials']
+        },
+        LEVELS_NEEDING_KEY: [1, 3, 4, 6],
+        MOD_RARITY_WEIGHTS: { common: 60, uncommon: 30, rare: 10 },
+        // Canonical list of all loot IDs handled by applyLoot(); add new types here and in applyLoot switch
+        VALID_IDS: ['meds', 'ammo', 'key', 'map', 'flashlight', 'molotov', 'shotgun', 'smg', 'crossbow', 'rifle', 'scrap', 'plug', 'helmet', 'vest', 'grenade', 'materials', 'cigarettes', 'extended_mag', 'suppressor', 'laser_sight', 'damage_barrel', 'rapid_fire', 'ammo_box'],
+        // Items that are not stored in backpack/stash: pickup only triggers instant effect (e.g. flashlight = option on, scrap = currency, meds = heal, molotov = key item)
+        NON_GRID_ITEM_IDS: ['flashlight', 'scrap', 'meds', 'molotov'],
+        // Grid inventory: items that go in backpack/stash (key/map/plug stay instant)
+        INVENTORY_ITEMS: {
+            meds:          { id: 'meds', sizeW: 1, sizeH: 1, stackMax: 10, category: 'consumable', label: 'Meds', icon: '+' },
+            ammo:          { id: 'ammo', sizeW: 1, sizeH: 1, stackMax: 99, category: 'stackable', label: 'Ammo', icon: '#' },
+            grenade:       { id: 'grenade', sizeW: 1, sizeH: 1, stackMax: 3, category: 'stackable', label: 'Grenade', icon: 'G' },
+            scrap:         { id: 'scrap', sizeW: 1, sizeH: 1, stackMax: 99, category: 'stackable', label: 'Scrap', icon: 'S' },
+            materials:     { id: 'materials', sizeW: 1, sizeH: 1, stackMax: 99, category: 'stackable', label: 'Materials', icon: 'M' },
+            cigarettes:    { id: 'cigarettes', sizeW: 1, sizeH: 1, stackMax: 99, category: 'stackable', label: 'Cigarettes', icon: 'C' },
+            flashlight:    { id: 'flashlight', sizeW: 1, sizeH: 1, stackMax: 1, category: 'weapon', label: 'Flashlight', icon: 'F' },
+            molotov:       { id: 'molotov', sizeW: 1, sizeH: 1, stackMax: 3, category: 'stackable', label: 'Molotov', icon: 'V' },
+            shotgun:       { id: 'shotgun', sizeW: 2, sizeH: 1, stackMax: 1, category: 'weapon', label: 'Shotgun', icon: 'SG' },
+            smg:           { id: 'smg', sizeW: 2, sizeH: 1, stackMax: 1, category: 'weapon', label: 'SMG', icon: 'SMG' },
+            crossbow:      { id: 'crossbow', sizeW: 2, sizeH: 1, stackMax: 1, category: 'weapon', label: 'Crossbow', icon: 'X' },
+            rifle:         { id: 'rifle', sizeW: 2, sizeH: 1, stackMax: 1, category: 'weapon', label: 'Rifle', icon: 'R' },
+            helmet:        { id: 'helmet', sizeW: 1, sizeH: 1, stackMax: 1, category: 'armor', label: 'Helmet', icon: 'H' },
+            vest:          { id: 'vest', sizeW: 1, sizeH: 1, stackMax: 1, category: 'armor', label: 'Vest', icon: 'V' },
+            extended_mag:  { id: 'extended_mag', sizeW: 1, sizeH: 1, stackMax: 5, category: 'stackable', label: 'Ext Mag', icon: 'M' },
+            suppressor:    { id: 'suppressor', sizeW: 1, sizeH: 1, stackMax: 5, category: 'stackable', label: 'Suppressor', icon: 'S' },
+            laser_sight:   { id: 'laser_sight', sizeW: 1, sizeH: 1, stackMax: 5, category: 'stackable', label: 'Laser', icon: 'L' },
+            damage_barrel: { id: 'damage_barrel', sizeW: 1, sizeH: 1, stackMax: 5, category: 'stackable', label: 'Dmg Barrel', icon: 'D' },
+            rapid_fire:    { id: 'rapid_fire', sizeW: 1, sizeH: 1, stackMax: 5, category: 'stackable', label: 'Rapid Fire', icon: 'R' },
+            adrenaline:    { id: 'adrenaline', sizeW: 1, sizeH: 1, stackMax: 5, category: 'consumable', label: 'Adrenaline', icon: 'A' },
+            armor_patch:   { id: 'armor_patch', sizeW: 1, sizeH: 1, stackMax: 5, category: 'consumable', label: 'Armor Patch', icon: 'P' },
+            ammo_box:      { id: 'ammo_box', sizeW: 2, sizeH: 2, stackMax: 1, category: 'container', label: 'Ammo Box', icon: 'A' }
+        },
+        AMMO_BOX_INNER: { gridW: 6, gridH: 6 }
     },
     
     // Achievements
@@ -242,6 +336,10 @@ const CONFIG = {
         MATERIALS: { name: 'Materials', icon: '⚙️', color: 0x00aaff }
     },
     
+    // Trader quests: turn in items from stash for rewards (one-time per quest)
+    TRADER_QUESTS: [
+        { id: 'cigarettes_10', name: 'Filthy Habit', desc: 'Collect 10 Cigarettes from the field and turn them in.', require: { itemId: 'cigarettes', count: 10 }, reward: { scrap: 100 } }
+    ],
     // Trader configuration
     TRADER: {
         HIDEOUT_STOCK: [
@@ -257,7 +355,13 @@ const CONFIG = {
             { id: 'damage_barrel', name: 'Damage Barrel', type: 'mod', cost: 30, currency: 'materials' },
             { id: 'rapid_fire', name: 'Rapid Fire', type: 'mod', cost: 25, currency: 'materials' }
         ],
-        SELL_RATE: 0.5
+        SELL_RATE: 0.5,
+        // Sell value for items in stash/backpack grid (per unit). Mods use CONFIG.MODS[].cost.amount * 0.5 for materials.
+        SELL_GRID: {
+            shotgun: { credits: 25 }, smg: { credits: 35 }, crossbow: { credits: 40 }, rifle: { credits: 45 },
+            helmet: { credits: 10 }, vest: { credits: 12 },
+            extended_mag: { materials: 7 }, suppressor: { materials: 10 }, laser_sight: { materials: 12 }, damage_barrel: { materials: 15 }, rapid_fire: { materials: 12 }
+        }
     },
     
     // Consumables configuration
@@ -268,13 +372,13 @@ const CONFIG = {
     
     // Enemy drop configuration (currency auto-collects, items go to skull)
     ENEMY_DROPS: {
-        WALKER: { currency: 'scrap', min: 1, max: 3, items: ['ammo', 'meds'] },
-        SPITTER: { currency: 'scrap', min: 2, max: 4, items: ['ammo', 'meds', 'grenade'] },
-        BANDIT: { currency: 'credits', min: 5, max: 15, items: ['ammo', 'helmet', 'vest'] },
-        BOSS: { currency: 'materials', min: 5, max: 15, items: ['grenade', 'meds', 'extended_mag', 'suppressor'] },
-        LEAPER: { currency: 'scrap', min: 1, max: 2, items: ['ammo'] },
-        EXPLODER: { currency: 'scrap', min: 2, max: 5, items: ['ammo', 'grenade'] },
-        NECROMANCER: { currency: 'materials', min: 10, max: 20, items: ['grenade', 'meds', 'crossbow', 'damage_barrel', 'rapid_fire', 'laser_sight'] }
+        WALKER: { currency: 'scrap', min: 1, max: 3, items: ['ammo', 'ammo', 'meds', 'scrap', 'cigarettes'] },
+        SPITTER: { currency: 'scrap', min: 2, max: 4, items: ['ammo', 'meds', 'grenade', 'scrap', 'cigarettes'] },
+        BANDIT: { currency: 'credits', min: 5, max: 15, items: ['ammo', 'ammo', 'helmet', 'vest', 'grenade', 'meds', 'extended_mag', 'cigarettes'] },
+        BOSS: { currency: 'materials', min: 8, max: 18, items: ['grenade', 'meds', 'extended_mag', 'suppressor', 'laser_sight', 'rapid_fire'] },
+        LEAPER: { currency: 'scrap', min: 1, max: 2, items: ['ammo', 'meds', 'cigarettes'] },
+        EXPLODER: { currency: 'scrap', min: 2, max: 5, items: ['ammo', 'grenade', 'meds', 'cigarettes'] },
+        NECROMANCER: { currency: 'materials', min: 12, max: 24, items: ['grenade', 'meds', 'crossbow', 'damage_barrel', 'rapid_fire', 'laser_sight', 'materials'] }
     },
     
     // Character classes
@@ -510,9 +614,11 @@ const CONFIG = {
     // Risk room configuration
     RISK_ROOM: {
         SPAWN_CHANCE: 0.25,        // 25% chance per eligible room
-        ENEMY_MULTIPLIER: 1.5,     // 1.5x enemies
+        ENEMY_MULTIPLIER: 1.5,     // 1.5x enemies (unused when ENEMIES_PER_LEVEL set)
+        ENEMIES_PER_LEVEL: { 1: 4, 2: 4, 3: 5, 4: 5, 5: 10, 6: 5, 7: 10 },
         LOOT_MULTIPLIER: 2.0,      // 2x currency drops
         GUARANTEED_DROPS: ['extended_mag', 'suppressor', 'laser_sight', 'damage_barrel', 'rapid_fire'],
+        BONUS_LOOT: ['materials', 'grenade', 'meds', 'ammo', 'ammo'],  // One extra from this pool in risk rooms
         ENEMY_UPGRADES: {
             walker: 'leaper',      // Walkers become leapers
             leaper: 'bandit',      // Leapers become bandits
@@ -916,7 +1022,7 @@ const CONFIG = {
 };
 
 const DEFAULT_STATS = { 
-    hp: 10, maxHp: 10, stamina: 100, maxStamina: 100, ammo: 30, scrap: 0,
+    hp: 10, maxHp: 10, stamina: 100, maxStamina: 100, scrap: 0,
     credits: 0,
     materials: 0,
     grenades: 0,
@@ -948,7 +1054,9 @@ const DEFAULT_STATS = {
         smg: [null, null],
         crossbow: [null, null],
         rifle: [null, null]
-    }
+    },
+    // Backpack grid (run inventory); items: [{ placementId, itemId, count, row, col, sizeW, sizeH }]
+    backpack: { gridW: 12, gridH: 12, items: [], _nextId: 1 }
 };
 
 // Persistent stats that survive across all runs (stored separately)
@@ -1016,7 +1124,17 @@ const DEFAULT_PERSISTENT = {
     runWeaponUsed: null,            // For pistol-only challenge
     
     // Weapon Mods System
-    modInventory: []                // Array of mod IDs owned (stored permanently)
+    modInventory: [],              // Array of mod IDs owned (stored permanently)
+    level7Completed: false,        // Show checkmark on Cemetery in mission select
+    // Stash grid (persistent storage at hideout); same item shape as backpack
+    stash: { gridW: 12, gridH: 16, items: [], _nextId: 1 },
+    // Currencies stored at hideout (not carried into raid)
+    scrap: 0,
+    credits: 0,
+    materials: 0,
+    // Quests: accepted (active) and completed
+    activeQuests: [],
+    completedQuests: []
 };
 
 const PERSISTENT_KEY = 'zombie_persistent_v17';
@@ -1459,6 +1577,11 @@ class SoundManager {
         this.playTone(200, 'triangle', 0.2, 0.2);
     }
     
+    crateShuffle() {
+        this.playFilteredNoise(0.15, 0.2, 400, 'lowpass');
+        this.playTone(150, 'sawtooth', 0.08, 0.15);
+        this.playTone(200, 'sawtooth', 0.06, 0.12);
+    }
     crateOpen() {
         this.playFilteredNoise(0.2, 0.25, 800, 'lowpass');
         this.playTone(300, 'triangle', 0.15, 0.2);
@@ -1563,6 +1686,21 @@ function loadPersistent() {
         if (!merged.modInventory || !Array.isArray(merged.modInventory)) {
             merged.modInventory = [];
         }
+        if (!merged.stash) merged.stash = { gridW: 12, gridH: 16, items: [], _nextId: 1 };
+        if (!Array.isArray(merged.stash.items)) merged.stash.items = [];
+        const nonGridStash = (CONFIG.LOOT && CONFIG.LOOT.NON_GRID_ITEM_IDS) || [];
+        merged.stash.items = merged.stash.items.filter(p => !nonGridStash.includes(p.itemId));
+        if (!merged.ammoBoxInventories || typeof merged.ammoBoxInventories !== 'object') merged.ammoBoxInventories = {};
+        (merged.stash.items || []).forEach(p => { if (p.itemId === 'ammo_box') { p.sizeW = 2; p.sizeH = 2; } });
+        if (!(merged.stash.items || []).some(p => p.itemId === 'ammo_box')) tryAddItem(merged.stash, 'ammo_box', 1);
+        if (merged.stash.gridW == null) merged.stash.gridW = 12;
+        if (merged.stash.gridH == null) merged.stash.gridH = 16;
+        if (merged.scrap === undefined) merged.scrap = 0;
+        if (merged.credits === undefined) merged.credits = 0;
+        if (merged.materials === undefined) merged.materials = 0;
+        if (!merged.activeQuests || !Array.isArray(merged.activeQuests)) merged.activeQuests = [];
+        if (!merged.completedQuests || !Array.isArray(merged.completedQuests)) merged.completedQuests = [];
+        if (!merged.questTurnInProgress || typeof merged.questTurnInProgress !== 'object') merged.questTurnInProgress = {};
         return merged;
     }
     return JSON.parse(JSON.stringify(DEFAULT_PERSISTENT));
@@ -1570,6 +1708,195 @@ function loadPersistent() {
 
 function savePersistent(data) {
     localStorage.setItem(PERSISTENT_KEY, JSON.stringify(data));
+}
+
+/** Pick one mod ID weighted by CONFIG.MODS.rarity (common > uncommon > rare). */
+function pickModByRarity() {
+    const weights = (CONFIG.LOOT && CONFIG.LOOT.MOD_RARITY_WEIGHTS) ? CONFIG.LOOT.MOD_RARITY_WEIGHTS : { common: 60, uncommon: 30, rare: 10 };
+    const mods = Object.values(CONFIG.MODS || {});
+    const weighted = [];
+    mods.forEach(m => {
+        const w = weights[m.rarity] || 10;
+        for (let i = 0; i < w; i++) weighted.push(m.id);
+    });
+    if (weighted.length === 0 && CONFIG.RISK_ROOM && CONFIG.RISK_ROOM.GUARANTEED_DROPS && CONFIG.RISK_ROOM.GUARANTEED_DROPS.length > 0)
+        return CONFIG.RISK_ROOM.GUARANTEED_DROPS[Math.floor(Math.random() * CONFIG.RISK_ROOM.GUARANTEED_DROPS.length)];
+    return weighted.length > 0 ? weighted[Math.floor(Math.random() * weighted.length)] : 'extended_mag';
+}
+
+// ========== Backpack / Stash grid helpers (Option B: list of placed items) ==========
+function getInventoryItemConfig(id) {
+    return (CONFIG.LOOT && CONFIG.LOOT.INVENTORY_ITEMS && CONFIG.LOOT.INVENTORY_ITEMS[id]) || null;
+}
+
+function getOccupiedSet(grid, excludePlacementId) {
+    const set = new Set();
+    (grid.items || []).forEach(p => {
+        if (excludePlacementId && p.placementId === excludePlacementId) return;
+        for (let r = 0; r < (p.sizeH || 1); r++)
+            for (let c = 0; c < (p.sizeW || 1); c++)
+                set.add(`${p.row + r},${p.col + c}`);
+    });
+    return set;
+}
+
+function canPlace(grid, row, col, sizeW, sizeH, excludePlacementId) {
+    const w = grid.gridW || 12, h = grid.gridH || 12;
+    if (row < 0 || col < 0 || row + sizeH > h || col + sizeW > w) return false;
+    const occupied = getOccupiedSet(grid, excludePlacementId);
+    for (let r = 0; r < sizeH; r++)
+        for (let c = 0; c < sizeW; c++)
+            if (occupied.has(`${row + r},${col + c}`)) return false;
+    return true;
+}
+
+function findSpace(grid, sizeW, sizeH) {
+    const h = grid.gridH || 12, w = grid.gridW || 12;
+    for (let row = 0; row <= h - sizeH; row++)
+        for (let col = 0; col <= w - sizeW; col++)
+            if (canPlace(grid, row, col, sizeW, sizeH, null)) return { row, col };
+    return null;
+}
+
+function nextPlacementId(grid) {
+    const n = (grid._nextId != null ? grid._nextId : 1);
+    grid._nextId = n + 1;
+    return 'inv_' + n + '_' + Date.now();
+}
+
+function placeItem(grid, itemId, count, row, col) {
+    const cfg = getInventoryItemConfig(itemId);
+    if (!cfg) return null;
+    const sizeW = cfg.sizeW || 1, sizeH = cfg.sizeH || 1;
+    if (!canPlace(grid, row, col, sizeW, sizeH, null)) return null;
+    if (!grid.items) grid.items = [];
+    const placementId = nextPlacementId(grid);
+    const maxStack = Math.min(count, cfg.stackMax || 1);
+    grid.items.push({ placementId, itemId, count: maxStack, row, col, sizeW, sizeH });
+    return placementId;
+}
+
+function removeItem(grid, placementId) {
+    if (!grid.items) return null;
+    const idx = grid.items.findIndex(p => p.placementId === placementId);
+    if (idx < 0) return null;
+    const removed = grid.items.splice(idx, 1)[0];
+    return removed;
+}
+
+function moveItemInGrid(grid, placementId, toRow, toCol) {
+    const item = removeItem(grid, placementId);
+    if (!item) return false;
+    const sizeW = item.sizeW || 1, sizeH = item.sizeH || 1;
+    if (!canPlace(grid, toRow, toCol, sizeW, sizeH, null)) {
+        grid.items.push(item);
+        return false;
+    }
+    item.row = toRow;
+    item.col = toCol;
+    grid.items.push(item);
+    return true;
+}
+
+function countItemInGrid(grid, itemId) {
+    if (!grid || !grid.items) return 0;
+    return (grid.items || []).reduce((n, p) => n + (p.itemId === itemId ? (p.count || 1) : 0), 0);
+}
+
+function countItemInGrids(stashGrid, backpackGrid, itemId) {
+    let n = 0;
+    [stashGrid, backpackGrid].forEach(grid => {
+        if (!grid || !grid.items) return;
+        grid.items.forEach(p => { if (p.itemId === itemId) n += (p.count || 1); });
+    });
+    return n;
+}
+
+/** Remove up to `count` of itemId from a single grid. Returns number actually removed. */
+function removeItemFromGrid(grid, itemId, count) {
+    if (!grid || !grid.items || count <= 0) return 0;
+    let left = count;
+    for (let i = grid.items.length - 1; i >= 0 && left > 0; i--) {
+        const p = grid.items[i];
+        if (p.itemId !== itemId) continue;
+        const take = Math.min(left, p.count || 1);
+        left -= take;
+        if (take >= (p.count || 1)) {
+            grid.items.splice(i, 1);
+        } else {
+            p.count = (p.count || 1) - take;
+        }
+    }
+    return count - left;
+}
+
+function removeItemFromGrids(stashGrid, backpackGrid, itemId, count) {
+    let left = count;
+    [stashGrid, backpackGrid].forEach(grid => {
+        if (!grid || !grid.items || left <= 0) return;
+        for (let i = grid.items.length - 1; i >= 0 && left > 0; i--) {
+            const p = grid.items[i];
+            if (p.itemId !== itemId) continue;
+            const take = Math.min(left, p.count || 1);
+            left -= take;
+            if (take >= (p.count || 1)) {
+                grid.items.splice(i, 1);
+            } else {
+                p.count = (p.count || 1) - take;
+            }
+        }
+    });
+    return left === 0;
+}
+
+/** Get or create inner inventory for an ammo box. inventoryMap = persistent.ammoBoxInventories or stats.ammoBoxInventories, key = 'stash_'+placementId or 'backpack_'+placementId. */
+function getOrCreateAmmoBoxInventory(inventoryMap, key) {
+    const inner = CONFIG.LOOT && CONFIG.LOOT.AMMO_BOX_INNER;
+    const w = inner?.gridW || 6, h = inner?.gridH || 6;
+    if (!inventoryMap[key]) {
+        inventoryMap[key] = { gridW: w, gridH: h, items: [], _nextId: 1 };
+    } else {
+        inventoryMap[key].gridW = w;
+        inventoryMap[key].gridH = h;
+    }
+    return inventoryMap[key];
+}
+
+/** Only allow ammo in ammo box inner grid. */
+function tryAddItemAmmoBoxOnly(grid, itemId, count) {
+    if (itemId !== 'ammo') return false;
+    return tryAddItem(grid, itemId, count);
+}
+
+function tryAddItem(grid, itemId, count) {
+    const nonGrid = (CONFIG.LOOT && CONFIG.LOOT.NON_GRID_ITEM_IDS) || [];
+    if (nonGrid.includes(itemId)) return false;
+    const cfg = getInventoryItemConfig(itemId);
+    if (!cfg) return false;
+    const sizeW = cfg.sizeW || 1, sizeH = cfg.sizeH || 1;
+    const stackMax = cfg.stackMax || 1;
+    const toAdd = Math.min(count, 999);
+    if (toAdd <= 0) return true;
+    if (stackMax > 1) {
+        const existing = (grid.items || []).find(p => p.itemId === itemId && (p.count || 0) < stackMax);
+        if (existing) {
+            const room = stackMax - (existing.count || 0);
+            const add = Math.min(toAdd, room);
+            existing.count = (existing.count || 0) + add;
+            return add >= toAdd ? true : tryAddItem(grid, itemId, toAdd - add);
+        }
+    }
+    const pos = findSpace(grid, sizeW, sizeH);
+    if (!pos) return false;
+    const placeCount = Math.min(toAdd, stackMax);
+    placeItem(grid, itemId, placeCount, pos.row, pos.col);
+    return placeCount >= toAdd ? true : tryAddItem(grid, itemId, toAdd - placeCount);
+}
+
+function resetPersistent() {
+    const fresh = JSON.parse(JSON.stringify(DEFAULT_PERSISTENT));
+    localStorage.setItem(PERSISTENT_KEY, JSON.stringify(fresh));
+    return fresh;
 }
 
 function resetRunStats(persistent) {
@@ -1773,13 +2100,32 @@ function checkUpgrades(persistent) {
 function getStartingStats(persistent) {
     const stats = JSON.parse(JSON.stringify(DEFAULT_STATS));
     
+    if (!stats.backpack || !Array.isArray(stats.backpack.items)) {
+        stats.backpack = { gridW: 12, gridH: 12, items: [], _nextId: 1 };
+    }
+    
     if (!persistent.unlockedUpgrades) return stats;
     
-    // Apply starting gear upgrades
-    if (persistent.unlockedUpgrades.includes('start_shotgun')) stats.hasShotgun = true;
-    if (persistent.unlockedUpgrades.includes('start_grenade')) stats.grenades = 1;
-    if (persistent.unlockedUpgrades.includes('start_flashlight')) stats.hasFlashlight = true;
-    if (persistent.unlockedUpgrades.includes('start_ammo')) stats.ammo += 20;
+    // Apply starting gear upgrades (legacy flags for gameplay)
+    if (persistent.unlockedUpgrades.includes('start_shotgun')) {
+        stats.hasShotgun = true;
+        tryAddItem(stats.backpack, 'shotgun', 1);
+    }
+    if (persistent.unlockedUpgrades.includes('start_grenade')) {
+        stats.grenades = 1;
+        tryAddItem(stats.backpack, 'grenade', 1);
+    }
+    if (persistent.unlockedUpgrades.includes('start_flashlight')) {
+        stats.hasFlashlight = true;
+    }
+    if (persistent.unlockedUpgrades.includes('start_ammo')) {
+        tryAddItem(stats.backpack, 'ammo', 20);
+    }
+    // Migrate legacy flat ammo into backpack (ammo is only in weapon mag + backpack now)
+    if (stats.ammo > 0) {
+        tryAddItem(stats.backpack, 'ammo', stats.ammo);
+        stats.ammo = 0;
+    }
     
     // Apply stat boosts (HP)
     if (persistent.unlockedUpgrades.includes('hp_boost_1')) { stats.hp += 1; stats.maxHp += 1; }
@@ -2098,10 +2444,11 @@ class MainMenuScene extends Phaser.Scene {
         this.add.text(400, 220, "EXTRACTION", { fontSize: '48px', fill: '#008800' }).setOrigin(0.5);
 
         // Main buttons - centered
-        this.createButton(400, 320, "NEW RUN", 0x880000, () => {
-            if(confirm("Start a new run? This overwrites current auto-save.")) {
+        this.createButton(400, 320, "NEW GAME", 0x880000, () => {
+            if (confirm("Start a new game? This resets everything: classes, skills, challenges, upgrades, mods, and run progress.")) {
                 localStorage.removeItem(CONFIG.SAVE_KEY);
-                const persistent = loadPersistent();
+                const persistent = resetPersistent();
+                if (checkChallengeReset(persistent)) savePersistent(persistent);
                 const stats = getStartingStats(persistent);
                 sfx.levelStart();
                 this.scene.start('HideoutScene', { stats: stats });
@@ -2148,6 +2495,11 @@ class MainMenuScene extends Phaser.Scene {
                             crossbow: [null, null], rifle: [null, null]
                         };
                     }
+                    if (!stats.backpack) stats.backpack = { gridW: 12, gridH: 12, items: [], _nextId: 1 };
+                    if (!Array.isArray(stats.backpack.items)) stats.backpack.items = [];
+                    if (stats.ammo > 0) { tryAddItem(stats.backpack, 'ammo', stats.ammo); stats.ammo = 0; }
+                    const nonGrid = (CONFIG.LOOT && CONFIG.LOOT.NON_GRID_ITEM_IDS) || [];
+                    stats.backpack.items = stats.backpack.items.filter(p => !nonGrid.includes(p.itemId));
                     sfx.menuOpen();
                     this.scene.start('HideoutScene', { stats });
                 } catch (e) {
@@ -2193,10 +2545,15 @@ class MainMenuScene extends Phaser.Scene {
     }
     
     exportSave() {
-        let saved = localStorage.getItem(CONFIG.SAVE_KEY);
-        if (!saved) { sfx.error(); alert("No save data to export."); return; }
-        
-        const blob = new Blob([saved], { type: 'application/json' });
+        const runSaved = localStorage.getItem(CONFIG.SAVE_KEY);
+        const persistentSaved = localStorage.getItem(PERSISTENT_KEY);
+        if (!runSaved && !persistentSaved) { sfx.error(); alert("No save data to export."); return; }
+        const payload = {
+            version: 2,
+            run: runSaved ? JSON.parse(runSaved) : null,
+            persistent: persistentSaved ? JSON.parse(persistentSaved) : null
+        };
+        const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
@@ -2219,10 +2576,15 @@ class MainMenuScene extends Phaser.Scene {
             reader.onload = (event) => {
                 try {
                     const json = JSON.parse(event.target.result);
-                    if (json.hp !== undefined && json.hideout !== undefined) {
+                    if (json.version === 2 && (json.run != null || json.persistent != null)) {
+                        if (json.run != null) localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(json.run));
+                        if (json.persistent != null) localStorage.setItem(PERSISTENT_KEY, JSON.stringify(json.persistent));
+                        sfx.success();
+                        alert("Save imported successfully! Run and progress (skills, upgrades, classes, challenges, mods) restored.");
+                    } else if (json.hp !== undefined && json.hideout !== undefined) {
                         localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(json));
                         sfx.success();
-                        alert("Save imported successfully!");
+                        alert("Save imported (run only). Progress like skills/upgrades were not in this file.");
                     } else {
                         sfx.error();
                         alert("Invalid save file format.");
@@ -2484,14 +2846,48 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
             this.setScale(cfg.SCALE);
             this.setTint(0xff0000);
         } else if (type === 'leaper') {
-            this.state = 'CHASE';
+            this.state = 'IDLE';
+            this.leaperFacingAngle = Math.random() * Math.PI * 2;
+            this.leaperWanderDirection = this.leaperFacingAngle;
+            this.leaperWanderChangeTime = 0;
+            this.lastHeardX = this.x;
+            this.lastHeardY = this.y;
+            this.lastHeardTime = 0;
             this.leapTimer = 0;
+            this.gunshotAlertEndTime = 0;
+            this.gunshotTargetX = 0;
+            this.gunshotTargetY = 0;
+            this.alertExclamation = null;
+            this.footstepAlertCount = 0;
             this.setTexture('leaper_idle_0'); // Use individual frame texture
             this.setScale(0.5); // Scale down to fit game
-            this.play('leaper_crawl'); // Start crawling animation
+            this.play('leaper_idle'); // Idle until they hear a sound
         } else if (type === 'bandit') {
             this.ammo = cfg.AMMO;
-            this.state = 'CHASE';
+            this.lastFired = 0;
+            const dirs = [0, Math.PI / 2, Math.PI, -Math.PI / 2];
+            this.banditState = 'PATROL';
+            this.patrolDirection = dirs[Phaser.Math.Between(0, 3)];
+            this.gunshotAlertEndTime = 0;
+            this.gunshotTargetX = 0;
+            this.gunshotTargetY = 0;
+            this.lastKnownPlayerX = this.x;
+            this.lastKnownPlayerY = this.y;
+            this.searchEndTime = 0;
+            this.alertExclamation = null;
+            this.searchWanderTargetX = null;
+            this.searchWanderTargetY = null;
+            this.searchWanderTimer = 0;
+            this.wallStuckTimer = 0;
+            this.goAroundEndTime = 0;
+            this.goAroundAngle = 0;
+            this.goAroundSide = 1;
+            this.lastCloseAggroRollTime = 0;
+            this.closeAggroRollCount = 0;
+            this.footstepAlertCount = 0;
+            this.damageAggro = false;
+            this.banditFacingAngle = this.patrolDirection;
+            this.lastMeleeHitTime = 0;
         } else if (type === 'spitter') {
             this.lastSpit = 0;
             this.setTint(0x00ff00); // Green tint for toxic look
@@ -2516,13 +2912,58 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
             this.lastTeleport = 0;
             this.summonedMinions = [];
             this.isInvulnerable = true; // Starts invulnerable
+        } else if (type === 'walker') {
+            const dirs = [0, Math.PI / 2, Math.PI, -Math.PI / 2];
+            this.walkerState = 'PATROL';
+            this.patrolDirection = dirs[Phaser.Math.Between(0, 3)];
+            this.gunshotAlertEndTime = 0;
+            this.gunshotTargetX = 0;
+            this.gunshotTargetY = 0;
+            this.lastKnownPlayerX = this.x;
+            this.lastKnownPlayerY = this.y;
+            this.searchEndTime = 0;
+            this.stuckTurnOffset = 0;
+            this.stuckTimer = 0;
+            this.alertExclamation = null;
+            this.searchWanderTargetX = null;
+            this.searchWanderTargetY = null;
+            this.searchWanderTimer = 0;
+            this.wallStuckTimer = 0;
+            this.goAroundEndTime = 0;
+            this.goAroundAngle = 0;
+            this.goAroundSide = 1;
+            this.lastCloseAggroRollTime = 0;
+            this.closeAggroRollCount = 0;
+            this.footstepAlertCount = 0;
+            this.damageAggro = false;
+            this.walkerFacingAngle = this.patrolDirection;
+            this.lastMeleeHitTime = 0;
         }
     }
     
-    takeDamage(amount, killSource = 'gun') {
+    takeDamage(amount, killSource = 'gun', fromX = null, fromY = null) {
         if (!this.active || !this.canTakeDamage || this.isInvulnerable) return;
         
         this.lastDamageSource = killSource; // Track what damaged us
+        if (this.enemyType === 'walker') {
+            this.damageAggro = true;
+            this.walkerState = 'HUNT';
+        }
+        if (this.enemyType === 'leaper') {
+            this.damageAggro = true;
+            if (this.state !== 'COOLDOWN') {
+                this.state = 'CHASE';
+                if (fromX != null && fromY != null) {
+                    this.lastHeardX = fromX;
+                    this.lastHeardY = fromY;
+                    this.lastHeardTime = this.scene.time.now;
+                }
+            }
+        }
+        if (this.enemyType === 'bandit') {
+            this.damageAggro = true;
+            this.banditState = 'HUNT';
+        }
         this.hp -= amount;
         sfx.enemyHit();
         this.setTint(0xffffff);
@@ -2616,11 +3057,18 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
         this.healthBar.fillRect(x, y, w * (this.hp / this.maxHp), h);
     }
     
-    knockBack() {
-        const speed = (this.enemyType === 'leaper') ? CONFIG.ENEMIES.LEAPER.KNOCKBACK_SPEED : CONFIG.ENEMIES.KNOCKBACK_SPEED;
+    knockBack(multiplier = 1) {
+        let speed = (this.enemyType === 'leaper') ? CONFIG.ENEMIES.LEAPER.KNOCKBACK_SPEED : CONFIG.ENEMIES.KNOCKBACK_SPEED;
+        if (multiplier > 1) speed *= multiplier;
         if (this.enemyType === 'leaper') {
             this.state = 'COOLDOWN';
-            this.leapTimer = CONFIG.ENEMIES.LEAPER.COOLDOWN_TIME;
+            const lcfg = CONFIG.ENEMIES.LEAPER;
+            const cooldownMs = (multiplier > 1 && lcfg.PLAYER_BREAKFREE_COOLDOWN_MS != null)
+                ? lcfg.PLAYER_BREAKFREE_COOLDOWN_MS
+                : lcfg.COOLDOWN_TIME;
+            const stunMs = (multiplier > 1 && lcfg.PLAYER_BREAKFREE_STUN_MS != null) ? lcfg.PLAYER_BREAKFREE_STUN_MS : 0;
+            this.stunEndTime = stunMs > 0 ? this.scene.time.now + stunMs : null;
+            this.leapTimer = Math.max(0, cooldownMs - stunMs);
         }
         const angle = Phaser.Math.Angle.Between(this.target.x, this.target.y, this.x, this.y);
         this.scene.physics.velocityFromRotation(angle, speed, this.body.velocity);
@@ -2628,14 +3076,118 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
     
     update(time, delta) {
         if (!this.active || !this.body) return;
-        if (this.healthBar) this.healthBar.setPosition(this.x, this.y);
+        if (this.healthBar) {
+            this.healthBar.setPosition(this.x, this.y);
+            this.healthBar.setVisible(this.hp > 0 && this.revealedByFlashlight === true);
+        }
 
         const cfg = this.config;
 
         if (this.enemyType === 'bandit') {
-            const dist = Phaser.Math.Distance.Between(this.x, this.y, this.target.x, this.target.y);
-            if (this.ammo > 0) {
-                if (dist < cfg.FIRE_RANGE) {
+            if (this.pinnedByLeaper) {
+                if (!this.pinnedByLeaper.active) this.pinnedByLeaper = null;
+                else this.setVelocity(0); // Fully immobilized while pinned (same as player)
+                return;
+            }
+            this.target = this.scene.getTargetForBandit(this);
+            const bcfg = CONFIG.ENEMIES.BANDIT;
+            const distToPlayer = Phaser.Math.Distance.Between(this.x, this.y, this.target.x, this.target.y);
+            const angleToPlayer = Phaser.Math.Angle.Between(this.x, this.y, this.target.x, this.target.y);
+            const getFacingAngle = () => {
+                if (this.banditState === 'HUNT' || this.banditState === 'SEARCH') return (this.banditFacingAngle != null ? this.banditFacingAngle : this.patrolDirection);
+                if (this.banditState === 'GUNSHOT_ALERT') return Phaser.Math.Angle.Between(this.x, this.y, this.gunshotTargetX, this.gunshotTargetY);
+                return this.patrolDirection;
+            };
+            const canSeePlayer = () => {
+                if (distToPlayer > bcfg.PERCEPTION_RADIUS) return false;
+                let angleDiff = angleToPlayer - getFacingAngle();
+                while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+                while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+                if (Math.abs(angleDiff) > bcfg.VISION_ANGLE) return false;
+                return this.scene.hasLineOfSight(this.x, this.y, this.target.x, this.target.y);
+            };
+
+            if (distToPlayer <= (bcfg.CLOSE_AGGRO_RADIUS || 100)) {
+                const intervalMs = bcfg.CLOSE_AGGRO_ROLL_INTERVAL_MS || 2000;
+                if (this.lastCloseAggroRollTime === 0) this.lastCloseAggroRollTime = time;
+                if (time - this.lastCloseAggroRollTime >= intervalMs) {
+                    this.lastCloseAggroRollTime = time;
+                    const firstChance = bcfg.CLOSE_AGGRO_CHANCE_FIRST != null ? bcfg.CLOSE_AGGRO_CHANCE_FIRST : 0.8;
+                    const floorChance = bcfg.CLOSE_AGGRO_CHANCE_FLOOR != null ? bcfg.CLOSE_AGGRO_CHANCE_FLOOR : 0.5;
+                    const decay = bcfg.CLOSE_AGGRO_CHANCE_DECAY != null ? bcfg.CLOSE_AGGRO_CHANCE_DECAY : 0.05;
+                    const chance = Math.max(floorChance, firstChance - this.closeAggroRollCount * decay);
+                    if (Math.random() < chance) {
+                        this.banditState = 'HUNT';
+                        this.lastKnownPlayerX = this.target.x;
+                        this.lastKnownPlayerY = this.target.y;
+                        this.goAroundEndTime = 0;
+                        this.wallStuckTimer = 0;
+                    }
+                    this.closeAggroRollCount++;
+                }
+            } else {
+                this.lastCloseAggroRollTime = 0;
+                this.closeAggroRollCount = 0;
+            }
+            if (distToPlayer > (bcfg.SOUND_RADIUS || 200)) this.footstepAlertCount = 0;
+            if (this.banditState === 'PATROL' || this.banditState === 'GUNSHOT_ALERT' || this.banditState === 'SEARCH') {
+                if (canSeePlayer()) {
+                    this.banditState = 'HUNT';
+                    this.lastKnownPlayerX = this.target.x;
+                    this.lastKnownPlayerY = this.target.y;
+                    this.goAroundEndTime = 0;
+                    this.wallStuckTimer = 0;
+                } else if (this.target !== this.scene.player && this.target.enemyType && ['walker', 'leaper'].includes(this.target.enemyType) && distToPlayer <= cfg.FIRE_RANGE) {
+                    this.banditState = 'HUNT';
+                    this.lastKnownPlayerX = this.target.x;
+                    this.lastKnownPlayerY = this.target.y;
+                    this.goAroundEndTime = 0;
+                    this.wallStuckTimer = 0;
+                }
+            }
+
+            if (this.banditState === 'GUNSHOT_ALERT') {
+                if (!this.alertExclamation) {
+                    this.alertExclamation = this.scene.add.text(this.x, this.y - 35, '!', { fontSize: '28px', fill: '#ff0000', fontStyle: 'bold' }).setOrigin(0.5).setDepth(100);
+                }
+                this.alertExclamation.setPosition(this.x, this.y - 35);
+                this.alertExclamation.setVisible(this.revealedByFlashlight === true);
+            } else if (this.alertExclamation) {
+                this.alertExclamation.setVisible(false);
+            }
+
+            if (this.banditState === 'PATROL') {
+                this.banditFacingAngle = this.patrolDirection;
+                const vx = Math.cos(this.patrolDirection) * (bcfg.PATROL_SPEED || 35);
+                const vy = Math.sin(this.patrolDirection) * (bcfg.PATROL_SPEED || 35);
+                this.body.setVelocity(vx, vy);
+            } else if (this.banditState === 'GUNSHOT_ALERT') {
+                const huntSpeed = cfg.SPEED * (bcfg.HUNT_SPEED_MULTIPLIER || 1.2);
+                if (time >= this.gunshotAlertEndTime) {
+                    if (this.damageAggro) {
+                        this.banditState = 'SEARCH';
+                        this.searchEndTime = time + bcfg.SEARCH_DURATION;
+                        this.searchWanderTargetX = null;
+                        this.searchWanderTargetY = null;
+                        this.searchWanderTimer = 0;
+                    } else {
+                        this.banditState = 'PATROL';
+                        this.angle = 0;
+                    }
+                    this.goAroundEndTime = 0;
+                } else {
+                    this.scene.physics.moveTo(this, this.gunshotTargetX, this.gunshotTargetY, huntSpeed);
+                }
+            } else if (this.banditState === 'HUNT') {
+                this.lastKnownPlayerX = this.target.x;
+                this.lastKnownPlayerY = this.target.y;
+                let faceDiff = angleToPlayer - this.banditFacingAngle;
+                while (faceDiff > Math.PI) faceDiff -= 2 * Math.PI;
+                while (faceDiff < -Math.PI) faceDiff += 2 * Math.PI;
+                this.banditFacingAngle += faceDiff * 0.12;
+                this.angle = this.banditFacingAngle * (180 / Math.PI);
+                const huntSpeed = cfg.SPEED * (bcfg.HUNT_SPEED_MULTIPLIER || 1.2);
+                if (bcfg.CAN_SHOOT !== false && canSeePlayer() && distToPlayer < cfg.FIRE_RANGE && this.ammo > 0) {
                     this.setVelocity(0);
                     if (time - this.lastFired > cfg.FIRE_RATE) {
                         const b = this.scene.bullets.get(this.x, this.y);
@@ -2643,13 +3195,64 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
                             b.fire(this.x, this.y, this.target.x, this.target.y, Phaser.Math.Between(-cfg.SPREAD, cfg.SPREAD), true);
                             this.ammo--;
                             this.lastFired = time;
+                            const spawnGraceMs = 5000;
+                            const inSpawnGrace = this.spawnTime != null && (time - this.spawnTime) < spawnGraceMs;
+                            this.scene.onUnsuppressedGunshot(this.x, this.y, inSpawnGrace ? { leapersOnly: true } : {});
                         }
                     }
+                } else if (this.ammo > 0) {
+                    this.scene.physics.moveToObject(this, this.target, huntSpeed);
                 } else {
-                    this.scene.physics.moveToObject(this, this.target, this.speed);
+                    this.scene.physics.moveToObject(this, this.target, cfg.MELEE_SPEED);
                 }
-            } else {
-                this.scene.physics.moveToObject(this, this.target, cfg.MELEE_SPEED);
+                if (!canSeePlayer() || distToPlayer > bcfg.PERCEPTION_RADIUS) {
+                    this.banditState = 'SEARCH';
+                    this.searchEndTime = time + bcfg.SEARCH_DURATION;
+                    this.searchWanderTargetX = null;
+                    this.searchWanderTargetY = null;
+                    this.searchWanderTimer = 0;
+                    this.goAroundEndTime = 0;
+                }
+            } else if (this.banditState === 'SEARCH') {
+                const angleToLastKnown = Phaser.Math.Angle.Between(this.x, this.y, this.lastKnownPlayerX, this.lastKnownPlayerY);
+                let faceDiff = angleToLastKnown - this.banditFacingAngle;
+                while (faceDiff > Math.PI) faceDiff -= 2 * Math.PI;
+                while (faceDiff < -Math.PI) faceDiff += 2 * Math.PI;
+                this.banditFacingAngle += faceDiff * 0.12;
+                this.angle = this.banditFacingAngle * (180 / Math.PI);
+                const toLast = Phaser.Math.Distance.Between(this.x, this.y, this.lastKnownPlayerX, this.lastKnownPlayerY);
+                const destX = toLast <= bcfg.SEARCH_RADIUS && this.searchWanderTargetX !== null ? this.searchWanderTargetX : this.lastKnownPlayerX;
+                const destY = toLast <= bcfg.SEARCH_RADIUS && this.searchWanderTargetY !== null ? this.searchWanderTargetY : this.lastKnownPlayerY;
+                if (toLast <= bcfg.SEARCH_RADIUS) {
+                    this.searchWanderTimer += delta;
+                    if (this.searchWanderTimer >= 600 || (this.searchWanderTargetX === null)) {
+                        this.searchWanderTimer = 0;
+                        const angle = Math.random() * 2 * Math.PI;
+                        this.searchWanderTargetX = this.lastKnownPlayerX + Math.cos(angle) * bcfg.SEARCH_RADIUS * 0.8;
+                        this.searchWanderTargetY = this.lastKnownPlayerY + Math.sin(angle) * bcfg.SEARCH_RADIUS * 0.8;
+                    }
+                    if (this.searchWanderTargetX !== null) {
+                        this.scene.physics.moveTo(this, this.searchWanderTargetX, this.searchWanderTargetY, cfg.SPEED * 0.7);
+                    }
+                } else {
+                    this.scene.physics.moveTo(this, this.lastKnownPlayerX, this.lastKnownPlayerY, cfg.SPEED);
+                }
+                if (time >= this.searchEndTime) {
+                    if (this.damageAggro) {
+                        this.searchEndTime = time + bcfg.SEARCH_DURATION;
+                    } else {
+                        this.banditState = 'PATROL';
+                        this.angle = 0;
+                        const dirs = [0, Math.PI / 2, Math.PI, -Math.PI / 2];
+                        this.patrolDirection = dirs[Phaser.Math.Between(0, 3)];
+                        this.goAroundEndTime = 0;
+                    }
+                }
+                if (canSeePlayer()) {
+                    this.banditState = 'HUNT';
+                    this.lastKnownPlayerX = this.target.x;
+                    this.lastKnownPlayerY = this.target.y;
+                }
             }
             return;
         }
@@ -2676,40 +3279,352 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
         if (this.enemyType === 'boss') {
             this.scene.physics.moveToObject(this, this.target, this.speed);
         } else if (this.enemyType === 'walker') {
-            // Patrol enemies are handled separately
-            if (this.isPatrol) return;
-            if (Phaser.Math.Distance.Between(this.x, this.y, this.target.x, this.target.y) < cfg.AGGRO_RANGE) {
-                this.scene.physics.moveToObject(this, this.target, this.speed);
+            const wcfg = CONFIG.ENEMIES.WALKER;
+            // Necromancer minions: stay within leash distance of the boss
+            if (this.necromancerMaster && this.necromancerMaster.active) {
+                const distToMaster = Phaser.Math.Distance.Between(this.x, this.y, this.necromancerMaster.x, this.necromancerMaster.y);
+                const leash = this.maxDistanceFromMaster != null ? this.maxDistanceFromMaster : 220;
+                if (distToMaster > leash) {
+                    this.scene.physics.moveToObject(this, this.necromancerMaster, this.speed || wcfg.SPEED);
+                    return;
+                }
             }
-        } else if (this.enemyType === 'leaper') {
-            const dist = Phaser.Math.Distance.Between(this.x, this.y, this.target.x, this.target.y);
-            switch (this.state) {
-                case 'CHASE':
-                    // Play crawl animation if not already playing
-                    if (this.anims.currentAnim?.key !== 'leaper_crawl') {
-                        this.play('leaper_crawl');
+            this.target = this.scene.getTargetForWalker(this);
+            const distToPlayer = Phaser.Math.Distance.Between(this.x, this.y, this.target.x, this.target.y);
+            const angleToPlayer = Phaser.Math.Angle.Between(this.x, this.y, this.target.x, this.target.y);
+            const getFacingAngle = () => {
+                if (this.walkerState === 'HUNT' || this.walkerState === 'SEARCH') return (this.walkerFacingAngle != null ? this.walkerFacingAngle : this.patrolDirection);
+                if (this.walkerState === 'GUNSHOT_ALERT') return Phaser.Math.Angle.Between(this.x, this.y, this.gunshotTargetX, this.gunshotTargetY);
+                return this.patrolDirection;
+            };
+            const canSeePlayer = () => {
+                if (distToPlayer > wcfg.PERCEPTION_RADIUS) return false;
+                let angleDiff = angleToPlayer - getFacingAngle();
+                while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+                while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+                if (Math.abs(angleDiff) > wcfg.VISION_ANGLE) return false;
+                return this.scene.hasLineOfSight(this.x, this.y, this.target.x, this.target.y);
+            };
+
+            if (distToPlayer <= (wcfg.CLOSE_AGGRO_RADIUS || 80)) {
+                const intervalMs = wcfg.CLOSE_AGGRO_ROLL_INTERVAL_MS || 2000;
+                if (this.lastCloseAggroRollTime === 0) this.lastCloseAggroRollTime = time;
+                if (time - this.lastCloseAggroRollTime >= intervalMs) {
+                    this.lastCloseAggroRollTime = time;
+                    const firstChance = wcfg.CLOSE_AGGRO_CHANCE_FIRST != null ? wcfg.CLOSE_AGGRO_CHANCE_FIRST : 0.8;
+                    const floorChance = wcfg.CLOSE_AGGRO_CHANCE_FLOOR != null ? wcfg.CLOSE_AGGRO_CHANCE_FLOOR : 0.5;
+                    const decay = wcfg.CLOSE_AGGRO_CHANCE_DECAY != null ? wcfg.CLOSE_AGGRO_CHANCE_DECAY : 0.05;
+                    const chance = Math.max(floorChance, firstChance - this.closeAggroRollCount * decay);
+                    if (Math.random() < chance) {
+                        this.walkerState = 'HUNT';
+                        this.lastKnownPlayerX = this.target.x;
+                        this.lastKnownPlayerY = this.target.y;
+                        this.goAroundEndTime = 0;
+                        this.wallStuckTimer = 0;
                     }
-                    this.scene.physics.moveToObject(this, this.target, cfg.SPEED);
-                    // Flip sprite based on movement direction
+                    this.closeAggroRollCount++;
+                }
+            } else {
+                this.lastCloseAggroRollTime = 0;
+                this.closeAggroRollCount = 0;
+            }
+            if (distToPlayer > (wcfg.SOUND_RADIUS || 180)) this.footstepAlertCount = 0;
+            if (this.walkerState === 'PATROL' || this.walkerState === 'GUNSHOT_ALERT' || this.walkerState === 'SEARCH') {
+                if (canSeePlayer()) {
+                    this.walkerState = 'HUNT';
+                    this.lastKnownPlayerX = this.target.x;
+                    this.lastKnownPlayerY = this.target.y;
+                    this.goAroundEndTime = 0;
+                    this.wallStuckTimer = 0;
+                }
+            }
+
+            if (this.walkerState === 'GUNSHOT_ALERT') {
+                if (!this.alertExclamation) {
+                    this.alertExclamation = this.scene.add.text(this.x, this.y - 35, '!', { fontSize: '28px', fill: '#ff0000', fontStyle: 'bold' }).setOrigin(0.5).setDepth(100);
+                }
+                this.alertExclamation.setPosition(this.x, this.y - 35);
+                this.alertExclamation.setVisible(this.revealedByFlashlight === true);
+            } else if (this.alertExclamation) {
+                this.alertExclamation.setVisible(false);
+            }
+
+            if (this.walkerState === 'PATROL') {
+                this.walkerFacingAngle = this.patrolDirection;
+                const speed = Math.sqrt(this.body.velocity.x * this.body.velocity.x + this.body.velocity.y * this.body.velocity.y);
+                if (time < this.goAroundEndTime) {
+                    const vx = Math.cos(this.goAroundAngle) * wcfg.PATROL_SPEED;
+                    const vy = Math.sin(this.goAroundAngle) * wcfg.PATROL_SPEED;
+                    this.body.setVelocity(vx, vy);
+                } else {
+                    const vx = Math.cos(this.patrolDirection) * wcfg.PATROL_SPEED;
+                    const vy = Math.sin(this.patrolDirection) * wcfg.PATROL_SPEED;
+                    this.body.setVelocity(vx, vy);
+                    if (speed < 5) {
+                        this.wallStuckTimer += delta;
+                        if (this.wallStuckTimer >= (wcfg.GO_AROUND_STUCK_TIME_MS || 350)) {
+                            this.goAroundEndTime = time + (wcfg.GO_AROUND_DURATION_MS || 700) * (wcfg.GO_AROUND_DISTANCE_MULTIPLIER || 1.15);
+                            this.goAroundAngle = this.patrolDirection + this.goAroundSide * (Math.PI / 2);
+                            this.goAroundSide *= -1;
+                            this.wallStuckTimer = 0;
+                        }
+                    } else {
+                        this.wallStuckTimer = 0;
+                    }
+                }
+            } else if (this.walkerState === 'GUNSHOT_ALERT') {
+                const huntSpeed = wcfg.SPEED * (wcfg.HUNT_SPEED_MULTIPLIER || 1.3);
+                if (time >= this.gunshotAlertEndTime) {
+                    if (this.damageAggro) {
+                        this.walkerState = 'SEARCH';
+                        this.searchEndTime = time + wcfg.SEARCH_DURATION;
+                        this.searchWanderTargetX = null;
+                        this.searchWanderTargetY = null;
+                        this.searchWanderTimer = 0;
+                    } else {
+                        this.walkerState = 'PATROL';
+                        this.angle = 0;
+                    }
+                    this.stuckTimer = 0;
+                    this.wallStuckTimer = 0;
+                    this.goAroundEndTime = 0;
+                } else {
+                    const angleToGunshot = Phaser.Math.Angle.Between(this.x, this.y, this.gunshotTargetX, this.gunshotTargetY);
+                    const speed = Math.sqrt(this.body.velocity.x * this.body.velocity.x + this.body.velocity.y * this.body.velocity.y);
+                    if (time < this.goAroundEndTime) {
+                        const vx = Math.cos(this.goAroundAngle) * huntSpeed;
+                        const vy = Math.sin(this.goAroundAngle) * huntSpeed;
+                        this.body.setVelocity(vx, vy);
+                    } else {
+                        this.scene.physics.moveTo(this, this.gunshotTargetX, this.gunshotTargetY, huntSpeed);
+                        if (speed < 5) {
+                            this.wallStuckTimer += delta;
+                            if (this.wallStuckTimer >= (wcfg.GO_AROUND_STUCK_TIME_MS || 350)) {
+                                this.goAroundEndTime = time + (wcfg.GO_AROUND_DURATION_MS || 700) * (wcfg.GO_AROUND_DISTANCE_MULTIPLIER || 1.15);
+                                this.goAroundAngle = angleToGunshot + this.goAroundSide * (Math.PI / 2);
+                                this.goAroundSide *= -1;
+                                this.wallStuckTimer = 0;
+                            }
+                        } else {
+                            this.wallStuckTimer = 0;
+                        }
+                    }
+                }
+            } else if (this.walkerState === 'HUNT') {
+                const huntSpeed = wcfg.SPEED * (wcfg.HUNT_SPEED_MULTIPLIER || 1.3);
+                this.lastKnownPlayerX = this.target.x;
+                this.lastKnownPlayerY = this.target.y;
+                const angleToPlayer = Phaser.Math.Angle.Between(this.x, this.y, this.target.x, this.target.y);
+                let faceDiff = angleToPlayer - this.walkerFacingAngle;
+                while (faceDiff > Math.PI) faceDiff -= 2 * Math.PI;
+                while (faceDiff < -Math.PI) faceDiff += 2 * Math.PI;
+                this.walkerFacingAngle += faceDiff * 0.12;
+                this.angle = this.walkerFacingAngle * (180 / Math.PI);
+                const speed = Math.sqrt(this.body.velocity.x * this.body.velocity.x + this.body.velocity.y * this.body.velocity.y);
+                if (time < this.goAroundEndTime) {
+                    const vx = Math.cos(this.goAroundAngle) * huntSpeed;
+                    const vy = Math.sin(this.goAroundAngle) * huntSpeed;
+                    this.body.setVelocity(vx, vy);
+                    if (canSeePlayer() && this.scene.hasLineOfSight(this.x, this.y, this.target.x, this.target.y)) {
+                        this.goAroundEndTime = 0;
+                    }
+                } else {
+                    this.scene.physics.moveToObject(this, this.target, huntSpeed);
+                    if (speed < 5) {
+                        this.wallStuckTimer += delta;
+                        if (this.wallStuckTimer >= (wcfg.GO_AROUND_STUCK_TIME_MS || 350)) {
+                            this.goAroundEndTime = time + (wcfg.GO_AROUND_DURATION_MS || 700) * (wcfg.GO_AROUND_DISTANCE_MULTIPLIER || 1.15);
+                            this.goAroundAngle = angleToPlayer + this.goAroundSide * (Math.PI / 2);
+                            this.goAroundSide *= -1;
+                            this.wallStuckTimer = 0;
+                        }
+                    } else {
+                        this.wallStuckTimer = 0;
+                    }
+                }
+                if (!canSeePlayer() || distToPlayer > wcfg.PERCEPTION_RADIUS) {
+                    this.walkerState = 'SEARCH';
+                    this.searchEndTime = time + wcfg.SEARCH_DURATION;
+                    this.searchWanderTargetX = null;
+                    this.searchWanderTargetY = null;
+                    this.searchWanderTimer = 0;
+                    this.goAroundEndTime = 0;
+                }
+            } else if (this.walkerState === 'SEARCH') {
+                const angleToLastKnown = Phaser.Math.Angle.Between(this.x, this.y, this.lastKnownPlayerX, this.lastKnownPlayerY);
+                let faceDiff = angleToLastKnown - this.walkerFacingAngle;
+                while (faceDiff > Math.PI) faceDiff -= 2 * Math.PI;
+                while (faceDiff < -Math.PI) faceDiff += 2 * Math.PI;
+                this.walkerFacingAngle += faceDiff * 0.12;
+                this.angle = this.walkerFacingAngle * (180 / Math.PI);
+                const speed = Math.sqrt(this.body.velocity.x * this.body.velocity.x + this.body.velocity.y * this.body.velocity.y);
+                const toLast = Phaser.Math.Distance.Between(this.x, this.y, this.lastKnownPlayerX, this.lastKnownPlayerY);
+                const destX = toLast <= wcfg.SEARCH_RADIUS && this.searchWanderTargetX !== null ? this.searchWanderTargetX : this.lastKnownPlayerX;
+                const destY = toLast <= wcfg.SEARCH_RADIUS && this.searchWanderTargetY !== null ? this.searchWanderTargetY : this.lastKnownPlayerY;
+                const angleToDest = Phaser.Math.Angle.Between(this.x, this.y, destX, destY);
+                if (time < this.goAroundEndTime) {
+                    const moveSpeed = toLast <= wcfg.SEARCH_RADIUS ? wcfg.SPEED * 0.7 : wcfg.SPEED;
+                    const vx = Math.cos(this.goAroundAngle) * moveSpeed;
+                    const vy = Math.sin(this.goAroundAngle) * moveSpeed;
+                    this.body.setVelocity(vx, vy);
+                } else {
+                    if (toLast <= wcfg.SEARCH_RADIUS) {
+                        this.searchWanderTimer += delta;
+                        if (this.searchWanderTimer >= 600 || (this.searchWanderTargetX === null)) {
+                            this.searchWanderTimer = 0;
+                            const angle = Math.random() * 2 * Math.PI;
+                            this.searchWanderTargetX = this.lastKnownPlayerX + Math.cos(angle) * wcfg.SEARCH_RADIUS * 0.8;
+                            this.searchWanderTargetY = this.lastKnownPlayerY + Math.sin(angle) * wcfg.SEARCH_RADIUS * 0.8;
+                        }
+                        if (this.searchWanderTargetX !== null) {
+                            this.scene.physics.moveTo(this, this.searchWanderTargetX, this.searchWanderTargetY, wcfg.SPEED * 0.7);
+                        }
+                    } else {
+                        this.scene.physics.moveTo(this, this.lastKnownPlayerX, this.lastKnownPlayerY, wcfg.SPEED);
+                    }
+                    if (speed < 5) {
+                        this.wallStuckTimer += delta;
+                        if (this.wallStuckTimer >= (wcfg.GO_AROUND_STUCK_TIME_MS || 350)) {
+                            this.goAroundEndTime = time + (wcfg.GO_AROUND_DURATION_MS || 700) * (wcfg.GO_AROUND_DISTANCE_MULTIPLIER || 1.15);
+                            this.goAroundAngle = angleToDest + this.goAroundSide * (Math.PI / 2);
+                            this.goAroundSide *= -1;
+                            this.wallStuckTimer = 0;
+                        }
+                    } else {
+                        this.wallStuckTimer = 0;
+                    }
+                }
+                if (time >= this.searchEndTime) {
+                    if (this.damageAggro) {
+                        this.searchEndTime = time + wcfg.SEARCH_DURATION;
+                    } else {
+                        this.walkerState = 'PATROL';
+                        this.angle = 0;
+                        const dirs = [0, Math.PI / 2, Math.PI, -Math.PI / 2];
+                        this.patrolDirection = dirs[Phaser.Math.Between(0, 3)];
+                        this.stuckTimer = 0;
+                        this.goAroundEndTime = 0;
+                    }
+                }
+            }
+            return;
+        } else if (this.enemyType === 'leaper') {
+            if (this.stunEndTime != null) {
+                if (time < this.stunEndTime) {
+                    this.setVelocity(0);
+                    this.setTint(0x8888ff);
+                    return;
+                }
+                this.stunEndTime = null;
+                this.clearTint();
+            }
+            this.target = this.scene.getTargetForWalker(this);
+            const dist = this.target ? Phaser.Math.Distance.Between(this.x, this.y, this.target.x, this.target.y) : 0;
+            switch (this.state) {
+                case 'IDLE': {
+                    const leapRadius = cfg.LEAP_TRIGGER_RADIUS != null ? cfg.LEAP_TRIGGER_RADIUS : 180;
+                    const huntRadius = leapRadius * 3;
+                    if (this.target && this.target !== this.scene.player && this.target.active && this.target.enemyType === 'bandit' && dist <= huntRadius) {
+                        this.state = 'CHASE';
+                        this.lastHeardX = this.target.x;
+                        this.lastHeardY = this.target.y;
+                        this.lastHeardTime = time;
+                        break;
+                    }
+                    const patrolSpeed = cfg.PATROL_SPEED != null ? cfg.PATROL_SPEED : 55;
+                    const wanderChangeMs = cfg.WANDER_CHANGE_MS != null ? cfg.WANDER_CHANGE_MS : 2500;
+                    if (this.leaperWanderChangeTime === 0) this.leaperWanderChangeTime = time;
+                    if (time - this.leaperWanderChangeTime >= wanderChangeMs) {
+                        this.leaperWanderDirection = Math.random() * Math.PI * 2;
+                        this.leaperWanderChangeTime = time;
+                    }
+                    this.leaperFacingAngle = this.leaperWanderDirection;
+                    this.scene.physics.velocityFromRotation(this.leaperWanderDirection, patrolSpeed, this.body.velocity);
                     this.setFlipX(this.body.velocity.x < 0);
-                    if (dist < cfg.LEAP_RANGE) {
+                    if (this.anims.currentAnim?.key !== 'leaper_crawl') this.play('leaper_crawl');
+                    break;
+                }
+                case 'GUNSHOT_ALERT': {
+                    if (time >= this.gunshotAlertEndTime) {
+                        this.state = 'CHASE';
+                        this.lastHeardX = this.gunshotTargetX;
+                        this.lastHeardY = this.gunshotTargetY;
+                        this.lastHeardTime = time;
+                        break;
+                    }
+                    if (this.anims.currentAnim?.key !== 'leaper_crawl') this.play('leaper_crawl');
+                    this.scene.physics.moveTo(this, this.gunshotTargetX, this.gunshotTargetY, cfg.SPEED);
+                    this.setFlipX(this.body.velocity.x < 0);
+                    const leapRadius = cfg.LEAP_TRIGGER_RADIUS != null ? cfg.LEAP_TRIGGER_RADIUS : 180;
+                    if (dist < leapRadius) {
                         this.state = 'PREPARE';
                         this.setVelocity(0);
                         this.leapTimer = cfg.PREPARE_TIME;
-                        this.play('leaper_attack'); // Start attack animation
-                        sfx.leaperPrepare();
+                        this.play('leaper_attack');
                     }
                     break;
+                }
+                case 'CHASE': {
+                    const loseMs = cfg.LOSE_PLAYER_MS != null ? cfg.LOSE_PLAYER_MS : 3000;
+                    const chasingBandit = this.target && this.target !== this.scene.player && this.target.enemyType === 'bandit';
+                    if (!chasingBandit && time - this.lastHeardTime > loseMs) {
+                        this.state = 'IDLE';
+                        this.leaperWanderDirection = Math.atan2(this.body.velocity.y, this.body.velocity.x);
+                        this.leaperWanderChangeTime = time;
+                        break;
+                    }
+                    if (this.anims.currentAnim?.key !== 'leaper_crawl') this.play('leaper_crawl');
+                    const dest = (chasingBandit && this.target && this.target.active) ? this.target : { x: this.lastHeardX, y: this.lastHeardY };
+                    this.scene.physics.moveToObject(this, dest, cfg.SPEED);
+                    this.setFlipX(this.body.velocity.x < 0);
+                    const leapRadius = cfg.LEAP_TRIGGER_RADIUS != null ? cfg.LEAP_TRIGGER_RADIUS : 180;
+                    if (dist < leapRadius) {
+                        this.state = 'PREPARE';
+                        this.setVelocity(0);
+                        this.leapTimer = cfg.PREPARE_TIME;
+                        this.play('leaper_attack');
+                    }
+                    break;
+                }
                 case 'PREPARE':
                     this.leapTimer -= delta;
                     if (this.leapTimer <= 0) {
                         this.state = 'LEAP';
                         this.scene.physics.moveToObject(this, this.target, cfg.LEAP_SPEED);
                         this.leapTimer = cfg.LEAP_DURATION;
-                        sfx.leaperLeap();
+                        // sfx.leaperLeap(); // off for now
                     }
                     break;
-                case 'LEAP':
+                case 'LEAP': {
+                    const banditHitRadius = 55;
+                    let hitBandit = null;
+                    this.scene.enemies.getChildren().forEach(b => {
+                        if (!b.active || b.enemyType !== 'bandit' || b === this) return;
+                        if (b.pinnedByLeaper) return;
+                        const d = Phaser.Math.Distance.Between(this.x, this.y, b.x, b.y);
+                        if (d < banditHitRadius) {
+                            if (!hitBandit || d < Phaser.Math.Distance.Between(this.x, this.y, hitBandit.x, hitBandit.y)) hitBandit = b;
+                        }
+                    });
+                    if (hitBandit) {
+                        // Same as player: immobilize bandit and land on them (always pin, no knockback)
+                        this.state = 'PINNING';
+                        this.pinnedTarget = hitBandit;
+                        this.pinHitCount = 0;
+                        this.lastPinDamageTime = time;
+                        hitBandit.pinnedByLeaper = this;
+                        this.setVelocity(0);
+                        hitBandit.setVelocity(0);
+                        const pct = cfg.PIN_DAMAGE_FIRST_PCT != null ? cfg.PIN_DAMAGE_FIRST_PCT : 0.1;
+                        const dmg = Math.max(1, Math.ceil(hitBandit.maxHp * pct)) * 2; // Double damage to bandits
+                        hitBandit.takeDamage(dmg, 'melee', this.x, this.y);
+                        this.pinHitCount = 1;
+                        break;
+                    }
+                    if (this.target && this.target.active) {
+                        this.scene.physics.moveToObject(this, this.target, cfg.LEAP_SPEED);
+                        if (dist > 30) this.setFlipX(this.body.velocity.x < 0);
+                    }
                     this.leapTimer -= delta;
                     if (this.leapTimer <= 0) {
                         this.state = 'COOLDOWN';
@@ -2718,7 +3633,18 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
                         this.play('leaper_idle'); // Idle/breathing after leap
                     }
                     break;
+                }
                 case 'PINNING':
+                    if (this.pinnedTarget && this.pinnedTarget.active) {
+                        this.setPosition(this.pinnedTarget.x, this.pinnedTarget.y);
+                        this.setVelocity(0);
+                        this.pinnedTarget.setVelocity(0);
+                    } else {
+                        if (this.pinnedTarget && this.pinnedTarget.pinnedByLeaper === this) this.pinnedTarget.pinnedByLeaper = null;
+                        this.pinnedTarget = null;
+                        this.state = 'COOLDOWN';
+                        this.leapTimer = cfg.COOLDOWN_TIME;
+                    }
                     break;
                 case 'COOLDOWN':
                     this.leapTimer -= delta;
@@ -2727,6 +3653,15 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
                         this.play('leaper_crawl'); // Back to crawling
                     }
                     break;
+            }
+            if (this.state === 'CHASE' || this.state === 'GUNSHOT_ALERT') {
+                if (!this.alertExclamation) {
+                    this.alertExclamation = this.scene.add.text(this.x, this.y - 35, '!', { fontSize: '28px', fill: '#ff0000', fontStyle: 'bold' }).setOrigin(0.5).setDepth(100);
+                }
+                this.alertExclamation.setPosition(this.x, this.y - 35);
+                this.alertExclamation.setVisible(this.revealedByFlashlight === true);
+            } else if (this.alertExclamation) {
+                this.alertExclamation.setVisible(false);
             }
         } else if (this.enemyType === 'exploder') {
             // Exploder just charges directly at player at high speed
@@ -2756,6 +3691,8 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
                         const spawnX = this.x + Math.cos(angle) * 100;
                         const spawnY = this.y + Math.sin(angle) * 100;
                         const minion = new Enemy(this.scene, spawnX, spawnY, this.target, 'walker');
+                        minion.necromancerMaster = this;
+                        minion.maxDistanceFromMaster = cfg.MINION_LEASH_RADIUS != null ? cfg.MINION_LEASH_RADIUS : 220;
                         this.scene.enemies.add(minion);
                         this.summonedMinions.push(minion);
                         // Summon visual effect
@@ -2832,6 +3769,10 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
     destroy(fromScene) {
         if (this.healthBar) this.healthBar.destroy();
         if (this.flashTween) this.flashTween.stop();
+        if ((this.enemyType === 'walker' || this.enemyType === 'leaper') && this.alertExclamation) {
+            this.alertExclamation.destroy();
+            this.alertExclamation = null;
+        }
         super.destroy(fromScene);
     }
 }
@@ -2851,6 +3792,14 @@ class HideoutScene extends Phaser.Scene {
         this.selectedLevel = null;
         
         this.stats = data.stats;
+        if (!this.stats.ammoBoxInventories) this.stats.ammoBoxInventories = {};
+        // Remove non-grid items from backpack; normalize ammo_box to 2x2
+        if (this.stats.backpack && Array.isArray(this.stats.backpack.items)) {
+            if (this.stats.ammo > 0) { tryAddItem(this.stats.backpack, 'ammo', this.stats.ammo); this.stats.ammo = 0; }
+            this.stats.backpack.items.forEach(p => { if (p.itemId === 'ammo_box') { p.sizeW = 2; p.sizeH = 2; } });
+            const nonGrid = (CONFIG.LOOT && CONFIG.LOOT.NON_GRID_ITEM_IDS) || [];
+            this.stats.backpack.items = this.stats.backpack.items.filter(p => !nonGrid.includes(p.itemId));
+        }
         // Ensure magazines exist
         if (!this.stats.magazines) {
             this.stats.magazines = {
@@ -2910,10 +3859,20 @@ class HideoutScene extends Phaser.Scene {
                 rifle: [null, null]
             };
         }
+        // Ensure backpack exists (for next run loadout)
+        if (!this.stats.backpack) this.stats.backpack = { gridW: 12, gridH: 12, items: [], _nextId: 1 };
+        if (!Array.isArray(this.stats.backpack.items)) this.stats.backpack.items = [];
         
         // Load persistent stats
         this.persistent = loadPersistent();
-        
+        // Deposit any run loot (scrap/credits/materials) into hideout stash; you don't carry these into raid
+        this.persistent.scrap = (this.persistent.scrap || 0) + (this.stats.scrap || 0);
+        this.persistent.credits = (this.persistent.credits || 0) + (this.stats.credits || 0);
+        this.persistent.materials = (this.persistent.materials || 0) + (this.stats.materials || 0);
+        this.stats.scrap = 0;
+        this.stats.credits = 0;
+        this.stats.materials = 0;
+        savePersistent(this.persistent);
         localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(this.stats));
         
         // Check and rotate challenges on hideout load
@@ -2955,8 +3914,8 @@ class HideoutScene extends Phaser.Scene {
     updateResourceText() {
         if (this.resourceText) {
             this.resourceText.setText(
-                `HP: ${this.stats.hp}/${this.stats.maxHp}  |  AMMO: ${this.stats.ammo}  |  ` +
-                `SCRAP: ${this.stats.scrap}  |  CREDITS: ${this.stats.credits}  |  MAT: ${this.stats.materials}`
+                `HP: ${this.stats.hp}/${this.stats.maxHp}  |  AMMO: ${countItemInGrid(this.stats.backpack, 'ammo')}  |  ` +
+                `SCRAP: ${this.persistent.scrap || 0}  |  CREDITS: ${this.persistent.credits || 0}  |  MAT: ${this.persistent.materials || 0}`
             );
         }
     }
@@ -2968,7 +3927,8 @@ class HideoutScene extends Phaser.Scene {
         const tabs = [
             { id: 'facilities', label: 'FACILITIES', x: 80 },
             { id: 'character', label: 'CHARACTER', x: 210 },
-            { id: 'shop', label: 'SHOP', x: 340 }
+            { id: 'shop', label: 'TRADER', x: 340 },
+            { id: 'stash', label: 'STASH', x: 470 }
         ];
         
         this.tabButtons = {};
@@ -3002,7 +3962,7 @@ class HideoutScene extends Phaser.Scene {
     }
     
     updateTabStyles() {
-        const tabs = ['facilities', 'character', 'shop'];
+        const tabs = ['facilities', 'character', 'shop', 'stash'];
         tabs.forEach(tabId => {
             const isActive = this.currentTab === tabId;
             if (this.tabButtons[tabId]) {
@@ -3043,7 +4003,7 @@ class HideoutScene extends Phaser.Scene {
     }
     
     showTab(tabId) {
-        // Clear existing tab content
+        if (this.stashCleanup) { this.stashCleanup(); this.stashCleanup = null; }
         this.tabContent.forEach(el => el.destroy());
         this.tabContent = [];
         
@@ -3060,6 +4020,9 @@ class HideoutScene extends Phaser.Scene {
             case 'shop':
                 this.renderShopTab();
                 break;
+            case 'stash':
+                this.renderStashTab();
+                break;
         }
     }
     
@@ -3075,12 +4038,13 @@ class HideoutScene extends Phaser.Scene {
             () => `LVL: ${this.stats.hideout.restAreaLvl}\n${this.getRestEffect()}`,
             () => {
                 const cost = (this.stats.hideout.restAreaLvl + 1) * 5;
-                if (this.stats.scrap >= cost) {
-                    this.stats.scrap -= cost;
+                if ((this.persistent.scrap || 0) >= cost) {
+                    this.persistent.scrap = (this.persistent.scrap || 0) - cost;
                     this.stats.hideout.restAreaLvl++;
                     if (this.stats.hideout.restAreaLvl > 0) this.stats.hp = this.stats.maxHp;
                     if (this.stats.hideout.restAreaLvl > 1) this.stats.maxHp += 2;
                     this.updateResourceText();
+                    savePersistent(this.persistent);
                     localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(this.stats));
                     return true;
                 }
@@ -3096,12 +4060,13 @@ class HideoutScene extends Phaser.Scene {
             },
             () => {
                 if (this.stats.hideout.generatorLvl === 0) {
-                    if (this.stats.scrap >= 10 && this.stats.hideout.hasSparkPlug) {
-                        this.stats.scrap -= 10;
+                    if ((this.persistent.scrap || 0) >= 10 && this.stats.hideout.hasSparkPlug) {
+                        this.persistent.scrap = (this.persistent.scrap || 0) - 10;
                         this.stats.hideout.generatorLvl = 1;
                         this.stats.hideout.hasSparkPlug = false;
                         this.stats.hasFlashlight = true;
                         this.updateResourceText();
+                        savePersistent(this.persistent);
                         localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(this.stats));
                         return true;
                     }
@@ -3180,6 +4145,7 @@ class HideoutScene extends Phaser.Scene {
         
         const btn = this.add.rectangle(x + w/2, y + h - 45, w - 20, 28, armory.hasNVG ? 0x222222 : 0x444444);
         if (!armory.hasNVG) btn.setInteractive();
+        this.armoryBtn = btn;
         this.tabContent.push(btn);
         
         this.armoryBtnText = this.add.text(x + w/2, y + h - 45, btnStr, { fontSize: '12px', fill: '#fff' }).setOrigin(0.5);
@@ -3205,14 +4171,15 @@ class HideoutScene extends Phaser.Scene {
                 return;
             }
             if (armory.crafting) return;
-            if (this.stats.scrap >= 3) {
+            if ((this.persistent.scrap || 0) >= 3) {
                 sfx.success();
-                this.stats.scrap -= 3;
+                this.persistent.scrap = (this.persistent.scrap || 0) - 3;
                 armory.crafting = { item: 'nvg', finishTime: Date.now() + CONFIG.TIMINGS.NVG_CRAFT };
                 this.updateResourceText();
                 descText.setText("Fabricating NVG...");
                 this.armoryBtnText.setText("CRAFTING...");
                 btn.disableInteractive();
+                savePersistent(this.persistent);
                 localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(this.stats));
             } else {
                 sfx.error();
@@ -3221,11 +4188,12 @@ class HideoutScene extends Phaser.Scene {
         });
         
         ammoBtn.on('pointerdown', () => {
-            if (this.stats.scrap >= 1) {
+            if ((this.persistent.scrap || 0) >= 1) {
                 sfx.lootAmmo();
-                this.stats.scrap -= 1;
-                this.stats.ammo += 4;
+                this.persistent.scrap = (this.persistent.scrap || 0) - 1;
+                tryAddItem(this.persistent.stash, 'ammo', 4);
                 this.updateResourceText();
+                savePersistent(this.persistent);
                 localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(this.stats));
                 this.cameras.main.flash(100, 0, 255, 0);
             } else {
@@ -3262,11 +4230,12 @@ class HideoutScene extends Phaser.Scene {
         this.tabContent.push(btnText);
         
         btn.on('pointerdown', () => {
-            if (this.stats.hideout.workbenchLvl === 0 && this.stats.scrap >= CONFIG.HIDEOUT.WORKBENCH_COST) {
+            if (this.stats.hideout.workbenchLvl === 0 && (this.persistent.scrap || 0) >= CONFIG.HIDEOUT.WORKBENCH_COST) {
                 sfx.success();
-                this.stats.scrap -= CONFIG.HIDEOUT.WORKBENCH_COST;
+                this.persistent.scrap = (this.persistent.scrap || 0) - CONFIG.HIDEOUT.WORKBENCH_COST;
                 this.stats.hideout.workbenchLvl = 1;
                 this.updateResourceText();
+                savePersistent(this.persistent);
                 descText.setText(`ACTIVE\n+${CONFIG.HIDEOUT.WORKBENCH_DAMAGE_BONUS * 100}% weapon damage`);
                 btnText.setText("UPGRADED");
                 localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(this.stats));
@@ -3319,11 +4288,12 @@ class HideoutScene extends Phaser.Scene {
         this.tabContent.push(btnText);
         
         btn.on('pointerdown', () => {
-            if (this.stats.hideout.repairStationLvl === 0 && this.stats.scrap >= CONFIG.HIDEOUT.REPAIR_STATION_COST) {
+            if (this.stats.hideout.repairStationLvl === 0 && (this.persistent.scrap || 0) >= CONFIG.HIDEOUT.REPAIR_STATION_COST) {
                 sfx.success();
-                this.stats.scrap -= CONFIG.HIDEOUT.REPAIR_STATION_COST;
+                this.persistent.scrap = (this.persistent.scrap || 0) - CONFIG.HIDEOUT.REPAIR_STATION_COST;
                 this.stats.hideout.repairStationLvl = 1;
                 this.updateResourceText();
+                savePersistent(this.persistent);
                 const { desc: newDesc, btn: newBtn } = getDescAndBtn();
                 descText.setText(newDesc);
                 btnText.setText(newBtn);
@@ -3424,7 +4394,7 @@ class HideoutScene extends Phaser.Scene {
             .setInteractive();
         this.tabContent.push(traderBtn);
         
-        const traderIcon = this.add.text(centerX, centerY - 20, "TRADER", { 
+        const traderIcon = this.add.text(centerX, centerY - 20, "SHOP", { 
             fontSize: '32px', fill: '#ffd700', fontStyle: 'bold' 
         }).setOrigin(0.5);
         this.tabContent.push(traderIcon);
@@ -3438,13 +4408,528 @@ class HideoutScene extends Phaser.Scene {
         traderBtn.on('pointerover', () => traderBtn.setFillStyle(0x4a4a1a));
         traderBtn.on('pointerout', () => traderBtn.setFillStyle(0x3a3a0a));
         
-        // Future shop features hint
-        const futureText = this.add.text(centerX, centerY + 100, "More shop features coming soon...", { 
-            fontSize: '12px', fill: '#555' 
-        }).setOrigin(0.5);
-        this.tabContent.push(futureText);
+        // Quests box below shop - opens shop modal on Quests tab
+        const questsBoxY = centerY + 100;
+        const questsBox = this.add.rectangle(centerX, questsBoxY, 400, 56, 0x2a3a2a)
+            .setStrokeStyle(2, 0x558855)
+            .setInteractive();
+        this.tabContent.push(questsBox);
+        const questsBoxTitle = this.add.text(centerX, questsBoxY - 8, "QUESTS", { fontSize: '18px', fill: '#88cc88', fontStyle: 'bold' }).setOrigin(0.5);
+        this.tabContent.push(questsBoxTitle);
+        const questsBoxDesc = this.add.text(centerX, questsBoxY + 12, "Turn in items for rewards", { fontSize: '12px', fill: '#888' }).setOrigin(0.5);
+        this.tabContent.push(questsBoxDesc);
+        questsBox.on('pointerdown', () => { sfx.menuOpen(); this.showTraderModal('quests'); });
+        questsBox.on('pointerover', () => questsBox.setFillStyle(0x334433));
+        questsBox.on('pointerout', () => questsBox.setFillStyle(0x2a3a2a));
     }
     
+    renderStashTab() {
+        if (!this.persistent.stash) this.persistent.stash = { gridW: 12, gridH: 16, items: [], _nextId: 1 };
+        if (!this.stats.backpack) this.stats.backpack = { gridW: 12, gridH: 12, items: [], _nextId: 1 };
+        const stash = this.persistent.stash;
+        const backpack = this.stats.backpack;
+        if (!Array.isArray(stash.items)) stash.items = [];
+        if (!Array.isArray(backpack.items)) backpack.items = [];
+        
+        const STASH_DEPTH = 200;
+        const cellSize = 18;
+        const gap = 1;
+        const itemZones = [];
+        function addItemZone(x0, y0, p, grid, isStash) {
+            const sw = p.itemId === 'ammo_box' ? 2 : (p.sizeW || 1);
+            const sh = p.itemId === 'ammo_box' ? 2 : (p.sizeH || 1);
+            const hw = sw * (cellSize + gap);
+            const hh = sh * (cellSize + gap);
+            const cx = x0 + p.col * (cellSize + gap) + hw / 2;
+            const cy = y0 + p.row * (cellSize + gap) + hh / 2;
+            itemZones.push({
+                left: cx - hw / 2, right: cx + hw / 2, top: cy - hh / 2, bottom: cy + hh / 2,
+                placementId: p.placementId, fromStash: isStash, itemId: p.itemId, count: p.count || 1,
+                sizeW: sw, sizeH: sh
+            });
+        }
+        
+        const drawGrid = (x0, y0, grid, label, maxRows) => {
+            const rows = maxRows || (grid.gridH || 12);
+            const cols = grid.gridW || 12;
+            const title = this.add.text(x0 + (cols * (cellSize + gap)) / 2, y0 - 22, label, { fontSize: '14px', fill: '#ffaa00', fontStyle: 'bold' }).setDepth(STASH_DEPTH);
+            this.tabContent.push(title);
+            const occupied = new Set();
+            (grid.items || []).forEach(p => {
+                const sh = p.itemId === 'ammo_box' ? 2 : (p.sizeH || 1);
+                const sw = p.itemId === 'ammo_box' ? 2 : (p.sizeW || 1);
+                for (let r = 0; r < sh; r++)
+                    for (let c = 0; c < sw; c++) occupied.add(`${p.row + r},${p.col + c}`);
+            });
+            for (let row = 0; row < rows; row++) {
+                for (let col = 0; col < cols; col++) {
+                    const x = x0 + col * (cellSize + gap);
+                    const y = y0 + row * (cellSize + gap);
+                    const isOcc = occupied.has(`${row},${col}`);
+                    const r = this.add.rectangle(x + cellSize/2, y + cellSize/2, cellSize, cellSize, isOcc ? 0x334433 : 0x222222).setStrokeStyle(1, 0x444444).setDepth(STASH_DEPTH);
+                    this.tabContent.push(r);
+                }
+            }
+            (grid.items || []).forEach(p => {
+                if (p.itemId === 'ammo_box') {
+                    const ammoBoxW = 2, ammoBoxH = 2;
+                    const bw = ammoBoxW * (cellSize + gap);
+                    const bh = ammoBoxH * (cellSize + gap);
+                    const cx = x0 + p.col * (cellSize + gap) + bw / 2;
+                    const cy = y0 + p.row * (cellSize + gap) + bh / 2;
+                    const boxRect = this.add.rectangle(cx, cy, bw, bh, 0xcc6600).setStrokeStyle(2, 0xff8800).setDepth(STASH_DEPTH);
+                    const boxLabel = this.add.text(cx, cy, 'AMMO', { fontSize: '8px', fill: '#fff', fontStyle: 'bold' }).setOrigin(0.5).setDepth(STASH_DEPTH);
+                    this.tabContent.push(boxRect, boxLabel);
+                } else {
+                    const cfg = getInventoryItemConfig(p.itemId);
+                    const lbl = (cfg && cfg.icon) ? cfg.icon : (p.itemId || '?').slice(0, 2).toUpperCase();
+                    const txt = this.add.text(x0 + p.col * (cellSize + gap) + cellSize/2 + 0.5, y0 + p.row * (cellSize + gap) + cellSize/2 + 0.5, (p.count > 1 ? lbl + p.count : lbl), { fontSize: '8px', fill: '#ccc' }).setOrigin(0.5).setDepth(STASH_DEPTH);
+                    this.tabContent.push(txt);
+                }
+                addItemZone(x0, y0, p, grid, grid === stash);
+            });
+        };
+        const stashX = 120, stashY = 100;
+        const backpackX = 420, backpackY = 100;
+        drawGrid(stashX, stashY, stash, 'STASH (storage)', 16);
+        drawGrid(backpackX, backpackY, backpack, 'BACKPACK (next run)', 12);
+        
+        const emptyCellZones = [];
+        const step = cellSize + gap;
+        function addEmptyZones(x0, y0, grid, maxRows, fromStash) {
+            const rows = maxRows || (grid.gridH || 12), cols = grid.gridW || 12;
+            const occupied = new Set();
+            (grid.items || []).forEach(p => {
+                const sh = p.itemId === 'ammo_box' ? 2 : (p.sizeH || 1);
+                const sw = p.itemId === 'ammo_box' ? 2 : (p.sizeW || 1);
+                for (let r = 0; r < sh; r++)
+                    for (let c = 0; c < sw; c++) occupied.add(`${p.row + r},${p.col + c}`);
+            });
+            for (let row = 0; row < rows; row++)
+                for (let col = 0; col < cols; col++)
+                    if (!occupied.has(`${row},${col}`)) {
+                        emptyCellZones.push({
+                            left: x0 + col * step, right: x0 + (col + 1) * step,
+                            top: y0 + row * step, bottom: y0 + (row + 1) * step,
+                            grid, row, col, fromStash
+                        });
+                    }
+        }
+        addEmptyZones(stashX, stashY, stash, 16, true);
+        addEmptyZones(backpackX, backpackY, backpack, 12, false);
+        
+        this.stashSelected = null;
+        this.stashDragging = null;
+        this.ammoBoxWindowOpen = null;
+        let lastAmmoBoxClick = null;
+        let ghostRect = null;
+        let ghostText = null;
+        const tooltipBg = this.add.rectangle(400, 385, 240, 36, 0x1a1a1a, 0.98).setStrokeStyle(2, 0x888888).setVisible(false).setDepth(STASH_DEPTH + 10);
+        const tooltipText = this.add.text(400, 385, '', { fontSize: '14px', fill: '#eee' }).setOrigin(0.5).setVisible(false).setDepth(STASH_DEPTH + 11);
+        const selectedLabel = this.add.text(400, 418, 'Drag items to move within or between STASH and BACKPACK. Or click item then → STASH / → PACK.', { fontSize: '12px', fill: '#aaa' }).setOrigin(0.5).setDepth(STASH_DEPTH);
+        this.tabContent.push(tooltipBg, tooltipText, selectedLabel);
+        
+        const btnStash = { left: 330, right: 410, top: 336, bottom: 364 };
+        const btnPack = { left: 390, right: 470, top: 336, bottom: 364 };
+        const btnMoveAll = { left: 268, right: 328, top: 336, bottom: 364 };
+        const inZone = (px, py, z) => px >= z.left && px <= z.right && py >= z.top && py <= z.bottom;
+        const getWorld = (ptr) => {
+            if (ptr.worldX != null) return { x: ptr.worldX, y: ptr.worldY };
+            const p = this.cameras.main.getWorldPoint(ptr.x, ptr.y);
+            return { x: p.x, y: p.y };
+        };
+        const onPointerMove = (ptr) => {
+            if (this.ammoBoxWindowOpen) return;
+            const w = getWorld(ptr);
+            const px = w.x, py = w.y;
+            if (this.stashDragging && ghostRect) {
+                ghostRect.setPosition(px, py);
+                ghostText.setPosition(px, py);
+            }
+            const over = itemZones.find(z => inZone(px, py, z));
+            if (over) {
+                const cfg = getInventoryItemConfig(over.itemId);
+                const name = (cfg && cfg.label) ? cfg.label : (over.itemId || 'Unknown').replace(/_/g, ' ');
+                tooltipText.setText(over.count > 1 ? name + ' (×' + over.count + ')' : name);
+                tooltipBg.setVisible(true);
+                tooltipText.setVisible(true);
+            } else {
+                tooltipBg.setVisible(false);
+                tooltipText.setVisible(false);
+            }
+        };
+        const rerenderStash = () => {
+            if (this.stashCleanup) this.stashCleanup();
+            this.tabContent.forEach(e => e.destroy());
+            this.tabContent = [];
+            this.renderStashTab();
+            this.updateResourceText();
+        };
+        const destroyGhost = () => {
+            if (ghostRect) { ghostRect.destroy(); ghostRect = null; }
+            if (ghostText) { ghostText.destroy(); ghostText = null; }
+        };
+        const onPointerDown = (ptr) => {
+            if (this.ammoBoxWindowOpen) return;
+            const w = getWorld(ptr);
+            const px = w.x, py = w.y;
+            const overItem = itemZones.find(z => inZone(px, py, z));
+            if (overItem) {
+                if (overItem.itemId === 'ammo_box') {
+                    const now = Date.now();
+                    if (lastAmmoBoxClick && lastAmmoBoxClick.placementId === overItem.placementId && lastAmmoBoxClick.fromStash === overItem.fromStash && (now - lastAmmoBoxClick.time) < 450) {
+                        lastAmmoBoxClick = null;
+                        sfx.menuOpen();
+                        this.showAmmoBoxWindow(overItem.placementId, overItem.fromStash, rerenderStash);
+                        return;
+                    }
+                    lastAmmoBoxClick = { time: now, placementId: overItem.placementId, fromStash: overItem.fromStash };
+                } else {
+                    lastAmmoBoxClick = null;
+                }
+                sfx.click();
+                this.stashSelected = { placementId: overItem.placementId, fromStash: overItem.fromStash };
+                this.stashDragging = { placementId: overItem.placementId, fromStash: overItem.fromStash, itemId: overItem.itemId, count: overItem.count || 1, sizeW: overItem.sizeW || 1, sizeH: overItem.sizeH || 1 };
+                const cfg = getInventoryItemConfig(overItem.itemId);
+                const name = (cfg && cfg.label) ? cfg.label : (overItem.itemId || '?').replace(/_/g, ' ');
+                const lbl = (cfg && cfg.icon) ? cfg.icon : (overItem.itemId || '?').slice(0, 2).toUpperCase();
+                const gw = (overItem.sizeW || 1) * step, gh = (overItem.sizeH || 1) * step;
+                ghostRect = this.add.rectangle(px, py, gw, gh, 0x446644, 0.9).setStrokeStyle(2, 0xaaffaa).setDepth(STASH_DEPTH + 5);
+                ghostText = this.add.text(px, py, (overItem.count > 1 ? lbl + overItem.count : lbl), { fontSize: '8px', fill: '#ccc' }).setOrigin(0.5).setDepth(STASH_DEPTH + 6);
+                this.tabContent.push(ghostRect, ghostText);
+                selectedLabel.setText('Dragging: ' + name + ' — drop on empty cell or other grid');
+                selectedLabel.setFill('#ffaa00');
+                return;
+            }
+            lastAmmoBoxClick = null;
+            const emptyZone = emptyCellZones.find(z => inZone(px, py, z));
+            if (emptyZone && this.stashSelected && emptyZone.fromStash === this.stashSelected.fromStash) {
+                const grid = emptyZone.fromStash ? this.persistent.stash : this.stats.backpack;
+                const item = (grid.items || []).find(p => p.placementId === this.stashSelected.placementId);
+                if (item && canPlace(grid, emptyZone.row, emptyZone.col, item.sizeW || 1, item.sizeH || 1, this.stashSelected.placementId)) {
+                    if (moveItemInGrid(grid, this.stashSelected.placementId, emptyZone.row, emptyZone.col)) {
+                        sfx.click();
+                        if (emptyZone.fromStash) savePersistent(this.persistent);
+                        else localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(this.stats));
+                        rerenderStash();
+                    }
+                }
+                return;
+            }
+            if (inZone(px, py, btnMoveAll)) {
+                const pack = this.stats.backpack;
+                const list = (pack.items || []).slice();
+                let moved = 0;
+                list.forEach(p => {
+                    const item = removeItem(pack, p.placementId);
+                    if (item && tryAddItem(this.persistent.stash, item.itemId, item.count)) moved++;
+                    else if (item) pack.items.push(item);
+                });
+                if (moved > 0) {
+                    sfx.click();
+                    localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(this.stats));
+                    savePersistent(this.persistent);
+                    rerenderStash();
+                }
+                return;
+            }
+            if (inZone(px, py, btnStash)) {
+                if (!this.stashSelected || this.stashSelected.fromStash) return;
+                const pack = this.stats.backpack;
+                const item = removeItem(pack, this.stashSelected.placementId);
+                if (item && tryAddItem(this.persistent.stash, item.itemId, item.count)) {
+                    sfx.click();
+                    localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(this.stats));
+                    savePersistent(this.persistent);
+                    rerenderStash();
+                }
+                return;
+            }
+            if (inZone(px, py, btnPack)) {
+                if (!this.stashSelected || !this.stashSelected.fromStash) return;
+                const st = this.persistent.stash;
+                const item = removeItem(st, this.stashSelected.placementId);
+                if (item && tryAddItem(this.stats.backpack, item.itemId, item.count)) {
+                    sfx.click();
+                    localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(this.stats));
+                    savePersistent(this.persistent);
+                    rerenderStash();
+                }
+            }
+        };
+        const onPointerUp = (ptr) => {
+            if (this.ammoBoxWindowOpen) return;
+            if (!this.stashDragging) return;
+            const w = getWorld(ptr);
+            const px = w.x, py = w.y;
+            const drag = this.stashDragging;
+            destroyGhost();
+            this.stashDragging = null;
+            const overAmmoBox = itemZones.find(z => inZone(px, py, z) && z.itemId === 'ammo_box');
+            if (overAmmoBox && drag.itemId === 'ammo') {
+                const invMap = overAmmoBox.fromStash ? this.persistent.ammoBoxInventories : this.stats.ammoBoxInventories;
+                if (!invMap) (overAmmoBox.fromStash ? this.persistent : this.stats).ammoBoxInventories = {};
+                const innerGrid = getOrCreateAmmoBoxInventory(invMap, (overAmmoBox.fromStash ? 'stash_' : 'backpack_') + overAmmoBox.placementId);
+                const srcGrid = drag.fromStash ? stash : backpack;
+                const item = removeItem(srcGrid, drag.placementId);
+                if (item && tryAddItemAmmoBoxOnly(innerGrid, item.itemId, item.count)) {
+                    sfx.click();
+                    savePersistent(this.persistent);
+                    localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(this.stats));
+                    rerenderStash();
+                } else if (item) srcGrid.items.push(item);
+                return;
+            }
+            const emptyZone = emptyCellZones.find(z => inZone(px, py, z));
+            if (emptyZone) {
+                const sameGrid = emptyZone.fromStash === drag.fromStash;
+                const grid = emptyZone.fromStash ? stash : backpack;
+                const sourceGrid = drag.fromStash ? stash : backpack;
+                if (sameGrid) {
+                    if (canPlace(grid, emptyZone.row, emptyZone.col, drag.sizeW, drag.sizeH, drag.placementId)) {
+                        if (moveItemInGrid(grid, drag.placementId, emptyZone.row, emptyZone.col)) {
+                            sfx.click();
+                            if (drag.fromStash) savePersistent(this.persistent);
+                            else localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(this.stats));
+                            rerenderStash();
+                        }
+                    }
+                } else {
+                    const item = removeItem(sourceGrid, drag.placementId);
+                    if (item && tryAddItem(grid, item.itemId, item.count)) {
+                        sfx.click();
+                        localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(this.stats));
+                        savePersistent(this.persistent);
+                        rerenderStash();
+                    } else if (item) {
+                        sourceGrid.items.push(item);
+                    }
+                }
+            }
+        };
+        this.input.on('pointermove', onPointerMove);
+        this.input.on('pointerdown', onPointerDown);
+        this.input.on('pointerup', onPointerUp);
+        this.stashCleanup = () => {
+            this.input.off('pointermove', onPointerMove);
+            this.input.off('pointerdown', onPointerDown);
+            this.input.off('pointerup', onPointerUp);
+            destroyGhost();
+        };
+        
+        const moveAllBtn = this.add.rectangle(298, 350, 60, 28, 0x334422).setDepth(STASH_DEPTH);
+        const moveAllTxt = this.add.text(298, 350, 'ALL→', { fontSize: '10px', fill: '#ccc' }).setOrigin(0.5).setDepth(STASH_DEPTH);
+        this.tabContent.push(moveAllBtn, moveAllTxt);
+        const toStashBtn = this.add.rectangle(370, 350, 80, 28, 0x444433).setDepth(STASH_DEPTH);
+        const toStashTxt = this.add.text(370, 350, '→ STASH', { fontSize: '11px', fill: '#fff' }).setOrigin(0.5).setDepth(STASH_DEPTH);
+        this.tabContent.push(toStashBtn, toStashTxt);
+        const toPackBtn = this.add.rectangle(430, 350, 80, 28, 0x434444).setDepth(STASH_DEPTH);
+        const toPackTxt = this.add.text(430, 350, '→ PACK', { fontSize: '11px', fill: '#fff' }).setOrigin(0.5).setDepth(STASH_DEPTH);
+        this.tabContent.push(toPackBtn, toPackTxt);
+        
+        const hint = this.add.text(400, 400, 'Drag items to move within or between grids. Or click item then → STASH / → PACK. ALL→ = move all backpack to stash.', { fontSize: '10px', fill: '#888' }).setOrigin(0.5).setDepth(STASH_DEPTH);
+        this.tabContent.push(hint);
+    }
+
+    showAmmoBoxWindow(placementId, fromStash, onCloseCallback) {
+        const AMMO_BOX_DEPTH = 300;
+        const invMap = fromStash ? this.persistent.ammoBoxInventories : this.stats.ammoBoxInventories;
+        if (!invMap) (fromStash ? this.persistent : this.stats).ammoBoxInventories = {};
+        const innerGrid = getOrCreateAmmoBoxInventory(fromStash ? this.persistent.ammoBoxInventories : this.stats.ammoBoxInventories, (fromStash ? 'stash_' : 'backpack_') + placementId);
+        if (!Array.isArray(innerGrid.items)) innerGrid.items = [];
+        const elements = [];
+        const overlay = this.add.rectangle(400, 300, 800, 600, 0x000000, 0.6).setDepth(AMMO_BOX_DEPTH).setInteractive();
+        elements.push(overlay);
+        const gridCols = innerGrid.gridW || 16, gridRows = innerGrid.gridH || 16;
+        const maxGridPx = 360;
+        const cellSize = Math.max(8, Math.floor(maxGridPx / gridCols) - 1);
+        const gap = 1;
+        const step = cellSize + gap;
+        const gridW = gridCols * step - gap, gridH = gridRows * step - gap;
+        const panelW = gridW + 40, panelH = gridH + 50;
+        const panel = this.add.rectangle(400, 300, panelW, panelH, 0x2a2a2a).setStrokeStyle(3, 0xcc6600).setDepth(AMMO_BOX_DEPTH + 1);
+        elements.push(panel);
+        const title = this.add.text(400, 300 - panelH/2 + 14, 'Ammo Box', { fontSize: '16px', fill: '#ffaa00', fontStyle: 'bold' }).setOrigin(0.5).setDepth(AMMO_BOX_DEPTH + 2);
+        elements.push(title);
+        const closeW = 24, closeH = 24;
+        const closeX = 400 + panelW/2 - closeW/2 - 4, closeY = 300 - panelH/2 + 14;
+        const closeBtn = this.add.rectangle(closeX, closeY, closeW, closeH, 0xaa2222).setDepth(AMMO_BOX_DEPTH + 2).setInteractive();
+        const closeTxt = this.add.text(closeX, closeY, 'X', { fontSize: '14px', fill: '#fff', fontStyle: 'bold' }).setOrigin(0.5).setDepth(AMMO_BOX_DEPTH + 3);
+        elements.push(closeBtn, closeTxt);
+        const gridX0 = 400 - gridW/2, gridY0 = 300 - gridH/2 + 20;
+        const occupied = new Set();
+        (innerGrid.items || []).forEach(p => {
+            for (let r = 0; r < (p.sizeH || 1); r++)
+                for (let c = 0; c < (p.sizeW || 1); c++) occupied.add(`${p.row + r},${p.col + c}`);
+        });
+        for (let row = 0; row < gridRows; row++) {
+            for (let col = 0; col < gridCols; col++) {
+                const x = gridX0 + col * step, y = gridY0 + row * step;
+                const isOcc = occupied.has(`${row},${col}`);
+                const r = this.add.rectangle(x + cellSize/2, y + cellSize/2, cellSize, cellSize, isOcc ? 0x334433 : 0x222222).setStrokeStyle(1, 0x555555).setDepth(AMMO_BOX_DEPTH + 1);
+                elements.push(r);
+            }
+        }
+        const innerItemZones = [];
+        (innerGrid.items || []).forEach(p => {
+            const hw = (p.sizeW || 1) * step, hh = (p.sizeH || 1) * step;
+            const cx = gridX0 + p.col * step + hw/2, cy = gridY0 + p.row * step + hh/2;
+            innerItemZones.push({ left: cx - hw/2, right: cx + hw/2, top: cy - hh/2, bottom: cy + hh/2, placementId: p.placementId, itemId: p.itemId, count: p.count || 1, sizeW: p.sizeW || 1, sizeH: p.sizeH || 1 });
+        });
+        const labelFontSize = cellSize <= 12 ? '6px' : '10px';
+        (innerGrid.items || []).forEach(p => {
+            const cfg = getInventoryItemConfig(p.itemId);
+            const lbl = (cfg && cfg.icon) ? cfg.icon : (p.itemId || '?').slice(0, 2).toUpperCase();
+            const cx = gridX0 + p.col * step + (p.sizeW || 1) * step / 2, cy = gridY0 + p.row * step + (p.sizeH || 1) * step / 2;
+            const txt = this.add.text(cx, cy, (p.count > 1 ? lbl + p.count : lbl), { fontSize: labelFontSize, fill: '#ccc' }).setOrigin(0.5).setDepth(AMMO_BOX_DEPTH + 2);
+            elements.push(txt);
+        });
+        const innerEmptyZones = [];
+        for (let row = 0; row < gridRows; row++)
+            for (let col = 0; col < gridCols; col++)
+                if (!occupied.has(`${row},${col}`))
+                    innerEmptyZones.push({
+                        left: gridX0 + col * step, right: gridX0 + (col + 1) * step,
+                        top: gridY0 + row * step, bottom: gridY0 + (row + 1) * step,
+                        row, col
+                    });
+        const inZone = (px, py, z) => px >= z.left && px <= z.right && py >= z.top && py <= z.bottom;
+        const getWorld = (ptr) => {
+            if (ptr.worldX != null) return { x: ptr.worldX, y: ptr.worldY };
+            const p = this.cameras.main.getWorldPoint(ptr.x, ptr.y);
+            return { x: p.x, y: p.y };
+        };
+        let innerSelected = null;
+        let innerDragging = null;
+        let innerGhostRect = null;
+        let innerGhostText = null;
+        let innerMoveHandler = null;
+        let innerUpHandler = null;
+        const destroyInnerGhost = () => {
+            if (innerGhostRect) { innerGhostRect.destroy(); innerGhostRect = null; }
+            if (innerGhostText) { innerGhostText.destroy(); innerGhostText = null; }
+        };
+        const redrawInner = () => {
+            innerItemZones.length = 0;
+            innerEmptyZones.length = 0;
+            const occ2 = new Set();
+            (innerGrid.items || []).forEach(p => {
+                for (let r = 0; r < (p.sizeH || 1); r++)
+                    for (let c = 0; c < (p.sizeW || 1); c++) occ2.add(`${p.row + r},${p.col + c}`);
+            });
+            (innerGrid.items || []).forEach(p => {
+                const hw = (p.sizeW || 1) * step, hh = (p.sizeH || 1) * step;
+                const cx = gridX0 + p.col * step + hw/2, cy = gridY0 + p.row * step + hh/2;
+                innerItemZones.push({ left: cx - hw/2, right: cx + hw/2, top: cy - hh/2, bottom: cy + hh/2, placementId: p.placementId, itemId: p.itemId, count: p.count || 1, sizeW: p.sizeW || 1, sizeH: p.sizeH || 1 });
+            });
+            for (let row = 0; row < gridRows; row++)
+                for (let col = 0; col < gridCols; col++)
+                    if (!occ2.has(`${row},${col}`))
+                        innerEmptyZones.push({ left: gridX0 + col * step, right: gridX0 + (col + 1) * step, top: gridY0 + row * step, bottom: gridY0 + (row + 1) * step, row, col });
+        };
+        const closeWindow = () => {
+            if (innerMoveHandler) { this.input.off('pointermove', innerMoveHandler); innerMoveHandler = null; }
+            if (innerUpHandler) { this.input.off('pointerup', innerUpHandler); innerUpHandler = null; }
+            destroyInnerGhost();
+            innerDragging = null;
+            innerSelected = null;
+            elements.forEach(e => e.destroy());
+            if (fromStash) savePersistent(this.persistent);
+            else localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(this.stats));
+            this.ammoBoxWindowOpen = null;
+            if (onCloseCallback) onCloseCallback();
+        };
+        closeBtn.on('pointerdown', () => { sfx.click(); closeWindow(); });
+        overlay.on('pointerdown', (ptr) => {
+            const w = getWorld(ptr);
+            const px = w.x, py = w.y;
+            if (px >= closeX - closeW/2 && px <= closeX + closeW/2 && py >= closeY - closeH/2 && py <= closeY + closeH/2) return;
+            const overItem = innerItemZones.find(z => inZone(px, py, z));
+            if (overItem) {
+                sfx.click();
+                innerSelected = { placementId: overItem.placementId };
+                innerDragging = { placementId: overItem.placementId, itemId: overItem.itemId, count: overItem.count || 1, sizeW: overItem.sizeW || 1, sizeH: overItem.sizeH || 1 };
+                const cfg = getInventoryItemConfig(overItem.itemId);
+                const lbl = (cfg && cfg.icon) ? cfg.icon : (overItem.itemId || '?').slice(0, 2).toUpperCase();
+                const gw = (overItem.sizeW || 1) * step, gh = (overItem.sizeH || 1) * step;
+                innerGhostRect = this.add.rectangle(px, py, gw, gh, 0x446644, 0.9).setStrokeStyle(2, 0xaaffaa).setDepth(AMMO_BOX_DEPTH + 10);
+                innerGhostText = this.add.text(px, py, (overItem.count > 1 ? lbl + overItem.count : lbl), { fontSize: labelFontSize, fill: '#ccc' }).setOrigin(0.5).setDepth(AMMO_BOX_DEPTH + 11);
+                elements.push(innerGhostRect, innerGhostText);
+                innerMoveHandler = (p) => {
+                    const ww = getWorld(p);
+                    if (innerGhostRect) { innerGhostRect.setPosition(ww.x, ww.y); innerGhostText.setPosition(ww.x, ww.y); }
+                };
+                innerUpHandler = (p) => {
+                    const ww = getWorld(p);
+                    const ex = ww.x, ey = ww.y;
+                    const emptyZone = innerEmptyZones.find(z => inZone(ex, ey, z));
+                    destroyInnerGhost();
+                    if (innerMoveHandler) { this.input.off('pointermove', innerMoveHandler); innerMoveHandler = null; }
+                    this.input.off('pointerup', innerUpHandler);
+                    innerUpHandler = null;
+                    const dragItem = innerDragging;
+                    innerDragging = null;
+                    const stashBounds = { left: 120, right: 120 + 12 * 19, top: 100, bottom: 100 + 16 * 19 };
+                    const backpackBounds = { left: 420, right: 420 + 12 * 19, top: 100, bottom: 100 + 12 * 19 };
+                    const inStash = ex >= stashBounds.left && ex <= stashBounds.right && ey >= stashBounds.top && ey <= stashBounds.bottom;
+                    const inBackpack = ex >= backpackBounds.left && ex <= backpackBounds.right && ey >= backpackBounds.top && ey <= backpackBounds.bottom;
+                    if (innerSelected && (inStash || inBackpack)) {
+                        const item = removeItem(innerGrid, innerSelected.placementId);
+                        if (item) {
+                            const targetGrid = inStash ? this.persistent.stash : this.stats.backpack;
+                            if (tryAddItem(targetGrid, item.itemId, item.count)) {
+                                sfx.click();
+                                if (fromStash) savePersistent(this.persistent);
+                                else localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(this.stats));
+                                innerSelected = null;
+                                elements.forEach(e => e.destroy());
+                                this.ammoBoxWindowOpen = null;
+                                if (onCloseCallback) onCloseCallback();
+                                return;
+                            }
+                            innerGrid.items.push(item);
+                        }
+                        innerSelected = null;
+                    }
+                    if (emptyZone && innerSelected) {
+                        const item = (innerGrid.items || []).find(it => it.placementId === innerSelected.placementId);
+                        if (item && canPlace(innerGrid, emptyZone.row, emptyZone.col, item.sizeW || 1, item.sizeH || 1, innerSelected.placementId)) {
+                            if (moveItemInGrid(innerGrid, innerSelected.placementId, emptyZone.row, emptyZone.col)) {
+                                sfx.click();
+                                if (fromStash) savePersistent(this.persistent);
+                                else localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(this.stats));
+                            }
+                        }
+                        innerSelected = null;
+                    }
+                    elements.forEach(e => e.destroy());
+                    this.showAmmoBoxWindow(placementId, fromStash, onCloseCallback);
+                };
+                this.input.on('pointermove', innerMoveHandler);
+                this.input.on('pointerup', innerUpHandler);
+                return;
+            }
+            const emptyZone = innerEmptyZones.find(z => inZone(px, py, z));
+            if (emptyZone && innerSelected && !innerDragging) {
+                const item = (innerGrid.items || []).find(p => p.placementId === innerSelected.placementId);
+                if (item && canPlace(innerGrid, emptyZone.row, emptyZone.col, item.sizeW || 1, item.sizeH || 1, innerSelected.placementId)) {
+                    if (moveItemInGrid(innerGrid, innerSelected.placementId, emptyZone.row, emptyZone.col)) {
+                        sfx.click();
+                        innerSelected = null;
+                        if (fromStash) savePersistent(this.persistent);
+                        else localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(this.stats));
+                        elements.forEach(e => e.destroy());
+                        this.showAmmoBoxWindow(placementId, fromStash, onCloseCallback);
+                        return;
+                    }
+                }
+                innerSelected = null;
+            }
+        });
+        overlay.setDepth(AMMO_BOX_DEPTH);
+        this.ammoBoxWindowOpen = { placementId, fromStash };
+    }
+
     countUnclaimedChallenges() {
         let count = 0;
         // Count completed but unclaimed dailies
@@ -3584,9 +5069,11 @@ class HideoutScene extends Phaser.Scene {
         elements.push(exportBtn, exportText);
         
         exportBtn.on('pointerdown', () => {
-            let saved = localStorage.getItem(CONFIG.SAVE_KEY);
-            if (!saved) { sfx.error(); return; }
-            const blob = new Blob([saved], { type: 'application/json' });
+            const runSaved = localStorage.getItem(CONFIG.SAVE_KEY);
+            const persistentSaved = localStorage.getItem(PERSISTENT_KEY);
+            if (!runSaved && !persistentSaved) { sfx.error(); return; }
+            const payload = { version: 2, run: runSaved ? JSON.parse(runSaved) : null, persistent: persistentSaved ? JSON.parse(persistentSaved) : null };
+            const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
@@ -3615,7 +5102,13 @@ class HideoutScene extends Phaser.Scene {
                 reader.onload = (event) => {
                     try {
                         const json = JSON.parse(event.target.result);
-                        if (json.hp !== undefined && json.hideout !== undefined) {
+                        if (json.version === 2 && (json.run != null || json.persistent != null)) {
+                            if (json.run != null) localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(json.run));
+                            if (json.persistent != null) localStorage.setItem(PERSISTENT_KEY, JSON.stringify(json.persistent));
+                            sfx.success();
+                            elements.forEach(e => e.destroy());
+                            this.scene.restart();
+                        } else if (json.hp !== undefined && json.hideout !== undefined) {
                             localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(json));
                             sfx.success();
                             elements.forEach(e => e.destroy());
@@ -3704,12 +5197,13 @@ class HideoutScene extends Phaser.Scene {
         this.updateWorkbenchUI();
         
         btn.on('pointerdown', () => {
-            if (this.stats.hideout.workbenchLvl === 0 && this.stats.scrap >= CONFIG.HIDEOUT.WORKBENCH_COST) {
+            if (this.stats.hideout.workbenchLvl === 0 && (this.persistent.scrap || 0) >= CONFIG.HIDEOUT.WORKBENCH_COST) {
                 sfx.success();
-                this.stats.scrap -= CONFIG.HIDEOUT.WORKBENCH_COST;
+                this.persistent.scrap = (this.persistent.scrap || 0) - CONFIG.HIDEOUT.WORKBENCH_COST;
                 this.stats.hideout.workbenchLvl = 1;
                 this.updateStatText();
                 this.updateWorkbenchUI();
+                savePersistent(this.persistent);
                 localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(this.stats));
                 this.cameras.main.flash(100, 255, 136, 0);
             } else {
@@ -3739,13 +5233,14 @@ class HideoutScene extends Phaser.Scene {
         this.updateRepairUI();
         
         btn.on('pointerdown', () => {
-            if (this.stats.hideout.repairStationLvl === 0 && this.stats.scrap >= CONFIG.HIDEOUT.REPAIR_STATION_COST) {
+            if (this.stats.hideout.repairStationLvl === 0 && (this.persistent.scrap || 0) >= CONFIG.HIDEOUT.REPAIR_STATION_COST) {
                 // Build repair station
                 sfx.success();
-                this.stats.scrap -= CONFIG.HIDEOUT.REPAIR_STATION_COST;
+                this.persistent.scrap = (this.persistent.scrap || 0) - CONFIG.HIDEOUT.REPAIR_STATION_COST;
                 this.stats.hideout.repairStationLvl = 1;
                 this.updateStatText();
                 this.updateRepairUI();
+                savePersistent(this.persistent);
                 localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(this.stats));
                 this.cameras.main.flash(100, 0, 170, 255);
             } else if (this.stats.hideout.repairStationLvl > 0) {
@@ -3766,8 +5261,8 @@ class HideoutScene extends Phaser.Scene {
             if (armor && armor.durability < armor.maxDurability) {
                 const needed = armor.maxDurability - armor.durability;
                 const cost = needed * CONFIG.HIDEOUT.REPAIR_COST_PER_POINT;
-                if (this.stats.scrap >= cost) {
-                    this.stats.scrap -= cost;
+                if ((this.persistent.scrap || 0) >= cost) {
+                    this.persistent.scrap = (this.persistent.scrap || 0) - cost;
                     armor.durability = armor.maxDurability;
                     repaired = true;
                 }
@@ -3777,6 +5272,7 @@ class HideoutScene extends Phaser.Scene {
             sfx.success();
             this.updateStatText();
             this.updateRepairUI();
+            savePersistent(this.persistent);
             localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(this.stats));
             this.cameras.main.flash(100, 0, 255, 0);
         } else {
@@ -3874,7 +5370,8 @@ class HideoutScene extends Phaser.Scene {
         for (let i = 1; i <= 7; i++) {
             const level = LEVELS[i];
             const isUnlocked = i <= this.stats.highestLevelUnlocked;
-            const isCleared = i < this.stats.highestLevelUnlocked;
+            const isLevel7Completed = (i === 7 && (this.persistent && this.persistent.level7Completed));
+            const isCleared = i < this.stats.highestLevelUnlocked || isLevel7Completed;
             const isSelected = i === this.selectedLevel;
             const isNext = i === this.stats.nextLevel;
             
@@ -3905,9 +5402,10 @@ class HideoutScene extends Phaser.Scene {
                 fontSize: '20px', fill: isUnlocked ? '#ffffff' : '#555555', fontStyle: 'bold' 
             }).setOrigin(0.5).setDepth(505);
             
-            // Status icon
+            // Status icon (checkmark for completed level 7)
             let icon = '';
-            if (!isUnlocked) icon = '🔒';
+            if (isLevel7Completed) icon = '✓';
+            else if (!isUnlocked) icon = '🔒';
             else if (isCleared) icon = '✓';
             else if (isNext) icon = '→';
             
@@ -3997,7 +5495,8 @@ class HideoutScene extends Phaser.Scene {
         if (!this.mapNodes[levelNum].node.active) return;
         
         const isUnlocked = levelNum <= this.stats.highestLevelUnlocked;
-        const isCleared = levelNum < this.stats.highestLevelUnlocked;
+        const isLevel7Completed = (levelNum === 7 && (this.persistent && this.persistent.level7Completed));
+        const isCleared = levelNum < this.stats.highestLevelUnlocked || isLevel7Completed;
         const isSelected = levelNum === this.selectedLevel;
         const isNext = levelNum === this.stats.nextLevel;
         
@@ -4007,6 +5506,15 @@ class HideoutScene extends Phaser.Scene {
         if (isSelected) nodeColor = 0x0066aa; // Selected
         
         this.mapNodes[levelNum].node.setFillStyle(nodeColor);
+        // Update level 7 checkmark icon when selection changes
+        if (levelNum === 7 && this.mapNodes[levelNum].iconText) {
+            let icon = '';
+            if (isLevel7Completed) icon = '✓';
+            else if (!isUnlocked) icon = '🔒';
+            else if (isCleared) icon = '✓';
+            else if (isNext) icon = '→';
+            this.mapNodes[levelNum].iconText.setText(icon);
+        }
     }
     
     updateMapSelection() {
@@ -4930,10 +6438,11 @@ class HideoutScene extends Phaser.Scene {
         });
     }
     
-    showTraderModal() {
+    showTraderModal(initialTab) {
         const elements = [];
-        this.traderTab = 'buy'; // Track current tab
+        this.traderTab = initialTab === 'quests' ? 'quests' : (initialTab === 'sell' ? 'sell' : 'buy');
         this.traderScrollOffset = 0; // Track scroll position for buy items
+        this.traderSellScrollOffset = 0; // Track scroll position for sell items
         
         // Dark overlay - click to close
         const overlay = this.add.rectangle(400, 300, 800, 600, 0x000000, 0.7).setDepth(499).setInteractive();
@@ -4945,24 +6454,28 @@ class HideoutScene extends Phaser.Scene {
         elements.push(modalBg);
         
         // Title
-        const title = this.add.text(400, 85, "TRADER", { fontSize: '36px', fill: '#ffd700', fontStyle: 'bold' }).setOrigin(0.5).setDepth(501);
+        const title = this.add.text(400, 85, "SHOP", { fontSize: '36px', fill: '#ffd700', fontStyle: 'bold' }).setOrigin(0.5).setDepth(501);
         elements.push(title);
         
-        // Currency display
+        // Currency display (stored at hideout stash)
         const currencyText = this.add.text(400, 120, 
-            `💰 Credits: ${this.stats.credits}  |  🔧 Scrap: ${this.stats.scrap}  |  ⚙️ Materials: ${this.stats.materials}`,
+            `💰 Credits: ${this.persistent.credits || 0}  |  🔧 Scrap: ${this.persistent.scrap || 0}  |  ⚙️ Materials: ${this.persistent.materials || 0}`,
             { fontSize: '14px', fill: '#ccc' }
         ).setOrigin(0.5).setDepth(501);
         elements.push(currencyText);
         this.traderCurrencyText = currencyText;
         
-        // Tab buttons
-        const buyTab = this.add.rectangle(300, 155, 150, 35, 0xffd700).setDepth(501).setInteractive();
-        const buyTabText = this.add.text(300, 155, "BUY", { fontSize: '18px', fill: '#000', fontStyle: 'bold' }).setOrigin(0.5).setDepth(502);
+        // Tab buttons (Buy, Quests, Sell)
+        const buyTab = this.add.rectangle(280, 155, 100, 35, 0xffd700).setDepth(501).setInteractive();
+        const buyTabText = this.add.text(280, 155, "BUY", { fontSize: '16px', fill: '#000', fontStyle: 'bold' }).setOrigin(0.5).setDepth(502);
         elements.push(buyTab, buyTabText);
         
-        const sellTab = this.add.rectangle(500, 155, 150, 35, 0x444444).setDepth(501).setInteractive();
-        const sellTabText = this.add.text(500, 155, "SELL", { fontSize: '18px', fill: '#fff' }).setOrigin(0.5).setDepth(502);
+        const questsTab = this.add.rectangle(400, 155, 100, 35, 0x444444).setDepth(501).setInteractive();
+        const questsTabText = this.add.text(400, 155, "QUESTS", { fontSize: '14px', fill: '#fff' }).setOrigin(0.5).setDepth(502);
+        elements.push(questsTab, questsTabText);
+        
+        const sellTab = this.add.rectangle(520, 155, 100, 35, 0x444444).setDepth(501).setInteractive();
+        const sellTabText = this.add.text(520, 155, "SELL", { fontSize: '16px', fill: '#fff' }).setOrigin(0.5).setDepth(502);
         elements.push(sellTab, sellTabText);
         
         // Content area (interactive for mouse wheel scrolling)
@@ -4971,9 +6484,9 @@ class HideoutScene extends Phaser.Scene {
         
         // Mouse wheel scrolling for trader
         contentBg.on('wheel', (pointer, deltaX, deltaY) => {
+            const maxVisibleItems = 6;
             if (this.traderTab === 'buy') {
                 const totalItems = CONFIG.TRADER.HIDEOUT_STOCK.length;
-                const maxVisibleItems = 6;
                 const maxScroll = Math.max(0, totalItems - maxVisibleItems);
                 
                 if (deltaY > 0 && this.traderScrollOffset < maxScroll) {
@@ -4983,32 +6496,36 @@ class HideoutScene extends Phaser.Scene {
                     this.traderScrollOffset--;
                     this.renderTraderItems(elements);
                 }
+            } else if (this.traderTab === 'sell' && (this.traderSellItemCount || 0) > maxVisibleItems) {
+                const totalItems = this.traderSellItemCount;
+                const maxScroll = Math.max(0, totalItems - maxVisibleItems);
+                
+                if (deltaY > 0 && this.traderSellScrollOffset < maxScroll) {
+                    this.traderSellScrollOffset++;
+                    this.renderTraderItems(elements);
+                } else if (deltaY < 0 && this.traderSellScrollOffset > 0) {
+                    this.traderSellScrollOffset--;
+                    this.renderTraderItems(elements);
+                }
             }
         });
         
         // Store item elements reference for tab switching
         this.traderItemElements = [];
         
-        // Tab click handlers
-        buyTab.on('pointerdown', () => {
-            sfx.click();
-            this.traderTab = 'buy';
-            buyTab.setFillStyle(0xffd700);
-            buyTabText.setColor('#000');
-            sellTab.setFillStyle(0x444444);
-            sellTabText.setColor('#fff');
-            this.renderTraderItems(elements);
-        });
-        
-        sellTab.on('pointerdown', () => {
-            sfx.click();
-            this.traderTab = 'sell';
-            sellTab.setFillStyle(0xffd700);
-            sellTabText.setColor('#000');
-            buyTab.setFillStyle(0x444444);
-            buyTabText.setColor('#fff');
-            this.renderTraderItems(elements);
-        });
+        const setTabStyle = (active) => {
+            const isBuy = active === 'buy', isQuests = active === 'quests', isSell = active === 'sell';
+            buyTab.setFillStyle(isBuy ? 0xffd700 : 0x444444);
+            buyTabText.setColor(isBuy ? '#000' : '#fff');
+            questsTab.setFillStyle(isQuests ? 0xffd700 : 0x444444);
+            questsTabText.setColor(isQuests ? '#000' : '#fff');
+            sellTab.setFillStyle(isSell ? 0xffd700 : 0x444444);
+            sellTabText.setColor(isSell ? '#000' : '#fff');
+        };
+        buyTab.on('pointerdown', () => { sfx.click(); this.traderTab = 'buy'; setTabStyle('buy'); this.renderTraderItems(elements); });
+        questsTab.on('pointerdown', () => { sfx.click(); this.traderTab = 'quests'; setTabStyle('quests'); this.renderTraderItems(elements); });
+        sellTab.on('pointerdown', () => { sfx.click(); this.traderTab = 'sell'; setTabStyle('sell'); this.renderTraderItems(elements); });
+        setTabStyle(this.traderTab); // Show correct tab when opened with initialTab (e.g. from Quests box)
         
         // Close button
         const closeBtn = this.add.text(400, 520, "[ CLOSE ]", { fontSize: '18px', fill: '#ff4444' }).setOrigin(0.5).setDepth(501).setInteractive();
@@ -5073,8 +6590,8 @@ class HideoutScene extends Phaser.Scene {
                 const costText = this.add.text(480, y, `${displayCost} ${currIcon}`, { fontSize: '14px', fill: costColor }).setDepth(501);
                 this.traderItemElements.push(costText);
                 
-                // Buy button
-                const canAfford = this.stats[item.currency] >= displayCost;
+                // Buy button (spend from hideout stash)
+                const canAfford = (this.persistent[item.currency] || 0) >= displayCost;
                 const buyBtn = this.add.rectangle(600, y + 8, 70, 28, canAfford ? 0x00aa00 : 0x444444).setDepth(501).setInteractive();
                 const buyBtnText = this.add.text(600, y + 8, "BUY", { fontSize: '14px', fill: '#fff' }).setOrigin(0.5).setDepth(502);
                 this.traderItemElements.push(buyBtn, buyBtnText);
@@ -5124,6 +6641,69 @@ class HideoutScene extends Phaser.Scene {
                     { fontSize: '10px', fill: '#666' }).setOrigin(0.5).setDepth(503);
                 this.traderItemElements.push(scrollText);
             }
+        } else if (this.traderTab === 'quests') {
+            const stash = this.persistent.stash || { items: [] };
+            const backpack = this.stats.backpack || { items: [] };
+            const active = this.persistent.activeQuests || [];
+            const completed = this.persistent.completedQuests || [];
+            const quests = CONFIG.TRADER_QUESTS || [];
+            if (quests.length === 0) {
+                const noQuests = this.add.text(400, 300, "No quests available", { fontSize: '16px', fill: '#666' }).setOrigin(0.5).setDepth(501);
+                this.traderItemElements.push(noQuests);
+            } else {
+                quests.forEach((q, i) => {
+                    const y = startY + i * (itemHeight + 8);
+                    const done = completed.includes(q.id);
+                    const accepted = active.includes(q.id);
+                    const req = q.require || {};
+                    const itemId = req.itemId || '';
+                    const need = req.count || 0;
+                    const have = countItemInGrids(stash, backpack, itemId);
+                    const turnedIn = (this.persistent.questTurnInProgress || {})[q.id] || 0;
+                    const cfg = getInventoryItemConfig(itemId);
+                    const itemLabel = (cfg && cfg.label) ? cfg.label : itemId;
+                    const nameText = this.add.text(120, y, q.name, { fontSize: '15px', fill: done ? '#666' : accepted ? '#ffaa00' : '#aaa', fontStyle: 'bold' }).setDepth(501);
+                    this.traderItemElements.push(nameText);
+                    const descText = this.add.text(120, y + 18, q.desc, { fontSize: '11px', fill: '#888' }).setDepth(501);
+                    this.traderItemElements.push(descText);
+                    if (done) {
+                        const progText = this.add.text(400, y + 9, 'DONE', { fontSize: '13px', fill: '#666' }).setOrigin(0.5).setDepth(501);
+                        this.traderItemElements.push(progText);
+                    } else if (accepted) {
+                        const progressStr = turnedIn > 0 ? `${itemLabel}: ${turnedIn}/${need} turned in · ${have} in stash` : `${itemLabel}: ${have}/${need}`;
+                        const progText = this.add.text(400, y + 9, progressStr, { fontSize: '12px', fill: (turnedIn >= need || have >= need - turnedIn) ? '#0f0' : '#aaa' }).setOrigin(0.5).setDepth(501);
+                        this.traderItemElements.push(progText);
+                        const canTurnIn = have >= 1 && turnedIn < need;
+                        if (canTurnIn) {
+                            const turnInBtn = this.add.rectangle(580, y + 9, 80, 26, 0x228822).setDepth(501).setInteractive();
+                            const turnInTxt = this.add.text(580, y + 9, "TURN IN", { fontSize: '12px', fill: '#fff' }).setOrigin(0.5).setDepth(502);
+                            this.traderItemElements.push(turnInBtn, turnInTxt);
+                            turnInBtn.on('pointerdown', () => {
+                                const maxTurnIn = Math.min(have, need - turnedIn);
+                                if (maxTurnIn <= 0) return;
+                                this.showQuestTurnInModal(q, itemLabel, have, turnedIn, need, maxTurnIn, elements);
+                            });
+                            turnInBtn.on('pointerover', () => turnInBtn.setFillStyle(0x33aa33));
+                            turnInBtn.on('pointerout', () => turnInBtn.setFillStyle(0x228822));
+                        }
+                    } else {
+                        const progText = this.add.text(400, y + 9, '—', { fontSize: '13px', fill: '#555' }).setOrigin(0.5).setDepth(501);
+                        this.traderItemElements.push(progText);
+                        const acceptBtn = this.add.rectangle(580, y + 9, 80, 26, 0x446644).setDepth(501).setInteractive();
+                        const acceptTxt = this.add.text(580, y + 9, "ACCEPT", { fontSize: '12px', fill: '#fff' }).setOrigin(0.5).setDepth(502);
+                        this.traderItemElements.push(acceptBtn, acceptTxt);
+                        acceptBtn.on('pointerdown', () => {
+                            if (!this.persistent.activeQuests) this.persistent.activeQuests = [];
+                            this.persistent.activeQuests.push(q.id);
+                            savePersistent(this.persistent);
+                            sfx.click();
+                            this.renderTraderItems(elements);
+                        });
+                        acceptBtn.on('pointerover', () => acceptBtn.setFillStyle(0x558855));
+                        acceptBtn.on('pointerout', () => acceptBtn.setFillStyle(0x446644));
+                    }
+                });
+            }
         } else {
             // Render sell items
             let y = startY;
@@ -5165,7 +6745,6 @@ class HideoutScene extends Phaser.Scene {
             Object.entries(modCounts).forEach(([modId, count]) => {
                 const modConfig = Object.values(CONFIG.MODS).find(m => m.id === modId);
                 if (modConfig) {
-                    // Sell value is based on material cost (50% rate)
                     const baseCost = modConfig.cost?.amount || 15;
                     const sellValue = Math.floor(baseCost * 0.5);
                     sellItems.push({
@@ -5179,20 +6758,52 @@ class HideoutScene extends Phaser.Scene {
                 }
             });
             
+            // Add weapons, armor, and attachments from stash and backpack
+            const sellGrid = CONFIG.TRADER.SELL_GRID || {};
+            [this.persistent.stash, this.stats.backpack].forEach((grid, idx) => {
+                if (!grid || !grid.items) return;
+                const source = idx === 0 ? 'Stash' : 'Backpack';
+                grid.items.forEach(p => {
+                    const price = sellGrid[p.itemId];
+                    if (!price) return;
+                    const cfg = getInventoryItemConfig(p.itemId);
+                    const label = (cfg && cfg.label) ? cfg.label : p.itemId;
+                    const count = p.count || 1;
+                    const currency = price.credits != null ? 'credits' : 'materials';
+                    const valueNum = (price.credits != null ? price.credits : price.materials) * count;
+                    sellItems.push({
+                        type: 'grid',
+                        grid: grid,
+                        placementId: p.placementId,
+                        itemId: p.itemId,
+                        count: count,
+                        name: `${label}${count > 1 ? ' (x' + count + ')' : ''} [${source}]`,
+                        value: valueNum,
+                        currency: currency
+                    });
+                });
+            });
+            
+            this.traderSellItemCount = sellItems.length;
             if (sellItems.length === 0) {
                 const noItems = this.add.text(400, 300, "Nothing to sell", { fontSize: '18px', fill: '#666' }).setOrigin(0.5).setDepth(501);
                 this.traderItemElements.push(noItems);
             } else {
-                sellItems.forEach((item, i) => {
+                // Clamp scroll offset for sell list
+                if (this.traderSellScrollOffset === undefined) this.traderSellScrollOffset = 0;
+                const totalSellItems = sellItems.length;
+                const maxSellScroll = Math.max(0, totalSellItems - maxVisibleItems);
+                this.traderSellScrollOffset = Math.max(0, Math.min(this.traderSellScrollOffset, maxSellScroll));
+                
+                const visibleSellItems = sellItems.slice(this.traderSellScrollOffset, this.traderSellScrollOffset + maxVisibleItems);
+                visibleSellItems.forEach((item, i) => {
                     const itemY = startY + i * itemHeight;
                     
-                    // Mods show differently (sell for materials)
-                    const nameColor = item.type === 'mod' ? '#cc88ff' : '#fff';
+                    const nameColor = (item.type === 'mod' || item.type === 'grid') ? (item.type === 'mod' ? '#cc88ff' : '#aaccff') : '#fff';
                     const nameText = this.add.text(150, itemY, item.name, { fontSize: '16px', fill: nameColor }).setDepth(501);
                     this.traderItemElements.push(nameText);
                     
-                    // Mods sell for materials (⚙️), others sell for credits (💰)
-                    const currencyIcon = item.type === 'mod' ? '⚙️' : '💰';
+                    const currencyIcon = (item.type === 'mod' || (item.type === 'grid' && item.currency === 'materials')) ? '⚙️' : '💰';
                     const valueText = this.add.text(450, itemY, `+${item.value} ${currencyIcon}`, { fontSize: '14px', fill: '#00ff00' }).setDepth(501);
                     this.traderItemElements.push(valueText);
                     
@@ -5208,6 +6819,37 @@ class HideoutScene extends Phaser.Scene {
                     sellBtn.on('pointerover', () => sellBtn.setAlpha(0.8));
                     sellBtn.on('pointerout', () => sellBtn.setAlpha(1));
                 });
+                
+                // Scroll buttons for sell list (only show if needed)
+                if (totalSellItems > maxVisibleItems) {
+                    const canScrollUp = this.traderSellScrollOffset > 0;
+                    const upBtn = this.add.text(640, 180, '▲', { fontSize: '20px', fill: canScrollUp ? '#ffd700' : '#444' })
+                        .setDepth(503).setInteractive({ useHandCursor: canScrollUp });
+                    this.traderItemElements.push(upBtn);
+                    if (canScrollUp) {
+                        upBtn.on('pointerdown', () => {
+                            this.traderSellScrollOffset--;
+                            sfx.click();
+                            this.renderTraderItems(elements);
+                        });
+                    }
+                    
+                    const canScrollDown = this.traderSellScrollOffset < maxSellScroll;
+                    const downBtn = this.add.text(640, 460, '▼', { fontSize: '20px', fill: canScrollDown ? '#ffd700' : '#444' })
+                        .setDepth(503).setInteractive({ useHandCursor: canScrollDown });
+                    this.traderItemElements.push(downBtn);
+                    if (canScrollDown) {
+                        downBtn.on('pointerdown', () => {
+                            this.traderSellScrollOffset++;
+                            sfx.click();
+                            this.renderTraderItems(elements);
+                        });
+                    }
+                    
+                    const scrollText = this.add.text(640, 320, `${this.traderSellScrollOffset + 1}-${Math.min(this.traderSellScrollOffset + maxVisibleItems, totalSellItems)}/${totalSellItems}`,
+                        { fontSize: '10px', fill: '#666' }).setOrigin(0.5).setDepth(503);
+                    this.traderItemElements.push(scrollText);
+                }
             }
         }
     }
@@ -5215,12 +6857,90 @@ class HideoutScene extends Phaser.Scene {
     updateTraderCurrency() {
         if (this.traderCurrencyText) {
             this.traderCurrencyText.setText(
-                `💰 Credits: ${this.stats.credits}  |  🔧 Scrap: ${this.stats.scrap}  |  ⚙️ Materials: ${this.stats.materials}`
+                `💰 Credits: ${this.persistent.credits || 0}  |  🔧 Scrap: ${this.persistent.scrap || 0}  |  ⚙️ Materials: ${this.persistent.materials || 0}`
             );
         }
-        this.updateStatText();
+        this.updateResourceText();
     }
     
+    showQuestTurnInModal(quest, itemLabel, have, turnedIn, need, maxTurnIn, elements) {
+        const itemId = (quest.require || {}).itemId || '';
+        const stash = this.persistent.stash || { items: [] };
+        const backpack = this.stats.backpack || { items: [] };
+        const DEPTH = 510;
+        const modalEls = [];
+        const overlay = this.add.rectangle(400, 300, 800, 600, 0x000000, 0.7).setDepth(DEPTH).setInteractive();
+        modalEls.push(overlay);
+        const panel = this.add.rectangle(400, 300, 280, 140, 0x2a2a2a).setStrokeStyle(3, 0xffaa00).setDepth(DEPTH + 1);
+        modalEls.push(panel);
+        const title = this.add.text(400, 248, `Turn in ${itemLabel}`, { fontSize: '16px', fill: '#ffaa00', fontStyle: 'bold' }).setOrigin(0.5).setDepth(DEPTH + 2);
+        modalEls.push(title);
+        const sub = this.add.text(400, 268, `You have ${have}. Need ${need - turnedIn} more.`, { fontSize: '12px', fill: '#aaa' }).setOrigin(0.5).setDepth(DEPTH + 2);
+        modalEls.push(sub);
+        let amount = 1;
+        const amountText = this.add.text(400, 295, '1', { fontSize: '20px', fill: '#fff', fontStyle: 'bold' }).setOrigin(0.5).setDepth(DEPTH + 2);
+        modalEls.push(amountText);
+        const minusBtn = this.add.text(340, 295, '  −  ', { fontSize: '18px', fill: '#ffaa00' }).setOrigin(0.5).setDepth(DEPTH + 2).setInteractive();
+        const plusBtn = this.add.text(460, 295, '  +  ', { fontSize: '18px', fill: '#ffaa00' }).setOrigin(0.5).setDepth(DEPTH + 2).setInteractive();
+        modalEls.push(minusBtn, plusBtn);
+        const updateAmount = () => {
+            amount = Math.max(1, Math.min(maxTurnIn, amount));
+            amountText.setText(String(amount));
+            confirmTxt.setText(`TURN IN (${amount})`);
+        };
+        minusBtn.on('pointerdown', () => { sfx.click(); amount--; updateAmount(); });
+        plusBtn.on('pointerdown', () => { sfx.click(); amount++; updateAmount(); });
+        const allBtn = this.add.rectangle(400, 318, 56, 24, 0x336622).setDepth(DEPTH + 2).setInteractive();
+        const allTxt = this.add.text(400, 318, 'All', { fontSize: '11px', fill: '#fff' }).setOrigin(0.5).setDepth(DEPTH + 3);
+        modalEls.push(allBtn, allTxt);
+        const confirmBtn = this.add.rectangle(340, 330, 80, 28, 0x228822).setDepth(DEPTH + 2).setInteractive();
+        const confirmTxt = this.add.text(340, 330, `TURN IN (${amount})`, { fontSize: '12px', fill: '#fff' }).setOrigin(0.5).setDepth(DEPTH + 3);
+        modalEls.push(confirmBtn, confirmTxt);
+        const cancelBtn = this.add.rectangle(440, 330, 70, 28, 0x444444).setDepth(DEPTH + 2).setInteractive();
+        const cancelTxt = this.add.text(440, 330, 'Cancel', { fontSize: '12px', fill: '#fff' }).setOrigin(0.5).setDepth(DEPTH + 3);
+        modalEls.push(cancelBtn, cancelTxt);
+        const doClose = () => {
+            modalEls.forEach(e => e.destroy());
+            this.renderTraderItems(elements);
+        };
+        const doTurnIn = () => {
+            amount = Math.max(1, Math.min(maxTurnIn, amount));
+            if (!removeItemFromGrids(stash, backpack, itemId, amount)) return;
+            if (!this.persistent.questTurnInProgress) this.persistent.questTurnInProgress = {};
+            this.persistent.questTurnInProgress[quest.id] = (this.persistent.questTurnInProgress[quest.id] || 0) + amount;
+            const newTurnedIn = this.persistent.questTurnInProgress[quest.id];
+            if (newTurnedIn >= need) {
+                const r = quest.reward || {};
+                if (r.scrap) this.persistent.scrap = (this.persistent.scrap || 0) + r.scrap;
+                if (r.credits) this.persistent.credits = (this.persistent.credits || 0) + r.credits;
+                if (r.materials) this.persistent.materials = (this.persistent.materials || 0) + r.materials;
+                if (!this.persistent.completedQuests) this.persistent.completedQuests = [];
+                this.persistent.completedQuests.push(quest.id);
+                const ax = (this.persistent.activeQuests || []).indexOf(quest.id);
+                if (ax !== -1) this.persistent.activeQuests.splice(ax, 1);
+                sfx.success();
+            } else {
+                sfx.click();
+            }
+            savePersistent(this.persistent);
+            localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(this.stats));
+            this.updateTraderCurrency();
+            doClose();
+        };
+        allBtn.on('pointerdown', () => { sfx.click(); amount = maxTurnIn; doTurnIn(); });
+        allBtn.on('pointerover', () => allBtn.setFillStyle(0x448833));
+        allBtn.on('pointerout', () => allBtn.setFillStyle(0x336622));
+        confirmBtn.on('pointerdown', () => {
+            amount = Math.max(1, Math.min(maxTurnIn, amount));
+            doTurnIn();
+        });
+        confirmBtn.on('pointerover', () => confirmBtn.setFillStyle(0x33aa33));
+        confirmBtn.on('pointerout', () => confirmBtn.setFillStyle(0x228822));
+        cancelBtn.on('pointerdown', () => { sfx.click(); doClose(); });
+        cancelBtn.on('pointerover', () => cancelBtn.setFillStyle(0x555555));
+        cancelBtn.on('pointerout', () => cancelBtn.setFillStyle(0x444444));
+    }
+
     closeTraderModal(elements) {
         sfx.menuClose();
         if (this.traderItemElements) {
@@ -5240,8 +6960,8 @@ class HideoutScene extends Phaser.Scene {
             cost = Math.floor(cost * 0.85);
         }
         
-        // Check if player can afford
-        if (this.stats[currency] < cost) {
+        // Check if player can afford (spend from hideout stash)
+        if ((this.persistent[currency] || 0) < cost) {
             sfx.error();
             return false;
         }
@@ -5262,14 +6982,14 @@ class HideoutScene extends Phaser.Scene {
             return false;
         }
         
-        // Deduct cost
-        this.stats[currency] -= cost;
+        // Deduct cost from hideout stash
+        this.persistent[currency] = (this.persistent[currency] || 0) - cost;
         this.persistent.itemsBought++;
         
         // Apply item effect
         switch (item.type) {
             case 'ammo':
-                this.stats.ammo += item.amount;
+                tryAddItem(this.persistent.stash, 'ammo', item.amount);
                 break;
             case 'heal':
                 const oldHp = this.stats.hp;
@@ -5314,20 +7034,21 @@ class HideoutScene extends Phaser.Scene {
     
     sellItem(item) {
         if (item.type === 'armor') {
-            // Remove armor and add credits
             this.stats.armor[item.slot] = null;
-            this.stats.credits += item.value;
+            this.persistent.credits = (this.persistent.credits || 0) + item.value;
         } else if (item.type === 'consumable') {
-            // Remove consumable and add credits
             this.stats.consumables[item.slot] = null;
-            this.stats.credits += item.value;
+            this.persistent.credits = (this.persistent.credits || 0) + item.value;
         } else if (item.type === 'mod') {
-            // Remove ONE mod from inventory and add materials (mods sell for materials)
             const modIndex = this.persistent.modInventory.indexOf(item.modId);
             if (modIndex !== -1) {
                 this.persistent.modInventory.splice(modIndex, 1);
-                this.stats.materials += item.value;
+                this.persistent.materials = (this.persistent.materials || 0) + item.value;
             }
+        } else if (item.type === 'grid') {
+            const removed = removeItem(item.grid, item.placementId);
+            if (!removed) return false;
+            this.persistent[item.currency] = (this.persistent[item.currency] || 0) + item.value;
         }
         
         this.persistent.itemsSold++;
@@ -5347,7 +7068,7 @@ class HideoutScene extends Phaser.Scene {
             } else {
                 this.armoryTimerText.setText("COMPLETE!");
                 this.armoryBtnText.setText("CLAIM NVG");
-                this.armoryBtn.setInteractive();
+                if (this.armoryBtn) this.armoryBtn.setInteractive();
             }
         }
     }
@@ -5376,12 +7097,13 @@ class HideoutScene extends Phaser.Scene {
                 return;
             }
             if (armory.crafting) return;
-            if (this.stats.scrap >= 3) {
+            if ((this.persistent.scrap || 0) >= 3) {
                 sfx.success();
-                this.stats.scrap -= 3;
+                this.persistent.scrap = (this.persistent.scrap || 0) - 3;
                 armory.crafting = { item: 'nvg', finishTime: Date.now() + CONFIG.TIMINGS.NVG_CRAFT };
                 this.updateStatText();
                 this.updateArmoryUI();
+                savePersistent(this.persistent);
                 localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(this.stats));
             } else {
                 sfx.error();
@@ -5390,11 +7112,12 @@ class HideoutScene extends Phaser.Scene {
         });
 
         ammoBtn.on('pointerdown', () => {
-            if (this.stats.scrap >= 1) {
+            if ((this.persistent.scrap || 0) >= 1) {
                 sfx.lootAmmo();
-                this.stats.scrap -= 1;
-                this.stats.ammo += 4;
+                this.persistent.scrap = (this.persistent.scrap || 0) - 1;
+                tryAddItem(this.persistent.stash, 'ammo', 4);
                 this.updateStatText();
+                savePersistent(this.persistent);
                 localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(this.stats));
                 this.cameras.main.flash(100, 0, 255, 0);
             } else {
@@ -5405,20 +7128,20 @@ class HideoutScene extends Phaser.Scene {
 
     updateArmoryUI() {
         let armory = this.stats.hideout.armory;
+        if (!this.armoryBtnText) return;
         if (armory.hasNVG) {
-            this.armoryDesc.setText("NVG UNLOCKED\nPress [N] in game.");
+            if (this.armoryDesc) this.armoryDesc.setText("NVG UNLOCKED\nPress [N] in game.");
             this.armoryBtnText.setText("EQUIPPED");
-            this.armoryTimerText.setText("");
-            this.armoryBtn.disableInteractive();
-            this.armoryBtn.setFillStyle(0x222222);
+            if (this.armoryTimerText) this.armoryTimerText.setText("");
+            if (this.armoryBtn) { this.armoryBtn.disableInteractive(); this.armoryBtn.setFillStyle(0x222222); }
         } else if (armory.crafting) {
-            this.armoryDesc.setText("Fabricating NVG...");
-            this.armoryBtn.disableInteractive();
+            if (this.armoryDesc) this.armoryDesc.setText("Fabricating NVG...");
+            if (this.armoryBtn) this.armoryBtn.disableInteractive();
         } else {
-            this.armoryDesc.setText("Craft Night Vision\nCost: 3 Scrap\nTime: 1m 30s");
+            if (this.armoryDesc) this.armoryDesc.setText("Craft Night Vision\nCost: 3 Scrap\nTime: 1m 30s");
             this.armoryBtnText.setText("CRAFT (3 SCRAP)");
-            this.armoryTimerText.setText("");
-            this.armoryBtn.setInteractive();
+            if (this.armoryTimerText) this.armoryTimerText.setText("");
+            if (this.armoryBtn) this.armoryBtn.setInteractive();
         }
     }
 
@@ -5482,11 +7205,18 @@ class GameScene extends Phaser.Scene {
     constructor() { super('GameScene'); }
     
     preload() {
-        // Load leaper animation frames (embedded for standalone/ GitHub)
-        this.load.image('leaper_idle_0', 'data:image/png;base64,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');
-        this.load.image('leaper_idle_1', 'data:image/png;base64,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');
-        // Load crate sprite (embedded for standalone / GitHub)
-        this.load.image('crate', 'data:image/png;base64,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');
+        // Load leaper animation frames as individual images
+        // Idle frames
+        this.load.image('leaper_idle_0', 'leaper_idle_0.png');
+        this.load.image('leaper_idle_1', 'leaper_idle_1.png');
+        // TODO: Add more frames as they become available
+        // this.load.image('leaper_idle_2', 'leaper_idle_2.png');
+        // this.load.image('leaper_idle_3', 'leaper_idle_3.png');
+        // this.load.image('leaper_crawl_0', 'leaper_crawl_0.png');
+        // etc...
+        
+        // Load crate sprite
+        this.load.image('crate', 'sprite_crate.png');
         
         const graphics = this.make.graphics({ x: 0, y: 0, add: false });
         
@@ -5829,6 +7559,9 @@ class GameScene extends Phaser.Scene {
         this.isDodging = false;
         this.dodgeCooldown = 0;
         this.lastDodgeTime = 0;
+
+        // Crouch: toggle with C; no footstep noise, leapers don't target you
+        this.isCrouching = false;
         
         // Reload state
         this.isReloading = false;
@@ -5913,12 +7646,23 @@ class GameScene extends Phaser.Scene {
             this.spawnLevelEntities(this.currentLevel);
         }
 
+        // Over time, spawn enemies from edges so they wander in
+        if (CONFIG.EDGE_SPAWN_ENABLED) {
+            this.edgeSpawnTimer = this.time.addEvent({
+                delay: CONFIG.EDGE_SPAWN_INTERVAL_MS,
+                callback: this.spawnEdgeEnemy,
+                callbackScope: this,
+                loop: true
+            });
+        }
+
         // Colliders
         this.physics.add.collider(this.player, this.walls);
         this.physics.add.collider(this.player, this.crates);
         this.physics.add.collider(this.player, this.debris);
         this.physics.add.collider(this.enemies, this.walls);
-        this.physics.add.collider(this.enemies, this.crates);
+        this.physics.add.collider(this.enemies, this.crates, null, (enemy, crate) => enemy.enemyType !== 'leaper');
+        this.physics.add.collider(this.enemies, this.enemies);
         this.physics.add.collider(this.bullets, this.walls, (b) => { b.setActive(false); b.setVisible(false); b.body.enable = false; });
         this.physics.add.collider(this.bullets, this.crates, (b) => { b.setActive(false); b.setVisible(false); b.body.enable = false; });
         this.physics.add.collider(this.bullets, this.debris, (b) => { b.setActive(false); b.setVisible(false); b.body.enable = false; });
@@ -5928,7 +7672,17 @@ class GameScene extends Phaser.Scene {
             const bullet = (obj1.texture.key === 'bullet') ? obj1 : obj2;
             const enemy = (obj1.texture.key === 'bullet') ? obj2 : obj1;
             if (bullet.active && enemy.active) {
-                if (bullet.isEnemyBullet) return;
+                if (bullet.isEnemyBullet) {
+                    if (enemy.enemyType === 'walker' || enemy.enemyType === 'leaper') {
+                        const damage = CONFIG.ENEMIES.BANDIT.DAMAGE || 1;
+                        if (typeof enemy.takeDamage === 'function') enemy.takeDamage(damage, 'gun', bullet.x, bullet.y);
+                        bullet.hasHit = true;
+                        bullet.setActive(false);
+                        bullet.setVisible(false);
+                        if (bullet.body) bullet.body.enable = false;
+                    }
+                    return;
+                }
                 
                 // Track which enemies this bullet has hit (for piercing)
                 if (!bullet.hitEnemies) bullet.hitEnemies = new Set();
@@ -5988,7 +7742,7 @@ class GameScene extends Phaser.Scene {
                 if (this.lastStandBonus > 0 && this.playerStats.hp / this.playerStats.maxHp <= this.lastStandThreshold) {
                     damage = Math.ceil(damage * (1 + this.lastStandBonus));
                 }
-                if (typeof enemy.takeDamage === 'function') enemy.takeDamage(damage, weaponSource);
+                if (typeof enemy.takeDamage === 'function') enemy.takeDamage(damage, weaponSource, this.player.x, this.player.y);
             }
         });
 
@@ -6037,9 +7791,67 @@ class GameScene extends Phaser.Scene {
             else this.hitPlayer(e.damage, e.x, e.y);
         });
 
+        // Only zombie vs human melee (walker-bandit); no zombie-on-zombie violence
+        this.physics.add.overlap(this.enemies, this.enemies, (e1, e2) => {
+            if (!e1.active || !e2.active) return;
+            const time = this.time.now;
+            const meleeCooldown = 800;
+            const walkerVsBanditCooldown = 350;
+            if (e1.enemyType === 'walker' && e2.enemyType === 'bandit') {
+                if ((e1.lastMeleeHitTime || 0) + walkerVsBanditCooldown <= time) {
+                    e2.takeDamage(e1.damage, 'melee', e1.x, e1.y);
+                    e1.lastMeleeHitTime = time;
+                }
+            } else if (e1.enemyType === 'leaper' && e2.enemyType === 'bandit' && e1.state === 'LEAP') {
+                // Same as player: leaper lands on bandit and immobilizes them (always pin)
+                const cfg = CONFIG.ENEMIES.LEAPER;
+                e1.state = 'PINNING';
+                e1.pinnedTarget = e2;
+                e1.pinHitCount = 0;
+                e1.lastPinDamageTime = time;
+                e2.pinnedByLeaper = e1;
+                e1.setVelocity(0);
+                e2.setVelocity(0);
+                const pct = cfg.PIN_DAMAGE_FIRST_PCT != null ? cfg.PIN_DAMAGE_FIRST_PCT : 0.1;
+                const dmg = Math.max(1, Math.ceil(e2.maxHp * pct)) * 2; // Leaper double damage to bandits
+                e2.takeDamage(dmg, 'melee', e1.x, e1.y);
+                e1.pinHitCount = 1;
+            } else if (e2.enemyType === 'leaper' && e1.enemyType === 'bandit' && e2.state === 'LEAP') {
+                const cfg = CONFIG.ENEMIES.LEAPER;
+                e2.state = 'PINNING';
+                e2.pinnedTarget = e1;
+                e2.pinHitCount = 0;
+                e2.lastPinDamageTime = time;
+                e1.pinnedByLeaper = e2;
+                e2.setVelocity(0);
+                e1.setVelocity(0);
+                const pct = cfg.PIN_DAMAGE_FIRST_PCT != null ? cfg.PIN_DAMAGE_FIRST_PCT : 0.1;
+                const dmg = Math.max(1, Math.ceil(e1.maxHp * pct)) * 2; // Leaper double damage to bandits
+                e1.takeDamage(dmg, 'melee', e2.x, e2.y);
+                e2.pinHitCount = 1;
+            } else if (e1.enemyType === 'bandit' && e2.enemyType === 'walker') {
+                if ((e1.lastMeleeHitTime || 0) + meleeCooldown <= time) {
+                    const cfg = CONFIG.ENEMIES.BANDIT;
+                    e2.takeDamage(cfg.DAMAGE || 1, 'melee', e1.x, e1.y);
+                    e1.lastMeleeHitTime = time;
+                }
+                if ((e2.lastMeleeHitTime || 0) + walkerVsBanditCooldown <= time) {
+                    e1.takeDamage(e2.damage, 'melee', e2.x, e2.y);
+                    e2.lastMeleeHitTime = time;
+                }
+            } else if (e1.enemyType === 'bandit' && e2.enemyType === 'leaper') {
+                if ((e1.lastMeleeHitTime || 0) + meleeCooldown <= time) {
+                    const cfg = CONFIG.ENEMIES.BANDIT;
+                    e2.takeDamage(cfg.DAMAGE || 1, 'melee', e1.x, e1.y);
+                    e1.lastMeleeHitTime = time;
+                }
+            }
+        });
+
         this.physics.add.overlap(this.player, this.pickups, (p, item) => {
             this.applyLoot(item.getData('type'));
             item.destroy();
+            this.onPlayerSearchNoise(this.player.x, this.player.y);
         });
 
         // Input
@@ -6059,11 +7871,18 @@ class GameScene extends Phaser.Scene {
             consumable1: Phaser.Input.Keyboard.KeyCodes.ONE,
             consumable2: Phaser.Input.Keyboard.KeyCodes.TWO,
             consumable3: Phaser.Input.Keyboard.KeyCodes.THREE,
-            laser: Phaser.Input.Keyboard.KeyCodes.L
+            laser: Phaser.Input.Keyboard.KeyCodes.L,
+            flashlight: Phaser.Input.Keyboard.KeyCodes.T,
+            crouch: Phaser.Input.Keyboard.KeyCodes.C,
+            visionDebug: Phaser.Input.Keyboard.KeyCodes.V
         });
+        
+        // Sensory overlay (vision cones, sound radii) - V toggles for testing
+        this.showSensoryOverlay = true;
         
         // Laser sight toggle (default on)
         this.laserEnabled = true;
+        this.flashlightOn = true;
         this.input.on('pointerdown', (p) => this.fireBullet(p));
         
         // Mouse wheel for weapon switching
@@ -6087,12 +7906,29 @@ class GameScene extends Phaser.Scene {
         this.lightShape = this.make.graphics({ x: 0, y: 0, add: false });
         const mask = this.lightShape.createGeometryMask();
         mask.setInvertAlpha(true);
-        this.darkness = this.add.rectangle(400, 300, 800, 600, 0x000000, 0.95).setDepth(90);
+        this.darkness = this.add.rectangle(400, 300, 800, 600, 0x000000, 0).setDepth(90);
         this.darkness.setMask(mask);
         this.nvgLayer = this.add.rectangle(400, 300, 800, 600, 0x00ff00, 0.2).setDepth(95).setVisible(false);
         
+        this.walkerVisionGraphics = this.add.graphics().setDepth(85).setVisible(true); // Testing: walker + bandit vision cones
+        this.leaperVisionGraphics = this.add.graphics().setDepth(86).setVisible(true); // Testing: leaper sensory
+        
         // Low HP Vignette - red edges when health is low
         this.vignetteGraphics = this.add.graphics().setDepth(105);
+        
+        // Test: spawn one extra enemy button (bottom-right)
+        this.spawnEnemyBtn = this.add.rectangle(720, 570, 140, 28, 0x444466).setDepth(106).setInteractive({ useHandCursor: true });
+        this.spawnEnemyBtnText = this.add.text(720, 570, '+1 Enemy', { fontSize: '14px', fill: '#aaa' }).setOrigin(0.5).setDepth(107);
+        this.spawnEnemyBtn.on('pointerover', () => { this.spawnEnemyBtn.setFillStyle(0x555577); this.spawnEnemyBtnText.setFill('#ccc'); });
+        this.spawnEnemyBtn.on('pointerout', () => { this.spawnEnemyBtn.setFillStyle(0x444466); this.spawnEnemyBtnText.setFill('#aaa'); });
+        this.spawnEnemyBtn.on('pointerdown', () => {
+            if (!this.player || !this.player.body) return;
+            const offset = 280 + Math.random() * 120;
+            const angle = Math.random() * Math.PI * 2;
+            const x = Phaser.Math.Clamp(this.player.x + Math.cos(angle) * offset, 100, 700);
+            const y = Phaser.Math.Clamp(this.player.y + Math.sin(angle) * offset, 100, 500);
+            this.spawnEnemy('bandit', x, y, true);
+        });
         
         // Scene shutdown cleanup
         this.events.on('shutdown', this.shutdown, this);
@@ -6108,10 +7944,21 @@ class GameScene extends Phaser.Scene {
             this.vignetteGraphics.destroy();
             this.vignetteGraphics = null;
         }
+        if (this.walkerVisionGraphics) {
+            this.walkerVisionGraphics.destroy();
+            this.walkerVisionGraphics = null;
+        }
+        if (this.leaperVisionGraphics) {
+            this.leaperVisionGraphics.destroy();
+            this.leaperVisionGraphics = null;
+        }
         if (this.uiGraphics) {
             this.uiGraphics.destroy();
             this.uiGraphics = null;
         }
+        if (this.edgeSpawnTimer) { this.edgeSpawnTimer.destroy(); this.edgeSpawnTimer = null; }
+        if (this.spawnEnemyBtn) { this.spawnEnemyBtn.destroy(); this.spawnEnemyBtn = null; }
+        if (this.spawnEnemyBtnText) { this.spawnEnemyBtnText.destroy(); this.spawnEnemyBtnText = null; }
         this.events.off('shutdown', this.shutdown, this);
     }
 
@@ -6232,7 +8079,8 @@ class GameScene extends Phaser.Scene {
             return;
         }
         if (this.isDodging || this.isPinned || this.isReloading) return;
-        
+        if (this.isCrouching) return; // Can't dodge while crouched
+
         // Get movement direction or face direction
         let vx = 0, vy = 0;
         if (this.cursors.left.isDown || this.wasd.A.isDown) vx = -1;
@@ -6294,8 +8142,8 @@ class GameScene extends Phaser.Scene {
             return;
         }
         
-        // No reserve ammo
-        if (this.playerStats.ammo <= 0) {
+        const reserveAmmo = countItemInGrid(this.playerStats.backpack, 'ammo');
+        if (reserveAmmo <= 0) {
             this.showFloatingText(this.player.x, this.player.y - 40, "NO AMMO!", 0xff0000);
             return;
         }
@@ -6309,10 +8157,10 @@ class GameScene extends Phaser.Scene {
         
         this.reloadTimer = this.time.delayedCall(reloadTime, () => {
             const needed = effectiveMagSize - this.playerStats.magazines[weapon];
-            const toLoad = Math.min(needed, this.playerStats.ammo);
+            const toLoad = Math.min(needed, countItemInGrid(this.playerStats.backpack, 'ammo'));
             
             this.playerStats.magazines[weapon] += toLoad;
-            this.playerStats.ammo -= toLoad;
+            removeItemFromGrid(this.playerStats.backpack, 'ammo', toLoad);
             
             this.isReloading = false;
             this.reloadTimer = null;
@@ -6618,7 +8466,7 @@ class GameScene extends Phaser.Scene {
         
         // Second pass: apply damage
         enemiesInRange.forEach(({ enemy, damage }) => {
-            if (enemy.takeDamage) enemy.takeDamage(damage, 'grenade');
+            if (enemy.takeDamage) enemy.takeDamage(damage, 'grenade', x, y);
             
             // Knockback (only if enemy still alive and has body)
             if (enemy.active && enemy.body) {
@@ -6679,7 +8527,7 @@ class GameScene extends Phaser.Scene {
             if (dist < cfg.EXPLOSION_RADIUS && dist > 0) { // dist > 0 prevents self-damage
                 const damageMult = 1 - (dist / cfg.EXPLOSION_RADIUS) * 0.5;
                 const damage = Math.ceil(cfg.ENEMY_DAMAGE * damageMult);
-                if (enemy.takeDamage) enemy.takeDamage(damage, 'explosion');
+                if (enemy.takeDamage) enemy.takeDamage(damage, 'explosion', x, y);
                 
                 // Knockback
                 if (enemy.active && enemy.body) {
@@ -6715,7 +8563,22 @@ class GameScene extends Phaser.Scene {
         this.invContainer = this.add.container(400, 300).setDepth(300).setVisible(false);
         const bg = this.add.rectangle(0, 0, 600, 400, 0x111111, 0.9).setStrokeStyle(4, 0x444444);
         const title = this.add.text(0, -180, "INVENTORY", { fontSize: '32px', fill: '#fff' }).setOrigin(0.5);
-        this.invText = this.add.text(-280, -140, "", { fontSize: '18px', fill: '#ccc', lineSpacing: 10 });
+        this.invGridGraphics = this.add.graphics();
+        this.invGridTexts = [];
+        const cellSize = 22;
+        const gridX = -278;
+        const gridY = -138;
+        for (let row = 0; row < 12; row++) {
+            for (let col = 0; col < 12; col++) {
+                const tx = gridX + col * (cellSize + 1);
+                const ty = gridY + row * (cellSize + 1);
+                const t = this.add.text(tx + cellSize/2 + 0.5, ty + cellSize/2 + 0.5, '', { fontSize: '10px', fill: '#ccc' }).setOrigin(0.5);
+                this.invGridTexts.push({ row, col, tx, ty, t });
+            }
+        }
+        this.invCellSize = cellSize;
+        this.invGridOrigin = { x: gridX, y: gridY };
+        this.invText = this.add.text(30, -140, "", { fontSize: '16px', fill: '#ccc', lineSpacing: 8 });
         this.armorSlots = {};
         const slots = [
             { id: 'head', x: 150, y: -100, label: 'HEAD' },
@@ -6730,6 +8593,8 @@ class GameScene extends Phaser.Scene {
             this.invContainer.add([slotBg, lbl, itemTxt]);
             this.armorSlots[s.id] = itemTxt;
         });
+        this.invContainer.add([this.invGridGraphics]);
+        this.invGridTexts.forEach(o => this.invContainer.add(o.t));
         this.invContainer.add([bg, title, this.invText]);
     }
 
@@ -6750,8 +8615,8 @@ class GameScene extends Phaser.Scene {
         
         this.invText.setText(
             `HP: ${this.playerStats.hp}/${this.playerStats.maxHp}\n` +
-            `AMMO: ${mag}/${effectiveMagSize} (${this.playerStats.ammo} reserve)\n` +
-            `GRENADES: ${this.playerStats.grenades}/${CONFIG.GRENADE.MAX_CARRY}\n` +
+            `AMMO: ${mag}/${effectiveMagSize} (${countItemInGrid(this.playerStats.backpack, 'ammo')}) reserve\n` +
+            `GREN: ${this.playerStats.grenades}/${CONFIG.GRENADE.MAX_CARRY}\n` +
             `SCRAP: ${this.playerStats.scrap}\n\n` +
             `WEAPON: ${weapon.toUpperCase()}\n` +
             `${modText}\n` +
@@ -6767,6 +8632,38 @@ class GameScene extends Phaser.Scene {
                 txtObj.setText("EMPTY");
                 txtObj.setColor('#555');
             }
+        }
+
+        // Draw backpack grid
+        if (this.invGridGraphics && this.invGridTexts) {
+            this.invGridGraphics.clear();
+            const cs = this.invCellSize || 22;
+            const gap = 1;
+            const backpack = this.playerStats.backpack || { gridW: 12, gridH: 12, items: [] };
+            const items = Array.isArray(backpack.items) ? backpack.items : [];
+            const occupied = new Set();
+            items.forEach(p => {
+                for (let r = 0; r < (p.sizeH || 1); r++)
+                    for (let c = 0; c < (p.sizeW || 1); c++) occupied.add(`${p.row + r},${p.col + c}`);
+            });
+            this.invGridTexts.forEach(o => {
+                o.t.setText('');
+                const isOccupied = occupied.has(`${o.row},${o.col}`);
+                this.invGridGraphics.fillStyle(isOccupied ? 0x334433 : 0x222222, 1);
+                this.invGridGraphics.fillRect(this.invGridOrigin.x + o.col * (cs + gap), this.invGridOrigin.y + o.row * (cs + gap), cs, cs);
+                this.invGridGraphics.lineStyle(1, 0x444444, 0.8);
+                this.invGridGraphics.strokeRect(this.invGridOrigin.x + o.col * (cs + gap), this.invGridOrigin.y + o.row * (cs + gap), cs, cs);
+            });
+            items.forEach(p => {
+                const cfg = getInventoryItemConfig(p.itemId);
+                const label = (cfg && cfg.icon) ? cfg.icon : (p.itemId || '?').slice(0, 2).toUpperCase();
+                const countStr = (p.count > 1) ? String(p.count) : '';
+                const cell = this.invGridTexts.find(o => o.row === p.row && o.col === p.col);
+                if (cell) {
+                    cell.t.setText(countStr ? label + ' ' + countStr : label);
+                    cell.t.setColor('#ccc');
+                }
+            });
         }
     }
 
@@ -7065,34 +8962,46 @@ class GameScene extends Phaser.Scene {
         // Update minimap
         this.updateMinimap();
     }
-    
-    spawnRoomEntities(roomData, isRiskRoom = false) {
+
+    /** Create a crate with consistent depth/visibility so it always renders above floor. */
+    createCrateAt(x, y, lootID) {
+        const crate = this.crates.create(x, y, 'crate').setScale(0.5).refreshBody().setData('lootID', lootID);
+        crate.setDepth(10).setVisible(true);
+        return crate;
+    }
+
+    /** Restore unlooted crates from room's saved state (e.g. after re-entering or exiting risk room). */
+    restoreCratesFromState(room) {
+        if (!room || !room.crateState || room.crateState.length === 0) return;
+        // Only restore when group is empty so we never stack crates (e.g. after transition cleared them)
+        if (this.crates.countActive() > 0) return;
+        room.crateState.forEach(s => {
+            this.createCrateAt(s.x, s.y, s.lootID);
+        });
+        // Clear so we don't re-apply the same state; it will be repopulated when we leave the room
+        room.crateState = [];
+    }
+
+    spawnRoomEntities(roomData, isRiskRoom = false, skipCrates = false) {
         const chunk = roomData.chunk;
         const level = this.currentLevel;
         
-        // Determine enemy types based on level
+        // Determine enemy types based on level (walker always included so they spawn with leapers etc.)
         const levelEnemyTypes = {
-            1: ['walker', 'bandit', 'leaper'],
-            2: ['bandit', 'leaper', 'walker'],
-            3: ['walker', 'spitter', 'bandit'],
-            4: ['spitter', 'walker', 'leaper'],
-            5: ['spitter', 'walker', 'boss'],
-            6: ['exploder', 'walker', 'bandit', 'spitter'],
-            7: ['walker', 'necromancer']
+            1: ['walker', 'walker', 'leaper', 'bandit', 'leaper'],
+            2: ['walker', 'walker', 'bandit', 'leaper', 'leaper'],
+            3: ['walker', 'walker', 'leaper', 'spitter', 'bandit'],
+            4: ['walker', 'walker', 'spitter', 'leaper', 'leaper'],
+            5: ['walker', 'spitter', 'leaper', 'boss'],
+            6: ['walker', 'walker', 'exploder', 'leaper', 'bandit', 'spitter'],
+            7: ['walker', 'leaper', 'necromancer']
         };
+        const ZOMBIE_TYPES = ['walker', 'leaper', 'spitter', 'exploder'];
         
-        // Determine loot pool based on level (map spawns to reveal minimap)
-        const levelLootPools = {
-            1: ['map', 'key', 'flashlight', 'shotgun', 'ammo', 'ammo', 'helmet', 'vest', 'scrap'],
-            2: ['map', 'molotov', 'shotgun', 'ammo', 'ammo', 'scrap', 'helmet', 'vest', 'plug'],
-            3: ['map', 'key', 'ammo', 'ammo', 'meds', 'meds', 'scrap', 'grenade'],
-            4: ['map', 'key', 'smg', 'ammo', 'ammo', 'ammo', 'grenade', 'grenade', 'meds', 'scrap', 'plug'],
-            5: ['map', 'ammo', 'ammo', 'ammo', 'meds', 'meds', 'grenade', 'scrap', 'extended_mag'],
-            6: ['map', 'key', 'rifle', 'ammo', 'ammo', 'ammo', 'meds', 'grenade', 'grenade', 'suppressor', 'rapid_fire'],
-            7: ['map', 'key', 'crossbow', 'ammo', 'ammo', 'meds', 'meds', 'laser_sight', 'damage_barrel', 'materials']
-        };
-        
-        let enemyTypes = levelEnemyTypes[level] || ['walker'];
+        // Determine loot pool from CONFIG (single source of truth)
+        const levelLootPools = CONFIG.LOOT.LEVEL_POOLS || {};
+        let enemyTypes = levelEnemyTypes[level] || ['leaper'];
+        if (CONFIG.WALKER_AI_TEST_MODE) enemyTypes = ['walker', 'leaper', 'bandit'];
         let lootPool = [...(levelLootPools[level] || ['ammo', 'scrap'])];
         
         // Risk room modifications
@@ -7101,22 +9010,35 @@ class GameScene extends Phaser.Scene {
         if (isRiskRoom) {
             enemyMultiplier = CONFIG.RISK_ROOM.ENEMY_MULTIPLIER;
             lootMultiplier = CONFIG.RISK_ROOM.LOOT_MULTIPLIER;
-            // Add guaranteed mod drop
-            const randomMod = CONFIG.RISK_ROOM.GUARANTEED_DROPS[
-                Math.floor(Math.random() * CONFIG.RISK_ROOM.GUARANTEED_DROPS.length)
-            ];
-            lootPool.push(randomMod);
+            // Add guaranteed mod drop (rarity-weighted)
+            lootPool.push(pickModByRarity());
+            // Add one bonus item from risk-only pool
+            const bonusPool = CONFIG.RISK_ROOM.BONUS_LOOT;
+            if (bonusPool && bonusPool.length > 0) {
+                lootPool.push(bonusPool[Math.floor(Math.random() * bonusPool.length)]);
+            }
             // Upgrade enemy types
             enemyTypes = enemyTypes.map(type => CONFIG.RISK_ROOM.ENEMY_UPGRADES[type] || type);
+            if (CONFIG.WALKER_AI_TEST_MODE) enemyTypes = ['walker', 'leaper', 'bandit'];
         }
         
-        // Spawn enemies at spawn points
+        // Spawn enemies at spawn points (predefined count per level)
+        const minDist = CONFIG.SPAWN_MIN_DISTANCE != null ? CONFIG.SPAWN_MIN_DISTANCE : 80;
         const spawnPoints = [...chunk.spawnPoints];
-        Phaser.Utils.Array.Shuffle(spawnPoints);
+        const baseEnemyCount = CONFIG.ENEMIES_PER_LEVEL[level] != null ? CONFIG.ENEMIES_PER_LEVEL[level] : 10;
+        while (spawnPoints.length < baseEnemyCount) {
+            const src = spawnPoints[spawnPoints.length % chunk.spawnPoints.length];
+            for (let attempt = 0; attempt < 30; attempt++) {
+                const offset = 50 + Math.min(attempt * 8, 80);
+                const nx = Phaser.Math.Clamp(src.x + Phaser.Math.Between(-offset, offset), 80, 720);
+                const ny = Phaser.Math.Clamp(src.y + Phaser.Math.Between(-offset, offset), 80, 520);
+                const tooClose = spawnPoints.some(p => Phaser.Math.Distance.Between(nx, ny, p.x, p.y) < minDist);
+                if (!tooClose) { spawnPoints.push({ x: nx, y: ny }); break; }
+                if (attempt === 29) spawnPoints.push({ x: nx, y: ny });
+            }
+        }
         
-        // Determine enemy count (2-4 per room, modified by level and risk)
-        let baseEnemyCount = Math.min(2 + Math.floor(level / 2), spawnPoints.length);
-        let enemyCount = Math.floor(baseEnemyCount * enemyMultiplier);
+        let enemyCount = Math.floor(Math.min(baseEnemyCount, spawnPoints.length) * enemyMultiplier);
         
         // Boss rooms have special spawning
         if (chunk.isBossRoom) {
@@ -7129,7 +9051,7 @@ class GameScene extends Phaser.Scene {
                 this.time.delayedCall(500, () => sfx.bossRoar());
                 // Support enemies
                 enemyCount = 2;
-                enemyTypes = ['spitter', 'walker'];
+                enemyTypes = ['spitter', 'leaper'];
             } else if (level === 7) {
                 this.spawnEnemy('necromancer', 400, 80);
                 this.bossBar.setVisible(true);
@@ -7154,17 +9076,52 @@ class GameScene extends Phaser.Scene {
             }
         }
         
-        // Spawn regular enemies
-        for (let i = 0; i < enemyCount && i < spawnPoints.length; i++) {
-            const pos = spawnPoints[i];
-            const enemyType = enemyTypes[Math.floor(Math.random() * enemyTypes.length)];
-            // Don't spawn bosses from random pool
-            if (enemyType !== 'boss' && enemyType !== 'necromancer') {
+        // Build spawn list: configurable % zombies / bandits (WALKERS_ONLY_SPAWN = only walker type)
+        let zombiePool = (levelEnemyTypes[level] || ['leaper']).filter(t => ZOMBIE_TYPES.includes(t));
+        if (CONFIG.WALKERS_ONLY_SPAWN) zombiePool = ['leaper'];
+        if (zombiePool.length > 0 && !zombiePool.includes('walker')) zombiePool.push('walker');
+        const hasBandit = (levelEnemyTypes[level] || []).includes('bandit');
+        const banditPct = (CONFIG.BANDIT_PCT != null ? CONFIG.BANDIT_PCT : 30) / 100;
+        const banditsOnly = banditPct >= 1;
+        const banditCount = banditsOnly ? enemyCount : (hasBandit ? Math.round(enemyCount * banditPct) : 0);
+        const zombieCount = enemyCount - banditCount;
+        const spawnList = [];
+        for (let i = 0; i < zombieCount && zombiePool.length > 0; i++) {
+            spawnList.push(zombiePool[Math.floor(Math.random() * zombiePool.length)]);
+        }
+        for (let i = 0; i < banditCount; i++) spawnList.push('bandit');
+        Phaser.Utils.Array.Shuffle(spawnList);
+        
+        const usedIndices = [];
+        for (let i = 0; i < spawnList.length; i++) {
+            const enemyType = spawnList[i];
+            if (enemyType === 'boss' || enemyType === 'necromancer') continue;
+            let bestIdx = -1;
+            if (usedIndices.length === 0) {
+                bestIdx = Math.floor(Math.random() * spawnPoints.length);
+            } else {
+                let bestMinDist = -1;
+                for (let j = 0; j < spawnPoints.length; j++) {
+                    if (usedIndices.includes(j)) continue;
+                    const p = spawnPoints[j];
+                    let minD = Infinity;
+                    for (const k of usedIndices) {
+                        const d = Phaser.Math.Distance.Between(p.x, p.y, spawnPoints[k].x, spawnPoints[k].y);
+                        if (d < minD) minD = d;
+                    }
+                    if (minD > bestMinDist) { bestMinDist = minD; bestIdx = j; }
+                }
+                if (bestIdx < 0) bestIdx = usedIndices[usedIndices.length - 1];
+            }
+            if (bestIdx >= 0) {
+                usedIndices.push(bestIdx);
+                const pos = spawnPoints[bestIdx];
                 this.spawnEnemy(enemyType, pos.x, pos.y);
             }
         }
         
-        // Spawn loot crates - filter out positions near doors
+        // Spawn loot crates - filter out positions near doors (skip if restoring from saved state)
+        if (!skipCrates) {
         const doorZones = [
             { x: 400, y: 30 },   // North door
             { x: 400, y: 570 },  // South door
@@ -7196,8 +9153,8 @@ class GameScene extends Phaser.Scene {
             Phaser.Utils.Array.Shuffle(crateSlots);
         }
         
-        // Essential items tracking
-        const levelsNeedingKey = [1, 3, 4, 6]; // Levels that require keys
+        // Essential items tracking (from CONFIG)
+        const levelsNeedingKey = CONFIG.LOOT.LEVELS_NEEDING_KEY || [1, 3, 4, 6];
         const needsKey = levelsNeedingKey.includes(level);
         
         // Track spawning at grid level
@@ -7213,8 +9170,8 @@ class GameScene extends Phaser.Scene {
             this.mapSpawned = true;
         }
         
-        // Key spawns in first NON-start room (gives reason to explore)
-        if (needsKey && !this.keySpawned && !roomData.isStart && lootPool.includes('key')) {
+        // Key spawns in START room on key levels so it's always findable (no risk of it being in an unvisited room)
+        if (needsKey && !this.keySpawned && roomData.isStart && lootPool.includes('key')) {
             essentialItems.push('key');
             this.keySpawned = true;
         }
@@ -7239,7 +9196,7 @@ class GameScene extends Phaser.Scene {
         for (let i = 0; i < crateCount; i++) {
             const pos = crateSlots[i];
             const lootID = roomLoot[i % roomLoot.length];
-            this.crates.create(pos.x, pos.y, 'crate').setScale(0.5).refreshBody().setData('lootID', lootID);
+            this.createCrateAt(pos.x, pos.y, lootID);
         }
         
         // Emergency fallback: if essential items couldn't spawn due to no crate slots, spawn them directly
@@ -7249,8 +9206,9 @@ class GameScene extends Phaser.Scene {
             ];
             for (let i = 0; i < Math.min(essentialItems.length, fallbackPositions.length); i++) {
                 const pos = fallbackPositions[i];
-                this.crates.create(pos.x, pos.y, 'crate').setScale(0.5).refreshBody().setData('lootID', essentialItems[i]);
+                this.createCrateAt(pos.x, pos.y, essentialItems[i]);
             }
+        }
         }
     }
     
@@ -7264,13 +9222,25 @@ class GameScene extends Phaser.Scene {
         const currentRoom = this.roomGrid.rooms[this.roomGrid.currentRoom];
         const targetRoom = this.roomGrid.rooms[targetRoomIndex];
         
-        // Mark current room as cleared if all enemies dead
-        if (this.enemies.countActive() === 0) {
+        // Mark current room as cleared if all room-spawned enemies are dead (ignore edge-spawned so they don't force "clear twice")
+        const roomEnemyCount = this.enemies.getChildren().filter(e => e.active && !e.edgeSpawned).length;
+        if (roomEnemyCount === 0) {
             currentRoom.cleared = true;
         }
         
-        // Save current room state
+        // Save current room state (including unlooted crates so they persist when re-entering)
         currentRoom.enemiesRemaining = this.enemies.countActive();
+        const crateList = this.crates.getChildren()
+            .filter(c => c.active && c.visible)
+            .map(c => ({ x: c.x, y: c.y, lootID: c.getData('lootID') }));
+        // Deduplicate by position so one crate per slot (avoid stacking when restoring)
+        const seen = new Set();
+        currentRoom.crateState = crateList.filter(s => {
+            const key = `${s.x}|${s.y}`;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        });
         
         // Play transition sound
         sfx.doorOpen();
@@ -7292,9 +9262,13 @@ class GameScene extends Phaser.Scene {
             // Setup new room
             this.setupRoom(targetRoom);
             
-            // Only spawn entities if room hasn't been cleared
+            // Restore crates from saved state if we have it (re-entering room); otherwise spawn new ones
+            const hasSavedCrates = targetRoom.crateState && targetRoom.crateState.length > 0;
+            if (hasSavedCrates) {
+                this.restoreCratesFromState(targetRoom);
+            }
             if (!targetRoom.cleared) {
-                this.spawnRoomEntities(targetRoom, false);
+                this.spawnRoomEntities(targetRoom, false, hasSavedCrates);
             }
             
             // Position player near the door they entered from
@@ -7345,6 +9319,17 @@ class GameScene extends Phaser.Scene {
         this.cameras.main.fadeOut(200, 0, 0, 0);
         
         this.time.delayedCall(200, () => {
+            // Save main room crate state so we can restore when exiting risk room (dedupe by position)
+            const crateList = this.crates.getChildren()
+                .filter(c => c.active && c.visible)
+                .map(c => ({ x: c.x, y: c.y, lootID: c.getData('lootID') }));
+            const seen = new Set();
+            currentRoom.crateState = crateList.filter(s => {
+                const key = `${s.x}|${s.y}`;
+                if (seen.has(key)) return false;
+                seen.add(key);
+                return true;
+            });
             // Clear current room elements completely
             this.enemies.clear(true, true);
             this.bullets.clear(true, true);
@@ -7430,37 +9415,77 @@ class GameScene extends Phaser.Scene {
     
     spawnRiskRoomEntities() {
         const level = this.currentLevel;
+        const ZOMBIE_TYPES = ['walker', 'leaper', 'spitter', 'exploder'];
+        const riskEnemyCounts = CONFIG.RISK_ROOM.ENEMIES_PER_LEVEL || { 1: 8, 2: 9, 3: 10, 4: 10, 5: 10, 6: 10, 7: 10 };
+        const enemyCount = riskEnemyCounts[level] != null ? riskEnemyCounts[level] : 10;
+        const banditPct = (CONFIG.BANDIT_PCT != null ? CONFIG.BANDIT_PCT : 30) / 100;
+        const banditsOnly = banditPct >= 1;
         
-        // Upgraded enemy types for risk room
         const riskEnemyTypes = {
-            1: ['leaper', 'bandit'],
-            2: ['bandit', 'leaper', 'spitter'],
-            3: ['spitter', 'bandit', 'leaper'],
-            4: ['exploder', 'spitter', 'bandit'],
-            5: ['spitter', 'bandit', 'exploder'],
-            6: ['exploder', 'bandit', 'spitter'],
-            7: ['exploder', 'bandit', 'spitter']
+            1: ['walker', 'leaper', 'bandit'],
+            2: ['walker', 'bandit', 'leaper', 'spitter'],
+            3: ['walker', 'spitter', 'bandit', 'leaper'],
+            4: ['walker', 'exploder', 'spitter', 'bandit'],
+            5: ['walker', 'spitter', 'bandit', 'exploder'],
+            6: ['walker', 'exploder', 'bandit', 'spitter'],
+            7: ['walker', 'exploder', 'bandit', 'spitter']
         };
         
         const enemyTypes = riskEnemyTypes[level] || ['bandit', 'leaper'];
+        let zombiePool = enemyTypes.filter(t => ZOMBIE_TYPES.includes(t));
+        if (CONFIG.WALKERS_ONLY_SPAWN) zombiePool = ['leaper'];
+        if (zombiePool.length > 0 && !zombiePool.includes('walker')) zombiePool.push('walker');
+        const hasBandit = enemyTypes.includes('bandit');
+        const banditCount = banditsOnly ? enemyCount : (hasBandit ? Math.round(enemyCount * banditPct) : 0);
+        const zombieCount = enemyCount - banditCount;
         
-        // Spawn 4-6 enemies in arena positions
         const spawnPoints = [
             { x: 150, y: 300 }, { x: 650, y: 300 },
             { x: 300, y: 150 }, { x: 500, y: 150 },
-            { x: 300, y: 450 }, { x: 500, y: 450 }
+            { x: 300, y: 450 }, { x: 500, y: 450 },
+            { x: 400, y: 200 }, { x: 400, y: 400 },
+            { x: 200, y: 300 }, { x: 600, y: 300 }
         ];
         
-        const enemyCount = 4 + Math.floor(level / 2);
-        for (let i = 0; i < enemyCount && i < spawnPoints.length; i++) {
-            const pos = spawnPoints[i];
-            const enemyType = enemyTypes[Math.floor(Math.random() * enemyTypes.length)];
-            this.spawnEnemy(enemyType, pos.x, pos.y);
+        const spawnList = [];
+        for (let i = 0; i < zombieCount && zombiePool.length > 0; i++) {
+            spawnList.push(zombiePool[Math.floor(Math.random() * zombiePool.length)]);
+        }
+        for (let i = 0; i < banditCount; i++) spawnList.push('bandit');
+        Phaser.Utils.Array.Shuffle(spawnList);
+        
+        const usedIndices = [];
+        for (let i = 0; i < spawnList.length; i++) {
+            let bestIdx = -1;
+            if (usedIndices.length === 0) {
+                bestIdx = Math.floor(Math.random() * spawnPoints.length);
+            } else {
+                let bestMinDist = -1;
+                for (let j = 0; j < spawnPoints.length; j++) {
+                    if (usedIndices.includes(j)) continue;
+                    const p = spawnPoints[j];
+                    let minD = Infinity;
+                    for (const k of usedIndices) {
+                        const d = Phaser.Math.Distance.Between(p.x, p.y, spawnPoints[k].x, spawnPoints[k].y);
+                        if (d < minD) minD = d;
+                    }
+                    if (minD > bestMinDist) { bestMinDist = minD; bestIdx = j; }
+                }
+                if (bestIdx < 0) bestIdx = usedIndices[usedIndices.length - 1];
+            }
+            if (bestIdx >= 0) {
+                usedIndices.push(bestIdx);
+                const pos = spawnPoints[bestIdx];
+                this.spawnEnemy(spawnList[i], pos.x, pos.y);
+            }
         }
         
-        // Spawn guaranteed good loot
+        // Spawn guaranteed good loot (mod is rarity-weighted, plus one from bonus pool)
+        const bonusPool = CONFIG.RISK_ROOM.BONUS_LOOT;
+        const bonusItem = (bonusPool && bonusPool.length > 0) ? bonusPool[Math.floor(Math.random() * bonusPool.length)] : 'scrap';
         const riskLoot = [
-            CONFIG.RISK_ROOM.GUARANTEED_DROPS[Math.floor(Math.random() * CONFIG.RISK_ROOM.GUARANTEED_DROPS.length)],
+            pickModByRarity(),
+            bonusItem,
             'ammo', 'ammo', 'meds', 'grenade', 'scrap'
         ];
         
@@ -7472,7 +9497,7 @@ class GameScene extends Phaser.Scene {
         
         cratePositions.forEach((pos, i) => {
             if (i < riskLoot.length) {
-                this.crates.create(pos.x, pos.y, 'crate').setScale(0.5).refreshBody().setData('lootID', riskLoot[i]);
+                this.createCrateAt(pos.x, pos.y, riskLoot[i]);
             }
         });
     }
@@ -7514,6 +9539,8 @@ class GameScene extends Phaser.Scene {
             
             // Restore the original room (risk room was cleared, so no risk door will appear)
             this.setupRoom(currentRoom);
+            // Restore unlooted crates so sprites and collision are back
+            this.restoreCratesFromState(currentRoom);
             
             // Position player near where risk door was
             this.player.setPosition(700, 450);
@@ -7646,9 +9673,9 @@ class GameScene extends Phaser.Scene {
             this.walls.create(500, 250, 'wall').setScale(1, 3).refreshBody();
             
             // Cover objects (benches, planters)
-            this.crates.create(200, 350, 'crate').setScale(0.5).refreshBody().setTint(0x8B4513); // Bench
-            this.crates.create(600, 350, 'crate').setScale(0.5).refreshBody().setTint(0x8B4513); // Bench
-            this.crates.create(400, 500, 'crate').setScale(0.5).refreshBody().setTint(0x228B22); // Planter
+            this.crates.create(200, 350, 'crate').setScale(0.5).refreshBody().setTint(0x8B4513).setDepth(10).setVisible(true); // Bench
+            this.crates.create(600, 350, 'crate').setScale(0.5).refreshBody().setTint(0x8B4513).setDepth(10).setVisible(true); // Bench
+            this.crates.create(400, 500, 'crate').setScale(0.5).refreshBody().setTint(0x228B22).setDepth(10).setVisible(true); // Planter
             
             // Visual: Balcony indicator
             this.add.rectangle(400, 100, 600, 80, 0x333333, 0.3).setDepth(1);
@@ -7688,43 +9715,48 @@ class GameScene extends Phaser.Scene {
     }
 
     spawnLevelEntities(level) {
-        let loot = [], cratePos = [];
+        const levelPools = CONFIG.LOOT.LEVEL_POOLS || {};
+        let loot = [...(levelPools[level] || ['ammo', 'scrap'])];
+        let cratePos = [];
         if (level === 1) {
-            loot = ['key', 'flashlight', 'shotgun', 'ammo', 'ammo', 'helmet', 'vest', 'scrap'];
             cratePos = [{x:100,y:100}, {x:700,y:500}, {x:50,y:300}, {x:750,y:300}, {x:400,y:400}, {x:200,y:50}, {x:600,y:50}, {x:400,y:500}];
-            this.spawnEnemy('walker', 100, 300);
+            this.spawnEnemy('walker', 400, 350);
+            this.spawnEnemy('walker', 300, 250);
+            this.spawnEnemy('leaper', 100, 300);
             this.spawnEnemy('bandit', 700, 300);
             this.spawnEnemy('leaper', 200, 200);
         } else if (level === 2) {
-            loot = ['molotov', 'shotgun', 'ammo', 'ammo', 'scrap', 'helmet', 'vest', 'plug'];
             cratePos = [{x:100,y:100}, {x:100,y:500}, {x:700,y:100}, {x:700,y:500}, {x:400,y:300}, {x:50,y:250}, {x:750,y:250}, {x:200,y:550}, {x:400,y:550}, {x:600,y:400}];
+            this.spawnEnemy('walker', 400, 300);
+            this.spawnEnemy('walker', 250, 400);
             this.spawnEnemy('bandit', 100, 100);
             this.spawnEnemy('bandit', 700, 100);
             this.spawnEnemy('leaper', 400, 450);
             this.spawnEnemy('leaper', 400, 150);
         } else if (level === 3) {
-            loot = ['key', 'ammo', 'ammo', 'meds', 'meds', 'scrap', 'grenade'];
             cratePos = [{x:100,y:100}, {x:700,y:100}, {x:100,y:500}, {x:700,y:500}, {x:400,y:300}, {x:50,y:300}, {x:750,y:300}];
-            this.spawnEnemy('walker', 400, 100);
-            this.spawnEnemy('walker', 200, 300);
+            this.spawnEnemy('walker', 350, 200);
+            this.spawnEnemy('walker', 450, 400);
+            this.spawnEnemy('leaper', 400, 100);
+            this.spawnEnemy('leaper', 200, 300);
             this.spawnEnemy('spitter', 600, 300);
             this.spawnEnemy('bandit', 100, 500);
             this.spawnEnemy('bandit', 700, 500);
         } else if (level === 4) {
             // SEWERS - Spitter-heavy with tight corridors
-            loot = ['key', 'smg', 'ammo', 'ammo', 'ammo', 'grenade', 'grenade', 'meds', 'scrap', 'plug'];
             cratePos = [{x:50,y:80}, {x:700,y:80}, {x:50,y:520}, {x:700,y:520}, {x:250,y:220}, {x:550,y:220}, {x:250,y:380}, {x:650,y:380}, {x:500,y:550}, {x:150,y:550}];
             // Spitters in the sewers
             this.spawnEnemy('spitter', 300, 250);
             this.spawnEnemy('spitter', 500, 250);
             this.spawnEnemy('spitter', 200, 500);
-            // Walkers emerging from pipes
-            this.spawnEnemy('walker', 100, 200);
-            this.spawnEnemy('walker', 650, 500);
+            // Walkers and leapers
+            this.spawnEnemy('walker', 200, 350);
+            this.spawnEnemy('walker', 500, 350);
+            this.spawnEnemy('leaper', 100, 200);
+            this.spawnEnemy('leaper', 650, 500);
             this.spawnEnemy('leaper', 400, 200);
         } else if (level === 5) {
             // HOSPITAL - Boss fight
-            loot = ['ammo', 'ammo', 'ammo', 'meds', 'meds', 'grenade', 'scrap', 'extended_mag'];
             cratePos = [{x:100,y:450}, {x:700,y:450}, {x:100,y:550}, {x:700,y:550}, {x:300,y:550}, {x:500,y:550}, {x:250,y:250}, {x:550,y:250}];
             // Hospital Boss
             this.spawnEnemy('boss', 400, 150);
@@ -7737,11 +9769,10 @@ class GameScene extends Phaser.Scene {
             // Support enemies
             this.spawnEnemy('spitter', 200, 200);
             this.spawnEnemy('spitter', 600, 200);
-            this.spawnEnemy('walker', 100, 400);
-            this.spawnEnemy('walker', 700, 400);
+            this.spawnEnemy('leaper', 100, 400);
+            this.spawnEnemy('leaper', 700, 400);
         } else if (level === 6) {
             // MALL - Multi-floor combat with exploders
-            loot = ['key', 'rifle', 'ammo', 'ammo', 'ammo', 'meds', 'grenade', 'grenade', 'suppressor', 'rapid_fire'];
             cratePos = [
                 {x:100,y:550}, {x:700,y:550}, {x:100,y:350}, {x:700,y:350},
                 {x:250,y:150}, {x:550,y:150}, {x:400,y:450}, {x:150,y:200},
@@ -7749,10 +9780,11 @@ class GameScene extends Phaser.Scene {
             ];
             
             // Ground floor enemies
+            this.spawnEnemy('walker', 400, 450);
             this.spawnEnemy('exploder', 150, 400);
             this.spawnEnemy('exploder', 650, 400);
-            this.spawnEnemy('walker', 300, 500);
-            this.spawnEnemy('walker', 500, 500);
+            this.spawnEnemy('leaper', 300, 500);
+            this.spawnEnemy('leaper', 500, 500);
             
             // Upper floor bandits (shooting down)
             this.spawnEnemy('bandit', 200, 100);
@@ -7766,19 +9798,18 @@ class GameScene extends Phaser.Scene {
                 if (this.currentLevel === 6) {
                     this.showFloatingText(100, 400, "STORE BREACH!", 0xff0000);
                     this.spawnEnemy('exploder', 80, 450);
-                    this.spawnEnemy('walker', 80, 480);
+                    this.spawnEnemy('leaper', 80, 480);
                 }
             });
             this.time.delayedCall(10000, () => {
                 if (this.currentLevel === 6) {
                     this.showFloatingText(700, 400, "STORE BREACH!", 0xff0000);
                     this.spawnEnemy('exploder', 720, 450);
-                    this.spawnEnemy('walker', 720, 480);
+                    this.spawnEnemy('leaper', 720, 480);
                 }
             });
         } else if (level === 7) {
             // CEMETERY - Stealth section + Necromancer boss
-            loot = ['key', 'crossbow', 'ammo', 'ammo', 'meds', 'meds', 'laser_sight', 'damage_barrel', 'materials'];
             cratePos = [
                 {x:100,y:550}, {x:700,y:550}, {x:200,y:350}, {x:600,y:350},
                 {x:150,y:250}, {x:650,y:250}, {x:400,y:400}, {x:300,y:500},
@@ -7799,9 +9830,9 @@ class GameScene extends Phaser.Scene {
             
             // Graveyard patrol enemies (stealth section)
             this.patrolEnemies = [];
-            const patrol1 = this.spawnPatrolEnemy('walker', 200, 400, [{x:200,y:400}, {x:200,y:300}, {x:300,y:300}, {x:300,y:400}]);
-            const patrol2 = this.spawnPatrolEnemy('walker', 500, 350, [{x:500,y:350}, {x:600,y:350}, {x:600,y:450}, {x:500,y:450}]);
-            const patrol3 = this.spawnPatrolEnemy('walker', 350, 450, [{x:350,y:450}, {x:450,y:450}]);
+            this.spawnEnemy('leaper', 200, 400);
+            this.spawnEnemy('leaper', 500, 350);
+            this.spawnEnemy('leaper', 350, 450);
             
             // Necromancer boss in church area
             this.spawnEnemy('necromancer', 400, 80);
@@ -7814,14 +9845,191 @@ class GameScene extends Phaser.Scene {
         }
         Phaser.Utils.Array.Shuffle(loot);
         cratePos.forEach((p, i) => {
-            if (i < loot.length) this.crates.create(p.x, p.y, 'crate').setScale(0.5).refreshBody().setData('lootID', loot[i]);
+            if (i < loot.length) this.createCrateAt(p.x, p.y, loot[i]);
         });
     }
 
-    spawnEnemy(type, x, y) {
-        this.enemies.add(new Enemy(this, x, y, this.player, type));
+    hasLineOfSight(fromX, fromY, toX, toY) {
+        if (!this.walls || !this.walls.getChildren) return true;
+        const line = new Phaser.Geom.Line(fromX, fromY, toX, toY);
+        const rect = new Phaser.Geom.Rectangle();
+        for (const wall of this.walls.getChildren()) {
+            if (!wall.body) continue;
+            rect.setPosition(wall.body.x, wall.body.y);
+            rect.setSize(wall.body.width, wall.body.height);
+            if (Phaser.Geom.Intersects.LineToRectangle(line, rect)) return false;
+        }
+        return true;
     }
-    
+
+    onUnsuppressedGunshot(shotX, shotY, options = {}) {
+        const time = this.time.now;
+        const leapersOnly = options.leapersOnly === true;
+        this.enemies.getChildren().forEach(e => {
+            if (!e.active) return;
+            if (e.enemyType === 'walker') {
+                if (leapersOnly) return;
+                const wcfg = CONFIG.ENEMIES.WALKER;
+                if (Phaser.Math.Distance.Between(e.x, e.y, shotX, shotY) > wcfg.HEARING_RADIUS) return;
+                e.walkerState = 'GUNSHOT_ALERT';
+                e.gunshotAlertEndTime = time + wcfg.GUNSHOT_ALERT_DURATION;
+                e.gunshotTargetX = shotX;
+                e.gunshotTargetY = shotY;
+            } else if (e.enemyType === 'bandit') {
+                if (leapersOnly) return;
+                const bcfg = CONFIG.ENEMIES.BANDIT;
+                if (Phaser.Math.Distance.Between(e.x, e.y, shotX, shotY) > bcfg.HEARING_RADIUS) return;
+                e.banditState = 'GUNSHOT_ALERT';
+                e.gunshotAlertEndTime = time + bcfg.GUNSHOT_ALERT_DURATION;
+                e.gunshotTargetX = shotX;
+                e.gunshotTargetY = shotY;
+            } else if (e.enemyType === 'leaper') {
+                const lcfg = CONFIG.ENEMIES.LEAPER;
+                if (Phaser.Math.Distance.Between(e.x, e.y, shotX, shotY) > lcfg.HEARING_RADIUS) return;
+                e.state = 'GUNSHOT_ALERT';
+                e.gunshotAlertEndTime = time + (lcfg.GUNSHOT_ALERT_DURATION != null ? lcfg.GUNSHOT_ALERT_DURATION : 3000);
+                e.gunshotTargetX = shotX;
+                e.gunshotTargetY = shotY;
+            }
+        });
+    }
+
+    onPlayerFootstep(playerX, playerY) {
+        const time = this.time.now;
+        this.enemies.getChildren().forEach(e => {
+            if (!e.active) return;
+            if (e.enemyType === 'walker') {
+                const wcfg = CONFIG.ENEMIES.WALKER;
+                const soundRadius = wcfg.SOUND_RADIUS || 180;
+                if (Phaser.Math.Distance.Between(e.x, e.y, playerX, playerY) > soundRadius) return;
+                e.footstepAlertCount = (e.footstepAlertCount || 0) + 1;
+                if (e.footstepAlertCount >= 4) {
+                    e.walkerState = 'GUNSHOT_ALERT';
+                    e.gunshotAlertEndTime = time + wcfg.GUNSHOT_ALERT_DURATION;
+                    e.gunshotTargetX = playerX;
+                    e.gunshotTargetY = playerY;
+                    e.footstepAlertCount = 0;
+                }
+            } else if (e.enemyType === 'bandit') {
+                const bcfg = CONFIG.ENEMIES.BANDIT;
+                const soundRadius = bcfg.SOUND_RADIUS || 200;
+                if (Phaser.Math.Distance.Between(e.x, e.y, playerX, playerY) > soundRadius) return;
+                e.footstepAlertCount = (e.footstepAlertCount || 0) + 1;
+                if (e.footstepAlertCount >= 4) {
+                    e.banditState = 'GUNSHOT_ALERT';
+                    e.gunshotAlertEndTime = time + bcfg.GUNSHOT_ALERT_DURATION;
+                    e.gunshotTargetX = playerX;
+                    e.gunshotTargetY = playerY;
+                    e.footstepAlertCount = 0;
+                }
+            } else if (e.enemyType === 'leaper') {
+                const lcfg = CONFIG.ENEMIES.LEAPER;
+                const soundRadius = lcfg.SOUND_RADIUS || 180;
+                if (Phaser.Math.Distance.Between(e.x, e.y, playerX, playerY) > soundRadius) return;
+                e.state = 'CHASE';
+                e.lastHeardX = playerX;
+                e.lastHeardY = playerY;
+                e.lastHeardTime = time;
+            }
+        });
+    }
+
+    onPlayerSearchNoise(x, y) {
+        const time = this.time.now;
+        this.enemies.getChildren().forEach(e => {
+            if (!e.active) return;
+            if (e.enemyType === 'walker') {
+                const wcfg = CONFIG.ENEMIES.WALKER;
+                const soundRadius = wcfg.SOUND_RADIUS || 180;
+                if (Phaser.Math.Distance.Between(e.x, e.y, x, y) > soundRadius) return;
+                e.walkerState = 'GUNSHOT_ALERT';
+                e.gunshotAlertEndTime = time + wcfg.GUNSHOT_ALERT_DURATION;
+                e.gunshotTargetX = x;
+                e.gunshotTargetY = y;
+            } else if (e.enemyType === 'bandit') {
+                const bcfg = CONFIG.ENEMIES.BANDIT;
+                const soundRadius = bcfg.SOUND_RADIUS || 200;
+                if (Phaser.Math.Distance.Between(e.x, e.y, x, y) > soundRadius) return;
+                e.banditState = 'GUNSHOT_ALERT';
+                e.gunshotAlertEndTime = time + bcfg.GUNSHOT_ALERT_DURATION;
+                e.gunshotTargetX = x;
+                e.gunshotTargetY = y;
+            } else if (e.enemyType === 'leaper') {
+                const lcfg = CONFIG.ENEMIES.LEAPER;
+                const soundRadius = lcfg.SOUND_RADIUS || 180;
+                if (Phaser.Math.Distance.Between(e.x, e.y, x, y) > soundRadius) return;
+                e.state = 'CHASE';
+                e.lastHeardX = x;
+                e.lastHeardY = y;
+                e.lastHeardTime = time;
+            }
+        });
+    }
+
+    getTargetForWalker(walker) {
+        const humanTypes = ['bandit'];
+        const now = this.time.now;
+        // When player is crouching, leapers/walkers don't "see" them (only bandits as targets)
+        const candidates = this.isCrouching ? [] : [this.player];
+        this.enemies.getChildren().forEach(e => {
+            if (!e.active || !humanTypes.includes(e.enemyType)) return;
+            // Include spawn-grace bandits so leapers target them instead of player when you spawn one
+            candidates.push(e);
+        });
+        let best = null;
+        let bestDist = Infinity;
+        candidates.forEach(c => {
+            const d = Phaser.Math.Distance.Between(walker.x, walker.y, c.x, c.y);
+            if (d < bestDist) { bestDist = d; best = c; }
+        });
+        return best || this.player;
+    }
+
+    getTargetForBandit(bandit) {
+        const zombieTypes = ['walker', 'leaper'];
+        const candidates = [this.player];
+        this.enemies.getChildren().forEach(e => {
+            if (e.active && e !== bandit && zombieTypes.includes(e.enemyType)) candidates.push(e);
+        });
+        let best = null;
+        let bestDist = Infinity;
+        candidates.forEach(c => {
+            const d = Phaser.Math.Distance.Between(bandit.x, bandit.y, c.x, c.y);
+            if (d < bestDist) { bestDist = d; best = c; }
+        });
+        return best || this.player;
+    }
+
+    spawnEnemy(type, x, y, fromButton = false, edgeSpawned = false) {
+        if (CONFIG.WALKER_AI_TEST_MODE && !['walker', 'leaper', 'bandit', 'boss', 'necromancer'].includes(type)) type = ['walker', 'leaper', 'bandit'][Math.floor(Math.random() * 3)];
+        const enemy = new Enemy(this, x, y, this.player, type);
+        if (fromButton) enemy.spawnTime = this.time.now;
+        if (edgeSpawned) enemy.edgeSpawned = true;
+        this.enemies.add(enemy);
+    }
+
+    /** Spawn one enemy from a random edge so they wander in over time. */
+    spawnEdgeEnemy() {
+        if (!CONFIG.EDGE_SPAWN_ENABLED || !this.player || !this.player.active) return;
+        if (this.isPaused || this.inRiskRoom || this.isTransitioningRoom || this.isTransitioning) return;
+        const level = this.currentLevel;
+        const ZOMBIE_TYPES = ['walker', 'leaper', 'spitter', 'exploder'];
+        const levelEnemyTypes = {
+            1: ['walker', 'leaper'], 2: ['walker', 'leaper'], 3: ['walker', 'leaper', 'spitter'],
+            4: ['walker', 'leaper', 'spitter'], 5: ['leaper', 'spitter'], 6: ['walker', 'leaper', 'spitter', 'exploder'], 7: ['leaper']
+        };
+        let pool = (levelEnemyTypes[level] || ['walker', 'leaper']).filter(t => ZOMBIE_TYPES.includes(t));
+        if (pool.length === 0) pool = ['walker', 'leaper'];
+        const type = pool[Math.floor(Math.random() * pool.length)];
+        const side = Math.floor(Math.random() * 4);
+        let x, y;
+        if (side === 0) { x = 15; y = 80 + Math.random() * 440; }
+        else if (side === 1) { x = 785; y = 80 + Math.random() * 440; }
+        else if (side === 2) { y = 15; x = 80 + Math.random() * 640; }
+        else { y = 585; x = 80 + Math.random() * 640; }
+        this.spawnEnemy(type, x, y, false, true);
+    }
+
     spawnPatrolEnemy(type, x, y, waypoints) {
         const enemy = new Enemy(this, x, y, this.player, type);
         enemy.isPatrol = true;
@@ -7840,23 +10048,25 @@ class GameScene extends Phaser.Scene {
         if (!this.patrolEnemies) return;
         
         this.patrolEnemies.forEach(enemy => {
-            if (!enemy.active || !enemy.isPatrol) return;
-            
-            // If alerted, chase player instead of patrolling
+            if (!enemy.active) return;
+            if (enemy.enemyType === 'walker') {
+                if (this.stealthAlerted && enemy.walkerState) enemy.walkerState = 'HUNT';
+                return;
+            }
+            if (enemy.enemyType === 'leaper') {
+                if (this.stealthAlerted) enemy.state = 'CHASE';
+                return;
+            }
+            if (!enemy.isPatrol) return;
             if (this.stealthAlerted) {
                 enemy.isPatrol = false;
                 return;
             }
-            
-            // Move to current waypoint
             const wp = enemy.waypoints[enemy.currentWaypoint];
             const dist = Phaser.Math.Distance.Between(enemy.x, enemy.y, wp.x, wp.y);
-            
             if (dist < 10) {
-                // Reached waypoint, move to next
                 enemy.currentWaypoint = (enemy.currentWaypoint + 1) % enemy.waypoints.length;
             } else {
-                // Move toward waypoint
                 this.physics.moveToObject(enemy, wp, enemy.patrolSpeed);
             }
         });
@@ -7935,11 +10145,11 @@ class GameScene extends Phaser.Scene {
             this.detectionText.setColor('#ff0000');
         }
         
-        // All patrol enemies become aggressive
         if (this.patrolEnemies) {
             this.patrolEnemies.forEach(enemy => {
                 if (enemy.active) {
-                    enemy.isPatrol = false;
+                    if (enemy.enemyType === 'walker' && enemy.walkerState) enemy.walkerState = 'HUNT';
+                    else enemy.isPatrol = false;
                 }
             });
         }
@@ -7947,10 +10157,10 @@ class GameScene extends Phaser.Scene {
         // Spawn reinforcement horde
         this.showFloatingText(400, 300, "HORDE INCOMING!", 0xff0000);
         this.time.delayedCall(500, () => {
-            this.spawnEnemy('walker', 100, 500);
-            this.spawnEnemy('walker', 700, 500);
-            this.spawnEnemy('walker', 200, 550);
-            this.spawnEnemy('walker', 600, 550);
+            this.spawnEnemy('leaper', 100, 500);
+            this.spawnEnemy('leaper', 700, 500);
+            this.spawnEnemy('leaper', 200, 550);
+            this.spawnEnemy('leaper', 600, 550);
             this.spawnEnemy('leaper', 400, 580);
         });
     }
@@ -8040,10 +10250,20 @@ class GameScene extends Phaser.Scene {
         }
 
         // Laser sight toggle (L key)
+        if (Phaser.Input.Keyboard.JustDown(this.keys.visionDebug)) {
+            this.showSensoryOverlay = !this.showSensoryOverlay;
+            if (this.walkerVisionGraphics) this.walkerVisionGraphics.setVisible(this.showSensoryOverlay);
+            if (this.leaperVisionGraphics) this.leaperVisionGraphics.setVisible(this.showSensoryOverlay);
+        }
         if (Phaser.Input.Keyboard.JustDown(this.keys.laser)) {
             this.laserEnabled = !this.laserEnabled;
             sfx.click();
             this.showFloatingText(this.player.x, this.player.y - 40, this.laserEnabled ? "LASER ON" : "LASER OFF", 0xff0000);
+        }
+        if (Phaser.Input.Keyboard.JustDown(this.keys.flashlight) && this.playerStats.hasFlashlight) {
+            this.flashlightOn = !this.flashlightOn;
+            sfx.click();
+            this.showFloatingText(this.player.x, this.player.y - 40, this.flashlightOn ? "FLASHLIGHT ON" : "FLASHLIGHT OFF", 0xffffff);
         }
 
         if (this.isPaused) return;
@@ -8051,7 +10271,106 @@ class GameScene extends Phaser.Scene {
         this.drawUI();
         this.drawVignette();
         this.drawLaserSight();
+        this.enemies.getChildren().forEach(e => { e.revealedByFlashlight = false; });
+        if (this.playerStats.hasFlashlight && this.flashlightOn) {
+            const angle = Phaser.Math.Angle.Between(this.player.x, this.player.y, this.input.activePointer.x, this.input.activePointer.y);
+            this.enemies.getChildren().forEach(e => {
+                if (!e.active) return;
+                const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, e.x, e.y);
+                if (dist > CONFIG.PLAYER.FLASHLIGHT_RANGE) return;
+                if (!this.hasLineOfSight(this.player.x, this.player.y, e.x, e.y)) return;
+                const angleToEnemy = Phaser.Math.Angle.Between(this.player.x, this.player.y, e.x, e.y);
+                let diff = angleToEnemy - angle;
+                while (diff > Math.PI) diff -= 2 * Math.PI;
+                while (diff < -Math.PI) diff += 2 * Math.PI;
+                if (Math.abs(diff) <= CONFIG.PLAYER.FLASHLIGHT_ANGLE) {
+                    e.revealedByFlashlight = true;
+                }
+            });
+        }
         this.enemies.getChildren().forEach(e => e.update(time, delta));
+
+        // Walker vs bandit melee: apply by distance (overlap same-group can be unreliable when bodies push)
+        const walkerVsBanditCooldown = 350;
+        const walkerMeleeRange = 50;
+        const bandits = this.enemies.getChildren().filter(e => e.active && e.enemyType === 'bandit');
+        this.enemies.getChildren().forEach(e => {
+            if (!e.active || e.enemyType !== 'walker') return;
+            for (const bandit of bandits) {
+                if (!bandit.active) continue;
+                const dist = Phaser.Math.Distance.Between(e.x, e.y, bandit.x, bandit.y);
+                if (dist > walkerMeleeRange) continue;
+                if ((e.lastMeleeHitTime || 0) + walkerVsBanditCooldown <= time) {
+                    bandit.takeDamage(e.damage, 'melee', e.x, e.y);
+                    e.lastMeleeHitTime = time;
+                    break;
+                }
+            }
+        });
+
+        if (this.walkerVisionGraphics) {
+            this.walkerVisionGraphics.clear();
+            const wcfg = CONFIG.ENEMIES.WALKER;
+            const bcfg = CONFIG.ENEMIES.BANDIT;
+            this.enemies.getChildren().forEach(e => {
+                if (!e.active) return;
+                if (e.enemyType === 'walker' && e.walkerState) {
+                    let facingAngle;
+                    if (e.walkerState === 'HUNT') facingAngle = e.walkerFacingAngle != null ? e.walkerFacingAngle : Phaser.Math.Angle.Between(e.x, e.y, e.target.x, e.target.y);
+                    else if (e.walkerState === 'GUNSHOT_ALERT') facingAngle = Phaser.Math.Angle.Between(e.x, e.y, e.gunshotTargetX, e.gunshotTargetY);
+                    else if (e.walkerState === 'SEARCH') facingAngle = Phaser.Math.Angle.Between(e.x, e.y, e.lastKnownPlayerX, e.lastKnownPlayerY);
+                    else facingAngle = e.patrolDirection;
+                    const alpha = e.walkerState === 'HUNT' ? 0.35 : 0.25;
+                    this.walkerVisionGraphics.fillStyle(0xff0000, alpha);
+                    this.walkerVisionGraphics.slice(e.x, e.y, wcfg.PERCEPTION_RADIUS, facingAngle - wcfg.VISION_ANGLE, facingAngle + wcfg.VISION_ANGLE);
+                    this.walkerVisionGraphics.fill();
+                    this.walkerVisionGraphics.lineStyle(2, 0xff6600, 0.9);
+                    this.walkerVisionGraphics.strokeCircle(e.x, e.y, wcfg.CLOSE_AGGRO_RADIUS || 80);
+                    this.walkerVisionGraphics.lineStyle(2, 0x0088ff, 0.8);
+                    this.walkerVisionGraphics.strokeCircle(e.x, e.y, wcfg.SOUND_RADIUS || 180);
+                } else if (e.enemyType === 'bandit' && e.banditState) {
+                    let facingAngle;
+                    if (e.banditState === 'HUNT') facingAngle = e.banditFacingAngle != null ? e.banditFacingAngle : Phaser.Math.Angle.Between(e.x, e.y, e.target.x, e.target.y);
+                    else if (e.banditState === 'GUNSHOT_ALERT') facingAngle = Phaser.Math.Angle.Between(e.x, e.y, e.gunshotTargetX, e.gunshotTargetY);
+                    else if (e.banditState === 'SEARCH') facingAngle = Phaser.Math.Angle.Between(e.x, e.y, e.lastKnownPlayerX, e.lastKnownPlayerY);
+                    else facingAngle = e.patrolDirection;
+                    const alpha = e.banditState === 'HUNT' ? 0.3 : 0.2;
+                    this.walkerVisionGraphics.fillStyle(0x0088ff, alpha);
+                    this.walkerVisionGraphics.slice(e.x, e.y, bcfg.PERCEPTION_RADIUS, facingAngle - bcfg.VISION_ANGLE, facingAngle + bcfg.VISION_ANGLE);
+                    this.walkerVisionGraphics.fill();
+                    this.walkerVisionGraphics.lineStyle(2, 0xffaa00, 0.8);
+                    this.walkerVisionGraphics.strokeCircle(e.x, e.y, bcfg.CLOSE_AGGRO_RADIUS || 100);
+                    this.walkerVisionGraphics.lineStyle(2, 0x00aaff, 0.7);
+                    this.walkerVisionGraphics.strokeCircle(e.x, e.y, bcfg.SOUND_RADIUS || 200);
+                }
+                // Leapers drawn on leaperVisionGraphics only (below)
+            });
+        }
+        
+        // Leaper perception visuals: blind, sound-only. Cone = direction only. Red = leap trigger. Double blue = hearing.
+        if (this.leaperVisionGraphics) {
+            this.leaperVisionGraphics.clear();
+            const wcfg = CONFIG.ENEMIES.WALKER;
+            const lcfg = CONFIG.ENEMIES.LEAPER;
+            const soundR = lcfg.SOUND_RADIUS != null ? lcfg.SOUND_RADIUS : 180;
+            const hearR = lcfg.HEARING_RADIUS != null ? lcfg.HEARING_RADIUS : 626;
+            const leapR = lcfg.LEAP_TRIGGER_RADIUS != null ? lcfg.LEAP_TRIGGER_RADIUS : 180;
+            this.enemies.getChildren().forEach(e => {
+                if (!e.active || e.enemyType !== 'leaper') return;
+                let facingAngle = e.leaperFacingAngle != null ? e.leaperFacingAngle : 0;
+                if (e.state === 'GUNSHOT_ALERT' && e.gunshotTargetX != null) facingAngle = Phaser.Math.Angle.Between(e.x, e.y, e.gunshotTargetX, e.gunshotTargetY);
+                else if (e.state === 'CHASE' && e.lastHeardX != null) facingAngle = Phaser.Math.Angle.Between(e.x, e.y, e.lastHeardX, e.lastHeardY);
+                this.leaperVisionGraphics.fillStyle(0xff0000, 0.2);
+                this.leaperVisionGraphics.slice(e.x, e.y, wcfg.PERCEPTION_RADIUS, facingAngle - wcfg.VISION_ANGLE, facingAngle + wcfg.VISION_ANGLE);
+                this.leaperVisionGraphics.fill();
+                this.leaperVisionGraphics.lineStyle(2, 0xff0000, 0.95);
+                this.leaperVisionGraphics.strokeCircle(e.x, e.y, leapR);
+                this.leaperVisionGraphics.lineStyle(2, 0x0088ff, 0.7);
+                this.leaperVisionGraphics.strokeCircle(e.x, e.y, soundR);
+                this.leaperVisionGraphics.lineStyle(2, 0x0088ff, 0.5);
+                this.leaperVisionGraphics.strokeCircle(e.x, e.y, hearR);
+            });
+        }
         
         // Update stealth mechanics for Cemetery level
         if (this.isStealthLevel && !this.stealthAlerted) {
@@ -8076,11 +10395,30 @@ class GameScene extends Phaser.Scene {
         if (this.lightShape && this.lightShape.scene) {
             this.lightShape.clear();
             this.lightShape.fillCircle(this.player.x, this.player.y, CONFIG.PLAYER.LIGHT_RADIUS);
-            if (this.playerStats.hasFlashlight) {
+            if (this.playerStats.hasFlashlight && this.flashlightOn) {
                 const angle = Phaser.Math.Angle.Between(this.player.x, this.player.y, this.input.activePointer.x, this.input.activePointer.y);
                 this.lightShape.fillStyle(0xffffff);
                 this.lightShape.slice(this.player.x, this.player.y, CONFIG.PLAYER.FLASHLIGHT_RANGE, angle - CONFIG.PLAYER.FLASHLIGHT_ANGLE, angle + CONFIG.PLAYER.FLASHLIGHT_ANGLE);
                 this.lightShape.fill();
+                this.enemies.getChildren().forEach(e => {
+                    if (!e.active) return;
+                    const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, e.x, e.y);
+                    if (dist > CONFIG.PLAYER.FLASHLIGHT_RANGE) return;
+                    if (!this.hasLineOfSight(this.player.x, this.player.y, e.x, e.y)) return;
+                    const angleToEnemy = Phaser.Math.Angle.Between(this.player.x, this.player.y, e.x, e.y);
+                    let diff = angleToEnemy - angle;
+                    while (diff > Math.PI) diff -= 2 * Math.PI;
+                    while (diff < -Math.PI) diff += 2 * Math.PI;
+                    if (Math.abs(diff) > CONFIG.PLAYER.FLASHLIGHT_ANGLE) return;
+                    if (e.enemyType === 'walker' && e.walkerState) {
+                        e.walkerState = 'HUNT';
+                        e.lastKnownPlayerX = this.player.x;
+                        e.lastKnownPlayerY = this.player.y;
+                        e.walkerFacingAngle = Phaser.Math.Angle.Between(e.x, e.y, this.player.x, this.player.y);
+                        e.goAroundEndTime = 0;
+                        e.wallStuckTimer = 0;
+                    }
+                });
             }
         }
 
@@ -8091,9 +10429,55 @@ class GameScene extends Phaser.Scene {
             } else {
                 this.pinnedBy.setPosition(this.player.x, this.player.y);
                 if (Phaser.Input.Keyboard.JustDown(this.keys.space)) this.recoverFromKnockdown();
+                else {
+                    const cfg = CONFIG.ENEMIES.LEAPER;
+                    const interval = cfg.PIN_DAMAGE_INTERVAL_MS != null ? cfg.PIN_DAMAGE_INTERVAL_MS : 1000;
+                    const now = this.time.now;
+                    if (now - this.lastPinDamageTime >= interval) {
+                        this.lastPinDamageTime = now;
+                        const maxHp = this.playerStats.maxHp;
+                        const pct = (this.pinHitCount || 0) < (cfg.PIN_DAMAGE_FIRST_HITS != null ? cfg.PIN_DAMAGE_FIRST_HITS : 3)
+                            ? (cfg.PIN_DAMAGE_FIRST_PCT != null ? cfg.PIN_DAMAGE_FIRST_PCT : 0.1)
+                            : (cfg.PIN_DAMAGE_AFTER_PCT != null ? cfg.PIN_DAMAGE_AFTER_PCT : 0.2);
+                        const damage = Math.max(1, Math.ceil(maxHp * pct));
+                        this.hitPlayer(damage, this.pinnedBy.x, this.pinnedBy.y, { fromPin: true });
+                        this.pinHitCount = (this.pinHitCount || 0) + 1;
+                    }
+                }
             }
             return;
         }
+
+        // Leaper pinning bandit: same DoT as player pin (tear into them)
+        const cfgLeaper = CONFIG.ENEMIES.LEAPER;
+        this.enemies.getChildren().forEach(e => {
+            if (!e.active || e.enemyType !== 'leaper' || e.state !== 'PINNING' || !e.pinnedTarget) return;
+            const bandit = e.pinnedTarget;
+            if (!bandit.active || bandit.enemyType !== 'bandit') {
+                if (bandit.pinnedByLeaper === e) bandit.pinnedByLeaper = null;
+                e.pinnedTarget = null;
+                e.state = 'COOLDOWN';
+                e.leapTimer = cfgLeaper.COOLDOWN_TIME;
+                return;
+            }
+            const interval = cfgLeaper.PIN_DAMAGE_INTERVAL_MS != null ? cfgLeaper.PIN_DAMAGE_INTERVAL_MS : 1000;
+            const now = this.time.now;
+            if (now - (e.lastPinDamageTime || 0) >= interval) {
+                e.lastPinDamageTime = now;
+                const pct = (e.pinHitCount || 0) < (cfgLeaper.PIN_DAMAGE_FIRST_HITS != null ? cfgLeaper.PIN_DAMAGE_FIRST_HITS : 3)
+                    ? (cfgLeaper.PIN_DAMAGE_FIRST_PCT != null ? cfgLeaper.PIN_DAMAGE_FIRST_PCT : 0.1)
+                    : (cfgLeaper.PIN_DAMAGE_AFTER_PCT != null ? cfgLeaper.PIN_DAMAGE_AFTER_PCT : 0.2);
+                const damage = Math.max(1, Math.ceil(bandit.maxHp * pct)) * 2; // Leaper double damage to bandits
+                bandit.takeDamage(damage, 'melee', e.x, e.y);
+                e.pinHitCount = (e.pinHitCount || 0) + 1;
+                if (bandit.hp <= 0 || !bandit.active) {
+                    bandit.pinnedByLeaper = null;
+                    e.pinnedTarget = null;
+                    e.state = 'COOLDOWN';
+                    e.leapTimer = cfgLeaper.COOLDOWN_TIME;
+                }
+            }
+        });
 
         // Dodge roll (SPACE when not pinned)
         if (Phaser.Input.Keyboard.JustDown(this.keys.space) && !this.isDodging) {
@@ -8121,11 +10505,17 @@ class GameScene extends Phaser.Scene {
             this.useConsumable(2);
         }
 
+        if (Phaser.Input.Keyboard.JustDown(this.keys.crouch)) {
+            this.isCrouching = !this.isCrouching;
+        }
+
         if (!this.isOpening && !this.debrisBurning && !this.isDodging) {
             this.player.setVelocity(0);
             let speed = CONFIG.PLAYER.WALK_SPEED * this.speedMultiplier;
 
-            if ((this.cursors.shift.isDown || this.wasd.SHIFT.isDown) && this.playerStats.stamina > 0) {
+            if (this.isCrouching) {
+                speed = CONFIG.PLAYER.CROUCH_SPEED * this.speedMultiplier;
+            } else if ((this.cursors.shift.isDown || this.wasd.SHIFT.isDown) && this.playerStats.stamina > 0) {
                 speed = CONFIG.PLAYER.SPRINT_SPEED * this.speedMultiplier;
                 this.playerStats.stamina -= CONFIG.PLAYER.STAMINA_DRAIN;
             } else if (this.playerStats.stamina < this.playerStats.maxStamina) {
@@ -8141,9 +10531,15 @@ class GameScene extends Phaser.Scene {
             if (vx !== 0 || vy !== 0) {
                 const len = Math.sqrt(vx * vx + vy * vy);
                 this.player.setVelocity((vx / len) * speed, (vy / len) * speed);
-                // Footstep sounds (silent for Scout class)
-                if (!this.silentFootsteps) {
-                    sfx.footstep(this.time.now, speed === CONFIG.PLAYER.SPRINT_SPEED);
+                // Crouching = no footstep noise (leapers won't detect you)
+                if (!this.silentFootsteps && !this.isCrouching) {
+                    const isRunning = speed === CONFIG.PLAYER.SPRINT_SPEED;
+                    const stepInterval = 250 / (isRunning ? 1.5 : 1);
+                    if (this.time.now - (this.lastPlayerFootstepTime || 0) >= stepInterval) {
+                        this.lastPlayerFootstepTime = this.time.now;
+                        sfx.footstep(this.time.now, isRunning);
+                        this.onPlayerFootstep(this.player.x, this.player.y);
+                    }
                 }
             }
 
@@ -8214,9 +10610,9 @@ class GameScene extends Phaser.Scene {
         this.enemies.getChildren().forEach(e => {
             if (e.active && Phaser.Math.Distance.Between(slash.x, slash.y, e.x, e.y) < CONFIG.PLAYER.MELEE_RANGE) {
                 if (e.enemyType === 'boss') {
-                    if (!e.isInvulnerable) e.takeDamage(meleeDamage, 'melee');
+                    if (!e.isInvulnerable) e.takeDamage(meleeDamage, 'melee', this.player.x, this.player.y);
                 } else if (e.takeDamage) {
-                    e.takeDamage(meleeDamage, 'melee');
+                    e.takeDamage(meleeDamage, 'melee', this.player.x, this.player.y);
                 }
             }
         });
@@ -8226,6 +10622,7 @@ class GameScene extends Phaser.Scene {
 
     fireBullet(pointer) {
         if (this.isOpening || this.isPaused || this.isInventoryOpen || this.isReloading || this.isDodging) return;
+        if (this.spawnEnemyBtn && this.spawnEnemyBtn.getBounds().contains(pointer.x, pointer.y)) return;
 
         const weapon = this.playerStats.currentWeapon;
         const wpnConfig = CONFIG.WEAPONS[weapon.toUpperCase()];
@@ -8261,9 +10658,11 @@ class GameScene extends Phaser.Scene {
         if (weapon === 'shotgun') {
             if (now - this.lastFired < effectiveFireRate) return;
 
-            if (!modEffects.isSilent) sfx.shootShotgun();
-            if (!modEffects.isSilent) this.particles.spawnMuzzleFlash(this.player.x, this.player.y, angle, 1.5, this.muzzleFlashColor);
-            
+            if (!modEffects.isSilent) {
+                sfx.shootShotgun();
+                this.particles.spawnMuzzleFlash(this.player.x, this.player.y, angle, 1.5, this.muzzleFlashColor);
+                this.onUnsuppressedGunshot(this.player.x, this.player.y);
+            }
             let pelletsShot = 0;
             const spreadMod = modEffects.spreadMultiplier;
             for (let i = -10; i <= 10; i += wpnConfig.SPREAD_STEP) {
@@ -8284,9 +10683,11 @@ class GameScene extends Phaser.Scene {
         } else if (weapon === 'smg') {
             if (now - this.lastFired < effectiveFireRate) return;
 
-            if (!modEffects.isSilent) sfx.shootSMG();
-            if (!modEffects.isSilent) this.particles.spawnMuzzleFlash(this.player.x, this.player.y, angle, 0.6, this.muzzleFlashColor);
-            
+            if (!modEffects.isSilent) {
+                sfx.shootSMG();
+                this.particles.spawnMuzzleFlash(this.player.x, this.player.y, angle, 0.6, this.muzzleFlashColor);
+                this.onUnsuppressedGunshot(this.player.x, this.player.y);
+            }
             const smgSpread = Math.round(wpnConfig.SPREAD * modEffects.spreadMultiplier);
             const spread = Phaser.Math.Between(-smgSpread, smgSpread);
             const b = this.bullets.get(this.player.x, this.player.y);
@@ -8327,9 +10728,11 @@ class GameScene extends Phaser.Scene {
             // Assault Rifle - Accurate, medium fire rate
             if (now - this.lastFired < effectiveFireRate) return;
 
-            if (!modEffects.isSilent) sfx.shootRifle();
-            if (!modEffects.isSilent) this.particles.spawnMuzzleFlash(this.player.x, this.player.y, angle, 1.2, this.muzzleFlashColor);
-            
+            if (!modEffects.isSilent) {
+                sfx.shootRifle();
+                this.particles.spawnMuzzleFlash(this.player.x, this.player.y, angle, 1.2, this.muzzleFlashColor);
+                this.onUnsuppressedGunshot(this.player.x, this.player.y);
+            }
             // First shot accuracy bonus when stationary
             const rifleSpread = Math.round(wpnConfig.SPREAD * modEffects.spreadMultiplier);
             let spread = Phaser.Math.Between(-rifleSpread, rifleSpread);
@@ -8353,9 +10756,11 @@ class GameScene extends Phaser.Scene {
             // Pistol
             if (now - this.lastFired < effectiveFireRate) return;
 
-            if (!modEffects.isSilent) sfx.shootPistol();
-            if (!modEffects.isSilent) this.particles.spawnMuzzleFlash(this.player.x, this.player.y, angle, 1, this.muzzleFlashColor);
-            
+            if (!modEffects.isSilent) {
+                sfx.shootPistol();
+                this.particles.spawnMuzzleFlash(this.player.x, this.player.y, angle, 1, this.muzzleFlashColor);
+                this.onUnsuppressedGunshot(this.player.x, this.player.y);
+            }
             const pistolSpread = Math.round(wpnConfig.SPREAD * modEffects.spreadMultiplier);
             const b = this.bullets.get(this.player.x, this.player.y);
             if (b) {
@@ -8371,8 +10776,9 @@ class GameScene extends Phaser.Scene {
         }
     }
 
-    hitPlayer(damage, fromX = null, fromY = null) {
-        if (this.player.alpha < 1 || this.isPinned || this.isDodging) return;
+    hitPlayer(damage, fromX = null, fromY = null, options = {}) {
+        const allowWhenPinned = options.fromPin === true;
+        if (!allowWhenPinned && (this.player.alpha < 1 || this.isPinned || this.isDodging)) return;
 
         // Apply skill damage reduction (Thick Skin / Iron Will)
         if (this.skillDamageReduction > 0) {
@@ -8463,9 +10869,12 @@ class GameScene extends Phaser.Scene {
         if (this.isPinned || this.isDodging) return;
         this.isPinned = true;
         this.pinnedBy = leaper;
+        this.pinHitCount = 0;
+        this.lastPinDamageTime = this.time.now;
         this.player.setVelocity(0);
         leaper.setVelocity(0);
         leaper.state = 'PINNING';
+        leaper.pinnedTarget = this.player; // Leaper stays on player (same as bandit pin)
         this.player.setTint(0x0000ff);
         this.showFloatingText(this.player.x, this.player.y - 50, "PRESS SPACE!", 0xff0000);
         this.cancelReload();
@@ -8475,7 +10884,11 @@ class GameScene extends Phaser.Scene {
         this.isPinned = false;
         this.player.clearTint();
         if (this.pinnedBy && this.pinnedBy.active && this.pinnedBy.body) {
-            this.pinnedBy.knockBack();
+            this.pinnedBy.pinnedTarget = null;
+            this.pinnedBy.state = 'COOLDOWN';
+            this.pinnedBy.leapTimer = CONFIG.ENEMIES.LEAPER.COOLDOWN_TIME;
+            const mult = CONFIG.ENEMIES.LEAPER.PLAYER_BREAKFREE_KNOCKBACK_MULTIPLIER != null ? CONFIG.ENEMIES.LEAPER.PLAYER_BREAKFREE_KNOCKBACK_MULTIPLIER : 1.5;
+            this.pinnedBy.knockBack(mult);
         }
         this.pinnedBy = null;
     }
@@ -8702,7 +11115,7 @@ class GameScene extends Phaser.Scene {
         
         // Stats summary
         const statsText = this.add.text(400, 295, 
-            `HP: ${this.playerStats.hp}/${this.playerStats.maxHp}  |  Ammo: ${this.playerStats.ammo}  |  Scrap: ${this.playerStats.scrap}`, 
+            `HP: ${this.playerStats.hp}/${this.playerStats.maxHp}  |  Ammo: ${countItemInGrid(this.playerStats.backpack, 'ammo')}  |  Scrap: ${this.playerStats.scrap}`, 
             { fontSize: '16px', fill: '#888888' }
         ).setOrigin(0.5).setDepth(501);
         
@@ -8796,6 +11209,7 @@ class GameScene extends Phaser.Scene {
         
         // Update next level for progression (after level 5 go to 6, after level 7 reset to 1)
         if (this.currentLevel === 7) {
+            this.persistent.level7Completed = true;
             this.playerStats.nextLevel = 1; // Game complete, reset
             this.playerStats.highestLevelUnlocked = 7; // All levels stay unlocked
             this.showFloatingText(400, 200, "GAME COMPLETE!", 0x00ff00);
@@ -8854,17 +11268,13 @@ class GameScene extends Phaser.Scene {
             const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, s.x, s.y);
             if (s.active && d < minDst) { closest = s; minDst = d; }
         });
-        if (closest) {
-            const itemID = closest.getData('lootID');
-            closest.destroy();
-            this.applyLoot(itemID);
-        }
+        if (closest) { this.openBody(closest); return; }
     }
 
     openCrate(crate) {
         const itemID = crate.getData('lootID');
         this.isOpening = true;
-        // Apply Quick Hands skill (+25% interact speed = -25% time)
+        sfx.crateShuffle();
         const openTime = Math.floor(CONFIG.TIMINGS.CRATE_OPEN * (1 - (this.quickHandsBonus || 0)));
         this.openTimerEvent = this.time.addEvent({
             delay: openTime,
@@ -8873,12 +11283,41 @@ class GameScene extends Phaser.Scene {
                 sfx.crateOpen();
                 crate.destroy();
                 this.applyLoot(itemID);
+                this.onPlayerSearchNoise(this.player.x, this.player.y);
+            }
+        });
+    }
+
+    openBody(skull) {
+        const itemID = skull.getData('lootID');
+        this.isOpening = true;
+        sfx.crateShuffle();
+        const searchTime = Math.floor((CONFIG.TIMINGS.BODY_SEARCH || 500) * (1 - (this.quickHandsBonus || 0)));
+        this.openTimerEvent = this.time.addEvent({
+            delay: searchTime,
+            callback: () => {
+                this.isOpening = false;
+                skull.destroy();
+                this.applyLoot(itemID);
+                this.onPlayerSearchNoise(this.player.x, this.player.y);
             }
         });
     }
 
     applyLoot(id) {
         let txt = "", col = 0xffffff;
+
+        // Grid items: try add to backpack first; key/map/plug and non-grid (flashlight, scrap, meds, molotov) stay instant
+        const instantOnly = ['key', 'map', 'plug', 'flashlight', 'scrap', 'meds', 'molotov'];
+        if (!instantOnly.includes(id) && getInventoryItemConfig(id)) {
+            const backpack = this.playerStats.backpack || { gridW: 12, gridH: 12, items: [], _nextId: 1 };
+            if (!Array.isArray(backpack.items)) backpack.items = [];
+            const count = (id === 'ammo' ? 5 : id === 'scrap' ? 5 : id === 'materials' ? 10 : id === 'meds' ? 1 : id === 'cigarettes' ? 1 : 1);
+            if (!tryAddItem(backpack, id, count)) {
+                this.showFloatingText(this.player.x, this.player.y - 30, "BACKPACK FULL!", 0xff6600);
+                return;
+            }
+        }
 
         switch (id) {
             case 'meds':
@@ -8900,7 +11339,6 @@ class GameScene extends Phaser.Scene {
                 break;
             case 'ammo':
                 sfx.lootAmmo();
-                this.playerStats.ammo += 5;
                 txt = "+5 Ammo"; col = 0xffff00;
                 break;
             case 'key':
@@ -8982,7 +11420,19 @@ class GameScene extends Phaser.Scene {
                     txt = "GRENADES FULL"; col = 0x888888;
                 }
                 break;
-            // Weapon Mods
+            case 'materials':
+                sfx.loot();
+                const materialsAmount = 10;
+                this.playerStats.materials += materialsAmount;
+                this.persistent.totalMaterialsCollected = (this.persistent.totalMaterialsCollected || 0) + materialsAmount;
+                txt = `+${materialsAmount} MATERIALS`;
+                col = (CONFIG.CURRENCIES && CONFIG.CURRENCIES.MATERIALS && CONFIG.CURRENCIES.MATERIALS.color) ? CONFIG.CURRENCIES.MATERIALS.color : 0x00aaff;
+                break;
+            case 'cigarettes':
+                sfx.loot();
+                txt = "+1 Cigarettes"; col = 0x8B4513;
+                break;
+            // Weapon Mods (rarity affects display color)
             case 'extended_mag':
             case 'suppressor':
             case 'laser_sight':
@@ -8992,9 +11442,19 @@ class GameScene extends Phaser.Scene {
                 if (!this.persistent.modInventory) this.persistent.modInventory = [];
                 this.persistent.modInventory.push(id);
                 savePersistent(this.persistent);
-                const modConfig = Object.values(CONFIG.MODS).find(m => m.id === id);
-                txt = `MOD: ${modConfig?.name || id.toUpperCase()}!`; 
-                col = 0xff00ff;
+                localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(this.playerStats));
+                const modConfig = Object.values(CONFIG.MODS || {}).find(m => m.id === id);
+                const modName = modConfig?.name || id.replace(/_/g, ' ').toUpperCase();
+                if (modConfig && modConfig.rarity === 'rare') {
+                    txt = `RARE: ${modName}!`;
+                    col = 0xffd700;
+                } else if (modConfig && modConfig.rarity === 'uncommon') {
+                    txt = `MOD: ${modName}!`;
+                    col = 0x00ccff;
+                } else {
+                    txt = `MOD: ${modName}!`;
+                    col = 0xff00ff;
+                }
                 break;
         }
 
@@ -9040,7 +11500,7 @@ class GameScene extends Phaser.Scene {
         if (this.extractionActive) this.levelText.setText(this.extractionTimer).setAlpha(1).setTint(0xff0000);
         
         // Main status line with all currencies
-        this.uiText.setText(`${weapon.toUpperCase()}: ${mag}/${maxMag} (${this.playerStats.ammo})${reloadText} | GREN: ${this.playerStats.grenades} | 🔧${this.playerStats.scrap} 💰${this.playerStats.credits} ⚙️${this.playerStats.materials}${timerText}`);
+        this.uiText.setText(`${weapon.toUpperCase()}: ${mag}/${maxMag} (${countItemInGrid(this.playerStats.backpack, 'ammo')})${reloadText} | GREN: ${this.playerStats.grenades} | 🔧${this.playerStats.scrap} 💰${this.playerStats.credits} ⚙️${this.playerStats.materials}${timerText}`);
 
         // Icons
         let iconX = 300;
@@ -9204,6 +11664,3 @@ const config = {
 };
 
 const game = new Phaser.Game(config);
-</script>
-</body>
-</html>

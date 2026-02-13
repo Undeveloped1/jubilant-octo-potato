@@ -1,0 +1,6 @@
+{
+  "editor.wordBasedSuggestions": "matchingDocument",
+  "files.associations": {
+    "game.js": "javascript"
+  }
+}
