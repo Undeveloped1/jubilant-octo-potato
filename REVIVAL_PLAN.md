@@ -37,8 +37,8 @@ Context: built Jan–Feb 2026 as a first-ever coding project. Tooling and AI ass
 
 ## Phase 2 — Ship a playable link *(~1 hour, agent)*
 
-- [ ] Enable GitHub Pages on `Undeveloped1/jubilant-octo-potato` (serve from `main`)
-- [ ] Verify the game runs from the Pages URL (CDN Phaser + relative paths)
+- [x] Enable GitHub Pages on `Undeveloped1/jubilant-octo-potato` (serve from `main`) — already on; `index.html` landed on `main` Jul 23, 2026
+- [x] Verify the game runs from the Pages URL (CDN Phaser + relative paths) — https://undeveloped1.github.io/jubilant-octo-potato/ boots to main menu
 - [ ] Hand the link to 3+ friends; watch at least one play without coaching
 - Playtest questions: Do they understand extraction? Do they find the inventory? Does the limb system register at all?
 
