@@ -26,14 +26,14 @@ Context: built Jan–Feb 2026 as a first-ever coding project. Tooling and AI ass
 3. **Hybrid**: asset pack for tiles/environment, AI-generate only hero characters and bosses in a matching palette.
 
 **Step 2: crunch what exists regardless.** Current sprites are ~4–5MB each, RGB with **no alpha channel**, at 2048–2816px for characters drawn ~64px on screen. Total repo asset weight ~35MB.
-- [ ] Downscale all sprites to display size (≤256px)
-- [ ] Re-export with alpha (or key + re-export)
-- [ ] Pack into a spritesheet + JSON atlas (Phaser loads atlases natively)
-- [ ] Target: **all game assets under 1MB total**
+- [x] Downscale all sprites to display size (≤256px)
+- [x] Re-export with alpha (or key + re-export)
+- [x] Pack into a spritesheet + JSON atlas (Phaser loads atlases natively) → `assets/sprites/sprites.png` + `sprites.json` (~345KB); crunch script at `tools/crunch_sprites.py`
+- [x] Target: **all game assets under 1MB total** (runtime atlas ~345KB; root giants removed — game still uses procedural textures until Step 1 art direction is picked and atlas is wired)
 
 **Step 3: asset pipeline for the future.**
-- [ ] `assets/` folder structure (sprites, audio, tiles, ui)
-- [ ] Document the style recipe (palette, resolution, generator prompt if AI) in `ART_GUIDE.md` so every future asset matches
+- [x] `assets/` folder structure (sprites, audio, tiles, ui)
+- [ ] Document the style recipe (palette, resolution, generator prompt if AI) in `ART_GUIDE.md` so every future asset matches *(blocked on Step 1 art direction)*
 
 ## Phase 2 — Ship a playable link *(~1 hour, agent)*
 
