@@ -43,6 +43,22 @@ const CONFIG = {
         LOW_HP_THRESHOLD: 0.4
     },
 
+    // Phase 5 — combat juice (feel)
+    JUICE: {
+        HITSTOP_MS: 45,
+        CORPSE_LINGER_MS: 3500,
+        CORPSE_FADE_MS: 450,
+        FLINCH_SPEED: 90,
+        HEARTBEAT_INTERVAL_MS: 750,
+        SHAKE: {
+            pistol:   { duration: 70,  intensity: 0.004 },
+            smg:      { duration: 40,  intensity: 0.0025 },
+            shotgun:  { duration: 120, intensity: 0.012 },
+            rifle:    { duration: 85,  intensity: 0.007 },
+            crossbow: { duration: 50,  intensity: 0.003 }
+        }
+    },
+
     BLEED: {
         MINOR_INTERVAL_MS: 3000,
         MINOR_DAMAGE: 1,
@@ -1692,15 +1708,31 @@ class SoundManager {
         this.playFilteredNoise(0.1, 0.1, 4000, 'highpass');
     }
     
-    reload() { 
-        this.playTone(400, 'triangle', 0.2, 0.4); 
-        this.playFilteredNoise(0.1, 0.2, 1500, 'lowpass');
+    reload() {
+        // Mag-out click
+        this.playTone(280, 'triangle', 0.08, 0.35);
+        this.playFilteredNoise(0.06, 0.18, 1200, 'lowpass');
     }
-    
-    reloadFinish() { 
-        this.playTone(600, 'triangle', 0.1, 0.5); 
-        this.playTone(800, 'triangle', 0.1, 0.3); 
-        this.playFilteredNoise(0.08, 0.15, 2000, 'highpass');
+
+    reloadFinish() {
+        // Mag-in + rack
+        this.playTone(520, 'triangle', 0.07, 0.4);
+        this.playFilteredNoise(0.05, 0.12, 1800, 'highpass');
+        setTimeout(() => {
+            this.playTone(700, 'square', 0.04, 0.25);
+            this.playFilteredNoise(0.04, 0.15, 2500, 'highpass');
+        }, 70);
+    }
+
+    weaponSwap() {
+        this.playTone(350, 'triangle', 0.06, 0.3);
+        this.playTone(220, 'sine', 0.05, 0.2);
+        this.playFilteredNoise(0.04, 0.12, 900, 'lowpass');
+    }
+
+    heartbeat() {
+        this.playTone(70, 'sine', 0.09, 0.28);
+        setTimeout(() => this.playTone(55, 'sine', 0.08, 0.22), 130);
     }
     
     // ==================== MOVEMENT SOUNDS ====================
@@ -3339,6 +3371,62 @@ class ParticlePool {
         const b = (color & 0xff) * 0.7;
         return (Math.floor(r) << 16) | (Math.floor(g) << 8) | Math.floor(b);
     }
+
+    /** Brief tracer streak from muzzle along aim angle. */
+    spawnTracer(x, y, angle, length = 34, color = 0xfff0a0) {
+        const tipX = x + Math.cos(angle) * 18;
+        const tipY = y + Math.sin(angle) * 18;
+        const line = this.scene.add.rectangle(tipX, tipY, length, 1.5, color)
+            .setDepth(48).setRotation(angle).setOrigin(0, 0.5).setAlpha(0.95);
+        this.scene.tweens.add({
+            targets: line,
+            x: tipX + Math.cos(angle) * (length * 2.2),
+            y: tipY + Math.sin(angle) * (length * 2.2),
+            alpha: 0,
+            duration: 55,
+            onComplete: () => line.destroy()
+        });
+    }
+
+    /** Ejected brass arc. */
+    spawnShellCasing(x, y, angle) {
+        const eject = angle - Math.PI / 2 + (Math.random() - 0.5) * 0.5;
+        const casing = this.scene.add.rectangle(x, y, 4, 2, 0xd4a017)
+            .setDepth(40).setRotation(angle).setAlpha(1);
+        const dist = 22 + Math.random() * 22;
+        this.scene.tweens.add({
+            targets: casing,
+            x: x + Math.cos(eject) * dist,
+            y: y + Math.sin(eject) * dist + 12,
+            rotation: casing.rotation + 1.5 + Math.random() * 2,
+            alpha: 0,
+            duration: 320 + Math.random() * 80,
+            ease: 'Quad.easeOut',
+            onComplete: () => casing.destroy()
+        });
+    }
+
+    /** Soft grey muzzle smoke puffs. */
+    spawnMuzzleSmoke(x, y, angle) {
+        for (let i = 0; i < 2; i++) {
+            const smoke = this.scene.add.circle(
+                x + Math.cos(angle) * 14,
+                y + Math.sin(angle) * 14,
+                3 + Math.random() * 4,
+                0x999999,
+                0.4
+            ).setDepth(47);
+            this.scene.tweens.add({
+                targets: smoke,
+                x: smoke.x + Math.cos(angle) * (8 + Math.random() * 16),
+                y: smoke.y + Math.sin(angle) * (8 + Math.random() * 16) - 10,
+                alpha: 0,
+                scale: 1.8,
+                duration: 180 + Math.random() * 120,
+                onComplete: () => smoke.destroy()
+            });
+        }
+    }
 }
 
 // =============================================================================
@@ -3996,7 +4084,7 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
     }
     
     takeDamage(amount, killSource = 'gun', fromX = null, fromY = null) {
-        if (!this.active || !this.canTakeDamage || this.isInvulnerable) return;
+        if (!this.active || this.isCorpse || !this.canTakeDamage || this.isInvulnerable) return;
         
         this.lastDamageSource = killSource; // Track what damaged us
         if (this.enemyType === 'walker') {
@@ -4021,8 +4109,28 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
         this.hp -= amount;
         sfx.enemyHit();
         this.setTint(0xffffff);
-        this.scene.time.delayedCall(50, () => { if (this.active) this.clearTint(); });
+        this.scene.time.delayedCall(50, () => {
+            if (this.active && !this.isCorpse) this.clearTint();
+        });
         this.updateHealthBar();
+
+        // Flinch / knockback on surviving hit
+        if (this.hp > 0 && this.body && fromX != null && fromY != null) {
+            const ang = Phaser.Math.Angle.Between(fromX, fromY, this.x, this.y);
+            const push = (CONFIG.JUICE.FLINCH_SPEED || 90) * (0.55 + Math.min(amount, 3) * 0.2);
+            this.scene.physics.velocityFromRotation(ang, push, this.body.velocity);
+            if (this.enemyType !== 'boss' && this.enemyType !== 'necromancer') {
+                const sx = this.scaleX, sy = this.scaleY;
+                this.scene.tweens.add({
+                    targets: this,
+                    scaleX: sx * 1.12,
+                    scaleY: sy * 0.88,
+                    duration: 45,
+                    yoyo: true,
+                    onComplete: () => { if (this.active && !this.isCorpse) this.setScale(sx, sy); }
+                });
+            }
+        }
         
         if (this.enemyType === 'boss' || this.enemyType === 'necromancer') {
             this.scene.updateBossBar(this.hp, this.maxHp);
@@ -4035,7 +4143,7 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
                 yoyo: true,
                 repeat: 4,
                 onComplete: () => {
-                    if (this.active) {
+                    if (this.active && !this.isCorpse) {
                         this.setAlpha(1);
                         this.canTakeDamage = true;
                         this.isInvulnerable = false;
@@ -4044,12 +4152,13 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
             });
         }
         
-            if (this.hp <= 0) {
+        if (this.hp <= 0) {
             // Check for melee-only boss kill achievement
             const bossKilledMelee = this.enemyType === 'boss' && !this.scene.persistent.bossHitWithGun;
             
             // Play death sound
             sfx.enemyDeath();
+            if (this.scene.doHitstop) this.scene.doHitstop(CONFIG.JUICE.HITSTOP_MS);
             
             // Exploder explosion on death
             if (this.enemyType === 'exploder') {
@@ -4086,18 +4195,52 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
                 });
                 savePersistent(this.scene.persistent);
             }
-            
-            // Leaper death animation - play then destroy after delay
-            if (this.enemyType === 'leaper') {
-                this.body.enable = false; // Disable physics so it doesn't block
-                this.play('leaper_death');
-                this.scene.time.delayedCall(600, () => {
-                    if (this.active) this.destroy();
-                });
-            } else {
-                this.destroy();
-            }
+
+            // Become a lingering corpse (feel + readability)
+            this.becomeCorpse();
         }
+    }
+
+    becomeCorpse() {
+        if (this.isCorpse) return;
+        this.isCorpse = true;
+        this.canTakeDamage = false;
+        this.isInvulnerable = true;
+        if (this.body) {
+            this.body.enable = false;
+            this.body.stop();
+        }
+        if (this.healthBar) {
+            this.healthBar.setVisible(false);
+            this.healthBar.destroy();
+            this.healthBar = null;
+        }
+        if (this.alertExclamation) {
+            this.alertExclamation.destroy();
+            this.alertExclamation = null;
+        }
+        this.scene.tweens.killTweensOf(this);
+        this.setTint(0x555555);
+        this.setAlpha(0.9);
+        // Inactive so countActive()/clear checks ignore corpses; still drawn
+        this.setActive(false);
+        this.setVisible(true);
+
+        if (this.enemyType === 'leaper' && this.anims) {
+            try { this.play('leaper_death'); } catch (e) { /* anim may be missing */ }
+        }
+
+        const linger = CONFIG.JUICE.CORPSE_LINGER_MS || 3500;
+        const fade = CONFIG.JUICE.CORPSE_FADE_MS || 450;
+        this.scene.time.delayedCall(linger, () => {
+            if (!this.isCorpse || !this.scene) return;
+            this.scene.tweens.add({
+                targets: this,
+                alpha: 0,
+                duration: fade,
+                onComplete: () => { if (this.scene) this.destroy(); }
+            });
+        });
     }
     
     updateHealthBar() {
@@ -4129,7 +4272,7 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
     }
     
     update(time, delta) {
-        if (!this.active || !this.body) return;
+        if (!this.active || this.isCorpse || !this.body) return;
         if (this.healthBar) {
             this.healthBar.setPosition(this.x, this.y);
             this.healthBar.setVisible(this.hp > 0 && this.revealedByFlashlight === true);
@@ -10079,8 +10222,11 @@ class GameScene extends Phaser.Scene {
 
         // Floating text, particle, and hit indicator pools
         this.floatingText = new FloatingTextPool(this, 20);
-        this.particles = new ParticlePool(this, 30);
+        this.particles = new ParticlePool(this, 60);
         this.hitIndicators = new HitIndicatorPool(this, 8);
+        this._hitstopActive = false;
+        this._lastHeartbeat = 0;
+        this._satFX = null;
         
         // Load settings
         this.gameSettings = loadSettings();
@@ -10756,12 +10902,62 @@ class GameScene extends Phaser.Scene {
         this.isReloading = false;
     }
 
+    // ==================== COMBAT JUICE ====================
+    doHitstop(ms) {
+        if (this._hitstopActive || !ms) return;
+        this._hitstopActive = true;
+        if (this.physics && this.physics.world) this.physics.world.pause();
+        this.time.delayedCall(ms, () => {
+            if (this.physics && this.physics.world) this.physics.world.resume();
+            this._hitstopActive = false;
+        });
+    }
+
+    /** Weapon fire feel: shake + tracer + casing + smoke (respects silent / settings). */
+    applyFireJuice(weapon, angle, silent = false) {
+        const shake = (CONFIG.JUICE.SHAKE && CONFIG.JUICE.SHAKE[weapon]) || CONFIG.JUICE.SHAKE.pistol;
+        if (!silent && this.gameSettings.screenShake && shake) {
+            this.cameras.main.shake(shake.duration, shake.intensity);
+        }
+        if (!this.particles) return;
+        if (weapon === 'crossbow') {
+            this.particles.spawnTracer(this.player.x, this.player.y, angle, 42, 0xc4a574);
+            return;
+        }
+        if (silent) return;
+        const tracerLen = weapon === 'rifle' ? 44 : (weapon === 'shotgun' ? 28 : 34);
+        this.particles.spawnTracer(this.player.x, this.player.y, angle, tracerLen);
+        this.particles.spawnShellCasing(this.player.x, this.player.y, angle);
+        if (weapon === 'shotgun') this.particles.spawnShellCasing(this.player.x, this.player.y, angle);
+        this.particles.spawnMuzzleSmoke(this.player.x, this.player.y, angle);
+    }
+
+    updateLowHpPostFX(hpPercent) {
+        const cam = this.cameras && this.cameras.main;
+        if (!cam || !cam.postFX) return;
+        const threshold = CONFIG.PLAYER.LOW_HP_THRESHOLD;
+        if (hpPercent > threshold) {
+            if (this._satFX) {
+                try { cam.postFX.remove(this._satFX); } catch (e) { /* ignore */ }
+                this._satFX = null;
+            }
+            return;
+        }
+        if (!this._satFX) {
+            try { this._satFX = cam.postFX.addColorMatrix(); } catch (e) { return; }
+        }
+        // 1 = full color; drop toward grey as HP falls
+        const sat = Math.max(0.15, hpPercent / threshold);
+        try { this._satFX.saturation(sat); } catch (e) { /* API variance */ }
+    }
+
     // ==================== LOW HP VIGNETTE ====================
     drawVignette() {
         if (!this.vignetteGraphics) return;
         this.vignetteGraphics.clear();
         
         const hpPercent = this.playerStats.hp / this.playerStats.maxHp;
+        this.updateLowHpPostFX(hpPercent);
         if (hpPercent > CONFIG.PLAYER.LOW_HP_THRESHOLD) return;
         
         // Intensity increases as HP decreases
@@ -10773,6 +10969,11 @@ class GameScene extends Phaser.Scene {
         if (hpPercent < 0.15) {
             const pulse = Math.sin(this.time.now / 200) * 0.15;
             pulseAlpha = alpha + pulse;
+            const beatEvery = CONFIG.JUICE.HEARTBEAT_INTERVAL_MS || 750;
+            if (this.time.now - (this._lastHeartbeat || 0) > beatEvery) {
+                this._lastHeartbeat = this.time.now;
+                sfx.heartbeat();
+            }
         }
         
         // Draw red gradient from edges
@@ -16885,9 +17086,9 @@ const pos = findSpace(backpack, 3, 2);
         // Walker vs bandit melee: apply by distance (overlap same-group can be unreliable when bodies push)
         const walkerVsBanditCooldown = 350;
         const walkerMeleeRange = 50;
-        const bandits = this.enemies.getChildren().filter(e => e.active && e.enemyType === 'bandit');
+        const bandits = this.enemies.getChildren().filter(e => e.active && !e.isCorpse && e.enemyType === 'bandit');
         this.enemies.getChildren().forEach(e => {
-            if (!e.active || e.enemyType !== 'walker') return;
+            if (!e.active || e.isCorpse || e.enemyType !== 'walker') return;
             for (const bandit of bandits) {
                 if (!bandit.active) continue;
                 const dist = Phaser.Math.Distance.Between(e.x, e.y, bandit.x, bandit.y);
@@ -17231,7 +17432,7 @@ const pos = findSpace(backpack, 3, 2);
         this.playerStats.currentWeapon = weapons[nextIdx];
         
         this.showFloatingText(this.player.x, this.player.y - 40, this.playerStats.currentWeapon.toUpperCase(), 0xffffff);
-        sfx.reload();
+        sfx.weaponSwap();
     }
 
     meleeAttack() {
@@ -17265,7 +17466,8 @@ const pos = findSpace(backpack, 3, 2);
         if (limbHpMelee && (limbHasBreak(limbHpMelee, 'leftArm') || limbHasBreak(limbHpMelee, 'rightArm'))) meleeDamage = Math.max(1, Math.floor(meleeDamage * 0.5));
         
         this.enemies.getChildren().forEach(e => {
-            if (e.active && Phaser.Math.Distance.Between(slash.x, slash.y, e.x, e.y) < CONFIG.PLAYER.MELEE_RANGE) {
+            if (!e.active || e.isCorpse) return;
+            if (Phaser.Math.Distance.Between(slash.x, slash.y, e.x, e.y) < CONFIG.PLAYER.MELEE_RANGE) {
                 if (e.enemyType === 'boss') {
                     if (!e.isInvulnerable) e.takeDamage(meleeDamage, 'melee', this.player.x, this.player.y);
                 } else if (e.takeDamage) {
@@ -17360,7 +17562,7 @@ const pos = findSpace(backpack, 3, 2);
             }
             this.playerStats.magazines[weapon] -= wpnConfig.AMMO_COST;
             this.lastFired = now;
-            if (this.gameSettings.screenShake) this.cameras.main.shake(100, 0.005);
+            this.applyFireJuice(weapon, angle, modEffects.isSilent);
             this.persistent.runShotsFired++;
             this.persistent.totalShotsFired++;
             if (this.hasNoGoodArms()) this.applyArmPenaltyDamage();
@@ -17384,6 +17586,7 @@ const pos = findSpace(backpack, 3, 2);
             const emSmg = getEquippedMag(this.playerStats, 'smg');
             if (emSmg) emSmg.rounds = Math.max(0, (emSmg.rounds || 0) - wpnConfig.AMMO_COST);
             this.lastFired = now;
+            this.applyFireJuice(weapon, angle, modEffects.isSilent);
             this.persistent.runShotsFired++;
             this.persistent.totalShotsFired++;
             if (this.hasNoGoodArms()) this.applyArmPenaltyDamage();
@@ -17406,6 +17609,7 @@ const pos = findSpace(backpack, 3, 2);
             }
             this.playerStats.magazines[weapon] -= wpnConfig.AMMO_COST;
             this.lastFired = now;
+            this.applyFireJuice(weapon, angle, true);
             this.persistent.runShotsFired++;
             this.persistent.totalShotsFired++;
             if (this.hasNoGoodArms()) this.applyArmPenaltyDamage();
@@ -17437,6 +17641,7 @@ const pos = findSpace(backpack, 3, 2);
             const emRifle = getEquippedMag(this.playerStats, 'rifle');
             if (emRifle) emRifle.rounds = Math.max(0, (emRifle.rounds || 0) - wpnConfig.AMMO_COST);
             this.lastFired = now;
+            this.applyFireJuice(weapon, angle, modEffects.isSilent);
             this.persistent.runShotsFired++;
             this.persistent.totalShotsFired++;
             if (this.hasNoGoodArms()) this.applyArmPenaltyDamage();
@@ -17460,6 +17665,7 @@ const pos = findSpace(backpack, 3, 2);
             const emPistol = getEquippedMag(this.playerStats, 'pistol');
             if (emPistol) emPistol.rounds = Math.max(0, (emPistol.rounds || 0) - wpnConfig.AMMO_COST);
             this.lastFired = now;
+            this.applyFireJuice(weapon, angle, modEffects.isSilent);
             this.persistent.runShotsFired++;
             this.persistent.totalShotsFired++;
             if (this.hasNoGoodArms()) this.applyArmPenaltyDamage();

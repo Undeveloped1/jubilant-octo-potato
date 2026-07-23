@@ -68,11 +68,11 @@ Current: single 18,900-line `game.js` (GameScene ~7,200 lines, HideoutScene ~4,7
 ## Phase 5 — Game-feel (juice) pass *(1–2 sessions, Paul tunes, agent implements)*
 
 Content is sufficient (7 levels, 7 enemy types, full meta). What separates "prototype" from "game people share":
-- [ ] Screen shake scaled to weapon caliber; hitstop frames on kill
-- [ ] Enemy flinch/knockback on hit; corpse persistence
-- [ ] Tracers, shell casings, muzzle smoke
-- [ ] Damage-direction indicator; low-blood heartbeat audio + desaturation
-- [ ] Weapon-swap and reload sound weight (mag-out, mag-in, rack — already have procedural SFX base)
+- [x] Screen shake scaled to weapon caliber; hitstop frames on kill (`CONFIG.JUICE`, `applyFireJuice`, `doHitstop`)
+- [x] Enemy flinch/knockback on hit; corpse persistence (`becomeCorpse`, ~3.5s linger)
+- [x] Tracers, shell casings, muzzle smoke (`ParticlePool` helpers)
+- [x] Damage-direction indicator (already existed); low-blood heartbeat audio + desaturation (vignette + ColorMatrix + `sfx.heartbeat`)
+- [x] Weapon-swap and reload sound weight (`sfx.weaponSwap`, mag-out / mag-in+rack on reload)
 
 ## Phase 6 — Make the limb sim VISIBLE (the differentiator) *(1–2 sessions)*
 
