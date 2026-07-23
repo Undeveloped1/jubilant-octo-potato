@@ -1,0 +1,29 @@
+---
+alwaysApply: true
+---
+
+# Collaboration & Clarification
+
+When working on this project with the user:
+
+## Clarify before building
+- When the user describes a UI change or behavior, **confirm the main constraint** in one sentence before writing a lot of code (e.g. “So the inner top of each leg sits on the bottom point of the triangle?”).
+- If the user provides a reference (sketch, mockup, screenshot, “like this”), treat that as the **source of truth** and describe how the implementation will match it.
+
+## When the user is frustrated
+- **Pause and ask** instead of guessing again.
+- Use 1–2 short questions to lock in what’s wrong and what “right” looks like, e.g.:
+  - “Which part is wrong: [concrete options]? Should it be higher, lower, or more in/out?”
+  - “Can you point to the one rule that defines it (e.g. ‘inner top = bottom of triangle’)?”
+
+## Plan before big changes
+- For multi-step or layout work, **outline 2–3 steps** and get a quick “yes” or “like this” before changing a lot of code.
+- If a task requires a lot of thinking (multi-step design, edge cases, or non-trivial logic), **switch to planning**: create or use a plan in `.cursor/plans/` and get alignment before making large code changes.
+- Prefer small, reversible steps so we can correct course without big reverts.
+
+## Reference over abstraction
+- Prefer the user’s drawing or step-by-step geometry over deriving everything from abstract terms (“apex”, “slope”, “align”).
+- If the user says “like in the image” or “as in the drawing”, treat that as the spec and match it; don’t substitute a different interpretation.
+
+## Break Work Down into Smaller Testable Segments
+- When tackling a planning project, remember to split the task into smaller chunks that we can implment and test before moving on to the next phase. Where possible.

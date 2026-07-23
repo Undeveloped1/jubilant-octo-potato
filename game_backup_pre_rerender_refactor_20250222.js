@@ -306,7 +306,7 @@ const CONFIG = {
             trauma_kit: { col: 0xff8800 }, limb_breaker: { col: 0x1a1a1a }, trauma_inflict: { col: 0x1a1a1a }
         },
         // Canonical list of all loot IDs handled by applyLoot(); add new types here and in applyLoot switch
-        VALID_IDS: ['meds', 'ammo', 'key', 'map', 'flashlight', 'molotov', 'pistol', 'shotgun', 'smg', 'crossbow', 'rifle', 'scrap', 'plug', 'helmet', 'headset', 'vest', 'medkit', 'bandage', 'hemostat', 'splint', 'trauma_kit', 'limb_breaker', 'trauma_inflict', 'grenade', 'materials', 'cigarettes', 'extended_mag', 'suppressor', 'laser_sight', 'damage_barrel', 'rapid_fire', 'ammo_box', 'rig', 'backpack_default', 'secure_container_default', 'med_bag_default', 'nvg', 'ammo_bolts', 'ammo_shells', 'ammo_9mm', 'ammo_45', 'ammo_556', 'mag_pistol', 'mag_smg', 'mag_rifle'],
+        VALID_IDS: ['meds', 'ammo', 'key', 'map', 'flashlight', 'molotov', 'pistol', 'shotgun', 'smg', 'crossbow', 'rifle', 'scrap', 'plug', 'helmet', 'headset', 'vest', 'medkit', 'bandage', 'hemostat', 'splint', 'trauma_kit', 'limb_breaker', 'trauma_inflict', 'grenade', 'materials', 'cigarettes', 'extended_mag', 'suppressor', 'laser_sight', 'damage_barrel', 'rapid_fire', 'ammo_box', 'rig', 'backpack_default', 'secure_container_default', 'med_bag_default', 'ammo_bolts', 'ammo_shells', 'ammo_9mm', 'ammo_45', 'ammo_556', 'mag_pistol', 'mag_smg', 'mag_rifle'],
         // Items that are not stored in backpack/stash: pickup only triggers instant effect (e.g. scrap = currency, meds = heal, molotov = key item). Flashlight is now a grid attachment.
         NON_GRID_ITEM_IDS: ['scrap', 'meds', 'molotov'],
         // Grid inventory: key, plug, flashlight (attachment) are grid items; map/scrap/meds/molotov stay instant
@@ -355,8 +355,7 @@ const CONFIG = {
             rig:           { id: 'rig', sizeW: 3, sizeH: 2, stackMax: 1, category: 'armor', label: 'Rig', icon: 'Rg', color: '#888888' },
             backpack_default: { id: 'backpack_default', sizeW: 5, sizeH: 8, stackMax: 1, category: 'container', label: 'Backpack', icon: 'Bp', innerGridW: 6, innerGridH: 9 },
             secure_container_default: { id: 'secure_container_default', sizeW: 1, sizeH: 1, stackMax: 1, category: 'container', label: 'Secure', icon: 'Sc', innerGridW: 2, innerGridH: 3 },
-            med_bag_default: { id: 'med_bag_default', sizeW: 1, sizeH: 1, stackMax: 1, category: 'container', label: 'Med Bag', icon: 'MB', innerGridW: 2, innerGridH: 2 },
-            nvg:            { id: 'nvg', sizeW: 1, sizeH: 1, stackMax: 1, category: 'weapon', label: 'NVG', icon: 'NV', color: '#00cc66' }
+            med_bag_default: { id: 'med_bag_default', sizeW: 1, sizeH: 1, stackMax: 1, category: 'container', label: 'Med Bag', icon: 'MB', innerGridW: 2, innerGridH: 2 }
         },
         AMMO_BOX_INNER: { gridW: 6, gridH: 6 },
         BACKPACK_DEFAULT_INNER: { gridW: 6, gridH: 9 },
@@ -386,10 +385,7 @@ const CONFIG = {
         WORKBENCH_COST: 15,
         WORKBENCH_DAMAGE_BONUS: 0.25, // +25% damage
         REPAIR_STATION_COST: 20,
-        REPAIR_COST_PER_POINT: 1, // 1 scrap per durability point
-        GUN_BENCH_LEVEL2_COST: 20,
-        GUN_BENCH_CRAFT_9MM:  { scrap: 1, itemId: 'ammo_9mm', count: 4, timeMs: 90000 },
-        GUN_BENCH_CRAFT_SHELLS: { scrap: 1, itemId: 'ammo_shells', count: 3, timeMs: 90000 }
+        REPAIR_COST_PER_POINT: 1 // 1 scrap per durability point
     },
     
     // Currency system
@@ -1255,7 +1251,7 @@ const DEFAULT_STATS = {
         crossbow: CONFIG.WEAPONS.CROSSBOW.MAG_SIZE,
         rifle: CONFIG.WEAPONS.RIFLE.MAG_SIZE
     },
-    armor: { head: null, body: null, ears: null, arms: null, feet: null, rig: null, nvg: null },
+    armor: { head: null, body: null, ears: null, arms: null, feet: null, rig: null },
     rigGrid: null,
     weaponSlots: { primary: 'rifle', secondary: 'smg', sidearm: 'pistol', melee: null },
     // Per-slot attachment mods (each weapon instance can have different mods). Keys: primary, secondary, sidearm, melee. Value: { slotName: modId } or null.
@@ -1266,8 +1262,7 @@ const DEFAULT_STATS = {
         restAreaLvl: 0, 
         generatorLvl: 0, 
         hasSparkPlug: false,
-        tinkerBench: { crafting: null },
-        gunBench: { level: 1, crafting: null },
+        armory: { crafting: null, hasNVG: false },
         workbenchLvl: 0,  // Weapon damage upgrade
         repairStationLvl: 0  // Armor repair
     },
@@ -1993,16 +1988,6 @@ function getAmmoIdForWeapon(weapon) {
 function isMagazineItem(itemId) {
     return !!(CONFIG.MAGAZINES && CONFIG.MAGAZINES[itemId]);
 }
-/** Random rounds for a magazine when looting a magazine-using weapon. 15% full, 50% less than half, 35% more than half. */
-function getRandomMagRoundsForLootedWeapon(capacity) {
-    if (!capacity || capacity <= 0) return 0;
-    const r = Math.random();
-    const half = Math.floor(capacity / 2);
-    if (r < 0.15) return capacity;
-    if (r < 0.65) return Phaser.Math.Between(0, Math.max(0, half - 1));
-    return Phaser.Math.Between(half, capacity);
-}
-
 /** Weapon this mag fits (e.g. mag_pistol -> 'pistol'). */
 function getMagazineWeapon(itemId) {
     const m = CONFIG.MAGAZINES && CONFIG.MAGAZINES[itemId];
@@ -2018,79 +2003,11 @@ function getMagazineAmmoId(itemId) {
     const m = CONFIG.MAGAZINES && CONFIG.MAGAZINES[itemId];
     return m ? m.ammoId : null;
 }
-/** True if itemId is an ammo type that can go in the ammo box (ammo, ammo_9mm, ammo_45, ammo_556, ammo_shells, ammo_bolts). Driven by CONFIG. */
-function isAmmoItemId(itemId) {
-    if (!itemId) return false;
-    if (itemId === 'ammo') return true;
-    if (CONFIG.AMMO_TYPES) {
-        for (const k of Object.keys(CONFIG.AMMO_TYPES)) {
-            if (CONFIG.AMMO_TYPES[k].ammoId === itemId) return true;
-        }
-    }
-    return !!(CONFIG.LOOT && CONFIG.LOOT.ITEMS && CONFIG.LOOT.ITEMS[itemId] && itemId.startsWith('ammo_'));
-}
 /** Label suffix for magazines: " rounds/max" or "". Use for stash, backpack, rig, pockets so all UIs match. p: { itemId, rounds?, maxRounds? }. */
 function getMagazineRoundsLabel(p) {
     if (!p || !isMagazineItem(p.itemId)) return '';
     return ' ' + (p.rounds ?? 0) + '/' + (p.maxRounds ?? getMagazineCapacity(p.itemId));
 }
-
-/** Unload magazine rounds into an ammo stack. magRef: { container?, placementId?, pocketIndex?, slotIndex?, itemId, fromStash?, fromAttachmentBox?, weaponId? }. isStashContext: use persistent.stash as destination. Returns true if any rounds were unloaded. */
-function unloadMagazineToStack(stats, persistent, magRef, isStashContext) {
-    if (!magRef || !magRef.itemId || !isMagazineItem(magRef.itemId)) return false;
-    const ammoId = getMagazineAmmoId(magRef.itemId);
-    if (!ammoId) return false;
-    let rounds = 0;
-    let placement = null;
-    let grid = null;
-    if (magRef.fromAttachmentBox && magRef.weaponId && stats && stats.equippedMagazines) {
-        const em = stats.equippedMagazines[magRef.weaponId];
-        if (!em || em.itemId !== magRef.itemId) return false;
-        rounds = em.rounds ?? 0;
-        placement = em;
-    } else if (magRef.fromStash && persistent && persistent.stash && magRef.placementId != null) {
-        ensureGridItems(persistent.stash);
-        placement = (persistent.stash.items || []).find(p => p.placementId === magRef.placementId);
-        if (!placement || placement.itemId !== magRef.itemId) return false;
-        rounds = placement.rounds ?? 0;
-    } else if (magRef.container === 'backpack' && stats && stats.backpack && magRef.placementId != null) {
-        ensureGridItems(stats.backpack);
-        placement = (stats.backpack.items || []).find(p => p.placementId === magRef.placementId);
-        if (!placement || placement.itemId !== magRef.itemId) return false;
-        rounds = placement.rounds ?? 0;
-    } else if ((magRef.fromRig || magRef.container === 'rig') && stats && stats.rigGrid && magRef.placementId != null) {
-        placement = (stats.rigGrid.items || []).find(p => p.placementId === magRef.placementId);
-        if (!placement || placement.itemId !== magRef.itemId) return false;
-        rounds = placement.rounds ?? 0;
-    } else if ((magRef.fromPocket || magRef.container === 'pocket') && stats && stats.pockets && magRef.pocketIndex != null && magRef.slotIndex != null) {
-        ensurePockets(stats);
-        const row = stats.pockets[magRef.pocketIndex];
-        placement = row && row[magRef.slotIndex];
-        if (!placement || placement._spansFrom !== undefined || placement.itemId !== magRef.itemId) return false;
-        rounds = placement.rounds ?? 0;
-    }
-    if (rounds <= 0) return false;
-    let destGrid = null;
-    if (isStashContext && persistent && persistent.stash) {
-        destGrid = persistent.stash;
-    } else if (stats) {
-        if (magRef.container === 'backpack' || magRef.fromAttachmentBox) {
-            destGrid = stats.backpack || (stats.armor && stats.armor.rig && stats.rigGrid ? stats.rigGrid : null);
-        } else if (magRef.fromRig || magRef.container === 'rig') {
-            destGrid = stats.rigGrid || null;
-        } else if (magRef.fromPocket || magRef.container === 'pocket') {
-            destGrid = stats.backpack || (stats.armor && stats.armor.rig && stats.rigGrid ? stats.rigGrid : null);
-        }
-    }
-    if (!destGrid) return false;
-    const added = tryAddItem(destGrid, ammoId, rounds);
-    if (added) {
-        placement.rounds = 0;
-        if (placement.maxRounds == null) placement.maxRounds = getMagazineCapacity(magRef.itemId);
-    }
-    return added;
-}
-
 /** Equipped mag state for weapon (pistol/smg/rifle). Returns { itemId, rounds, maxRounds } or null. */
 function getEquippedMag(stats, weapon) {
     if (!stats || !stats.equippedMagazines) return null;
@@ -2102,14 +2019,11 @@ function setEquippedMag(stats, weapon, magState) {
     if (!stats.equippedMagazines) stats.equippedMagazines = { pistol: null, smg: null, rifle: null };
     stats.equippedMagazines[weapon] = magState ? { itemId: magState.itemId, rounds: magState.rounds, maxRounds: magState.maxRounds } : null;
 }
-/** First empty slot for a mag (sizeW, sizeH). Tries both orientations to fit. Order: rig -> pockets -> backpack. Optional excludeSlot: { container, row?, col?, pocketIndex?, slotIndex? } — skip that slot (e.g. when swapping, the source slot is vacated so usually not needed). */
+/** First empty slot for a mag (sizeW, sizeH). Tries both orientations to fit. Order: rig -> pockets -> backpack. Optional excludeSlot: { container, row?, col?, pocketIndex?, slotIndex? } — do not put the old mag in the same slot the new mag came from. */
 function findFirstEmptySlotForMag(stats, sizeW, sizeH, excludeSlot) {
     if (!stats) return null;
-    ensureRigStats(stats);
-    ensureBackpackStats(stats);
-    ensurePockets(stats);
     const exclude = excludeSlot || null;
-    if (stats.armor && stats.armor.rig && stats.rigGrid && Array.isArray(stats.rigGrid.items)) {
+    if (stats.armor && stats.armor.rig && stats.rigGrid && stats.rigGrid.items) {
         let pos;
         if (exclude && exclude.container === 'rig' && exclude.row != null && exclude.col != null) {
             ensureGridItems(stats.rigGrid);
@@ -2123,13 +2037,9 @@ function findFirstEmptySlotForMag(stats, sizeW, sizeH, excludeSlot) {
         }
         if (pos) return { container: 'rig', row: pos.row, col: pos.col, rotated: pos.rotated };
     }
+    ensurePockets(stats);
     const pockets = stats.pockets || [];
-    const isPocketSlotEmpty = (pi, si) => {
-        const s = pockets[pi] && pockets[pi][si];
-        if (!s) return true;
-        if (s._spansFrom !== undefined) return false;
-        return !s.itemId;
-    };
+    const isPocketSlotEmpty = (pi, si) => { const s = pockets[pi] && pockets[pi][si]; return !s || !s.itemId || s._spansFrom !== undefined; };
     const isExcludedPocket = (pi, si) => exclude && exclude.container === 'pocket' && exclude.pocketIndex === pi && exclude.slotIndex === si;
     if (sizeW === 1 && sizeH === 1) {
         for (let pi = 0; pi < pockets.length; pi++) {
@@ -2147,23 +2057,19 @@ function findFirstEmptySlotForMag(stats, sizeW, sizeH, excludeSlot) {
                 return { container: 'pocket', pocketIndex: pi, slotIndex: 0, rotated: sizeW === 1 && sizeH === 2 };
         }
     }
-    if (stats.backpack) {
-        ensureGridItems(stats.backpack);
-        if (stats.backpack.gridW == null) stats.backpack.gridW = 6;
-        if (stats.backpack.gridH == null) stats.backpack.gridH = 9;
-        if (Array.isArray(stats.backpack.items)) {
-            let pos;
-            if (exclude && exclude.container === 'backpack' && exclude.row != null && exclude.col != null) {
-                const exW = exclude.sizeW || 1, exH = exclude.sizeH || 1;
-                const dummy = { placementId: '_exclude_', row: exclude.row, col: exclude.col, sizeW: exW, sizeH: exH };
-                stats.backpack.items.push(dummy);
-                pos = findSpaceTryRotated(stats.backpack, sizeW, sizeH);
-                stats.backpack.items.pop();
-            } else {
-                pos = findSpaceTryRotated(stats.backpack, sizeW, sizeH);
-            }
-            if (pos) return { container: 'backpack', row: pos.row, col: pos.col, rotated: pos.rotated };
+    if (stats.backpack && stats.backpack.items) {
+        let pos;
+        if (exclude && exclude.container === 'backpack' && exclude.row != null && exclude.col != null) {
+            ensureGridItems(stats.backpack);
+            const exW = exclude.sizeW || 1, exH = exclude.sizeH || 1;
+            const dummy = { placementId: '_exclude_', row: exclude.row, col: exclude.col, sizeW: exW, sizeH: exH };
+            stats.backpack.items.push(dummy);
+            pos = findSpaceTryRotated(stats.backpack, sizeW, sizeH);
+            stats.backpack.items.pop();
+        } else {
+            pos = findSpaceTryRotated(stats.backpack, sizeW, sizeH);
         }
+        if (pos) return { container: 'backpack', row: pos.row, col: pos.col, rotated: pos.rotated };
     }
     return null;
 }
@@ -2198,43 +2104,31 @@ function removeMagFromRigOrPocket(stats, ref) {
     return null;
 }
 
-/** Place a mag (equippedMag state) into first free rig/pocket/backpack, then optional persistentStash (hideout), then drop to ground. Uses scene for drop sprite. */
-function placeMagInRigPocketBackpackOrGround(scene, stats, magState, persistentStash) {
+/** Place a mag (equippedMag state) into first free rig/pocket/backpack slot or drop to ground. Uses scene for drop sprite. */
+function placeMagInRigPocketBackpackOrGround(scene, stats, magState) {
     if (!magState || !magState.itemId) return;
     const cfg = getInventoryItemConfig(magState.itemId);
     const sizeW = (cfg && cfg.sizeW) || 1, sizeH = (cfg && cfg.sizeH) || 1;
     const magExtra = { rounds: magState.rounds ?? 0, maxRounds: magState.maxRounds ?? getMagazineCapacity(magState.itemId) };
     const dest = findFirstEmptySlotForMag(stats, sizeW, sizeH);
-    let placed = false;
     if (dest) {
         const placeW = dest.rotated ? sizeH : sizeW, placeH = dest.rotated ? sizeW : sizeH;
         if (dest.container === 'rig' && stats.rigGrid)
-            placed = !!placeItem(stats.rigGrid, magState.itemId, 1, dest.row, dest.col, magExtra, (placeW !== 1 || placeH !== 1) ? { sizeW: placeW, sizeH: placeH } : undefined);
+            placeItem(stats.rigGrid, magState.itemId, 1, dest.row, dest.col, magExtra, (placeW !== 1 || placeH !== 1) ? { sizeW: placeW, sizeH: placeH } : undefined);
         else if (dest.container === 'backpack' && stats.backpack)
-            placed = !!placeItem(stats.backpack, magState.itemId, 1, dest.row, dest.col, magExtra, (placeW !== 1 || placeH !== 1) ? { sizeW: placeW, sizeH: placeH } : undefined);
+            placeItem(stats.backpack, magState.itemId, 1, dest.row, dest.col, magExtra, (placeW !== 1 || placeH !== 1) ? { sizeW: placeW, sizeH: placeH } : undefined);
         else if (dest.container === 'pocket') {
             ensurePockets(stats);
             if (placeW === 1 && placeH === 1) {
                 const slot = stats.pockets[dest.pocketIndex] && stats.pockets[dest.pocketIndex][dest.slotIndex];
-                if (slot && !slot.itemId) {
+                if (slot && !slot.itemId)
                     stats.pockets[dest.pocketIndex][dest.slotIndex] = { itemId: magState.itemId, count: 1, rounds: magExtra.rounds, maxRounds: magExtra.maxRounds };
-                    placed = true;
-                }
             } else if (placeW === 2 && placeH === 1 && dest.slotIndex === 0) {
                 stats.pockets[dest.pocketIndex][0] = { itemId: magState.itemId, count: 1, rounds: magExtra.rounds, maxRounds: magExtra.maxRounds, sizeW: 2, sizeH: 1 };
                 stats.pockets[dest.pocketIndex][1] = { _spansFrom: 0 };
-                placed = true;
             }
         }
-    }
-    if (!placed && persistentStash) {
-        const pos = findSpace(persistentStash, sizeW, sizeH);
-        if (pos) {
-            const extra = { rounds: magExtra.rounds, maxRounds: magExtra.maxRounds };
-            placed = !!placeItem(persistentStash, magState.itemId, 1, pos.row, pos.col, extra, (sizeW !== 1 || sizeH !== 1) ? { sizeW, sizeH } : undefined);
-        }
-    }
-    if (!placed && scene && scene.droppedInventoryItems) {
+    } else if (scene && scene.droppedInventoryItems) {
         if (!scene.textures.exists('pickup_dropped')) {
             const g = scene.make.graphics({ x: 0, y: 0, add: false });
             g.fillStyle(0x8B4513, 1);
@@ -2743,11 +2637,6 @@ function hasDoorKey(stats) {
     return n > 0;
 }
 
-/** True if player has NVG equipped in the NVG slot (equippable item). */
-function hasEquippedNvg(stats) {
-    return !!(stats && stats.armor && stats.armor.nvg);
-}
-
 /** Remove one grenade from pocket or rig (pockets first). Returns true if removed. */
 function removeOneGrenadeFromPocketOrRig(stats) {
     if (!stats) return false;
@@ -2846,9 +2735,9 @@ function getOrCreateRigInventory(inventoryMap, key) {
     return inventoryMap[key];
 }
 
-/** Only allow ammo types in ammo box inner grid (9mm, .45, 5.56, shells, bolts, legacy ammo). */
+/** Only allow ammo in ammo box inner grid. */
 function tryAddItemAmmoBoxOnly(grid, itemId, count) {
-    if (!isAmmoItemId(itemId)) return false;
+    if (itemId !== 'ammo') return false;
     return tryAddItem(grid, itemId, count);
 }
 
@@ -4863,24 +4752,6 @@ class HideoutScene extends Phaser.Scene {
         if (this.stats.hideout.repairStationLvl === undefined) {
             this.stats.hideout.repairStationLvl = 0;
         }
-        // Migrate armory → tinkerBench + gunBench; NVG → equippable item
-        if (this.stats.hideout.tinkerBench === undefined) {
-            this.stats.hideout.tinkerBench = { crafting: null };
-        }
-        if (this.stats.hideout.gunBench === undefined) {
-            this.stats.hideout.gunBench = { level: 1, crafting: null };
-        }
-        if (this.stats.hideout.armory) {
-            const armory = this.stats.hideout.armory;
-            if (armory.hasNVG) this.stats._migrateGrantNvg = true;
-            if (armory.crafting && armory.crafting.item === 'nvg') {
-                this.stats.hideout.tinkerBench.crafting = { item: 'nvg', finishTime: armory.crafting.finishTime };
-            }
-            delete this.stats.hideout.armory;
-        }
-        if (this.stats.armor.nvg === undefined) {
-            this.stats.armor.nvg = null;
-        }
         // Ensure new currency fields exist
         if (this.stats.credits === undefined) {
             this.stats.credits = 0;
@@ -4920,10 +4791,6 @@ class HideoutScene extends Phaser.Scene {
 
         // Load persistent stats
         this.persistent = loadPersistent();
-        if (this.stats._migrateGrantNvg && this.persistent.stash) {
-            tryAddItem(this.persistent.stash, 'nvg', 1);
-            delete this.stats._migrateGrantNvg;
-        }
         // Deposit any run loot (scrap/credits/materials) into hideout stash; you don't carry these into raid
         this.persistent.scrap = (this.persistent.scrap || 0) + (this.stats.scrap || 0);
         this.persistent.credits = (this.persistent.credits || 0) + (this.stats.credits || 0);
@@ -4942,7 +4809,7 @@ class HideoutScene extends Phaser.Scene {
         // Initialize tab content array for cleanup
         this.tabContent = [];
         this.currentTab = (data && data.tab) || 'character';  // default = loadout (inventory + stash)
-        this.hideoutInvBodyView = 'gear';  // for CHARACTER tab body section
+        this.hideoutInvBodyView = 'gear';  // for CHARACTER tab Gear/Health toggle
         
         // Render persistent UI elements
         this.renderBackground();
@@ -5085,11 +4952,6 @@ class HideoutScene extends Phaser.Scene {
         missionBtn.on('pointerout', () => missionBtn.setFillStyle(0x00aa44));
     }
     
-    /** Schedules a deferred rerender of the CHARACTER tab (stash + inventory). Safe to call even if tab is not active. */
-    scheduleRerenderCharacterTab() {
-        if (this._rerenderCharacterTab) this.time.delayedCall(0, () => { if (this._rerenderCharacterTab) this._rerenderCharacterTab(); });
-    }
-
     /** So drag/drop rerender() in renderInventoryPanel works when panel is drawn on CHARACTER tab. */
     renderInventoryPanel() {
         GameScene.prototype.renderInventoryPanel.call(this);
@@ -5117,7 +4979,6 @@ class HideoutScene extends Phaser.Scene {
                 this.input.off('pointerup', this.invListeners.up);
                 if (this.invListeners.delKey) this.invListeners.delKey.off('down', this.invListeners.delKeyCallback);
                 if (this.invListeners.rKey) this.invListeners.rKey.off('down', this.invListeners.rKeyCallback);
-                if (this.invListeners.uKey) this.invListeners.uKey.off('down', this.invListeners.uKeyCallback);
                 this.invListeners = null;
             }
             if (this.invGhostRect) { this.invGhostRect.destroy(); this.invGhostRect = null; }
@@ -5146,16 +5007,12 @@ class HideoutScene extends Phaser.Scene {
                 this.input.off('pointerup', this.invListeners.up);
                 if (this.invListeners.delKey) this.invListeners.delKey.off('down', this.invListeners.delKeyCallback);
                 if (this.invListeners.rKey) this.invListeners.rKey.off('down', this.invListeners.rKeyCallback);
-                if (this.invListeners.uKey) this.invListeners.uKey.off('down', this.invListeners.uKeyCallback);
                 this.invListeners = null;
             }
             if (this.invGhostRect) { this.invGhostRect.destroy(); this.invGhostRect = null; }
             if (this.invGhostText) { this.invGhostText.destroy(); this.invGhostText = null; }
             this.invDragging = null;
             this._stashSelected = null;
-            this.stashDragging = null;
-            this.lastBackpackListWeaponClick = null;
-            this.lastStashGridWeaponClick = null;
             this._hideoutStashBounds = null;
             this._hideoutContainerBounds = null;
             this.addItemToStash = null;
@@ -5169,7 +5026,6 @@ class HideoutScene extends Phaser.Scene {
             this.equipStashItemToSlot = null;
             this.equipStashItemToWeaponSlot = null;
             this.equipStashMagToWeaponSlot = null;
-            this.equipStashModToWeaponSlot = null;
             this.injectIntoStash = null;
             this._rerenderCharacterTab = null;
             if (this.stashCleanup) { this.stashCleanup(); this.stashCleanup = null; }
@@ -5198,7 +5054,7 @@ class HideoutScene extends Phaser.Scene {
         const cardSpacing = 15;
         const startX = 25;
         
-        // Row 1: REST AREA, GENERATOR, GUN BENCH
+        // Row 1: REST AREA, GENERATOR, ARMORY
         this.createFacilityCard(startX, startY, cardWidth, cardHeight, "REST AREA", '#ffff00',
             () => `LVL: ${this.stats.hideout.restAreaLvl}\n${this.getRestEffect()}`,
             () => {
@@ -5250,13 +5106,12 @@ class HideoutScene extends Phaser.Scene {
             () => this.stats.hideout.generatorLvl === 0 ? "BUILD" : "MAX LEVEL"
         );
         
-        this.createGunBenchFacilityCard(startX + (cardWidth + cardSpacing) * 2, startY, cardWidth, cardHeight);
+        this.createArmoryFacilityCard(startX + (cardWidth + cardSpacing) * 2, startY, cardWidth, cardHeight);
         
-        // Row 2: WORKBENCH, REPAIR STATION, TINKER BENCH
+        // Row 2: WORKBENCH, REPAIR STATION
         const row2Y = startY + cardHeight + cardSpacing;
         this.createWorkbenchFacilityCard(startX, row2Y, cardWidth, cardHeight);
         this.createRepairFacilityCard(startX + cardWidth + cardSpacing, row2Y, cardWidth, cardHeight);
-        this.createTinkerBenchFacilityCard(startX + (cardWidth + cardSpacing) * 2, row2Y, cardWidth, cardHeight);
     }
     
     createFacilityCard(x, y, w, h, title, titleColor, descFn, actionFn, costFn) {
@@ -5292,211 +5147,67 @@ class HideoutScene extends Phaser.Scene {
         btn.on('pointerout', () => btn.setFillStyle(0x444444));
     }
     
-    createGunBenchFacilityCard(x, y, w, h) {
+    createArmoryFacilityCard(x, y, w, h) {
         const card = this.add.rectangle(x + w/2, y + h/2, w, h, 0x2a2a2a).setStrokeStyle(2, 0x444444);
         this.tabContent.push(card);
         
-        const titleText = this.add.text(x + 10, y + 10, "GUN BENCH", { fontSize: '16px', fill: '#ff00ff', fontStyle: 'bold' });
+        const titleText = this.add.text(x + 10, y + 10, "ARMORY", { fontSize: '16px', fill: '#ff00ff', fontStyle: 'bold' });
         this.tabContent.push(titleText);
         
-        const gunBench = this.stats.hideout.gunBench;
-        const level = gunBench.level || 1;
-        let descStr = `LVL ${level}\nCraft ammo (1 scrap, 90s)`;
-        const descText = this.add.text(x + 10, y + 35, descStr, { fontSize: '13px', fill: '#aaa', lineSpacing: 4 });
-        this.tabContent.push(descText);
-        
-        this.gunBenchTimerText = this.add.text(x + 10, y + 62, "", { fontSize: '12px', fill: '#00ff00' });
-        this.tabContent.push(this.gunBenchTimerText);
-        
-        const cfg9 = CONFIG.HIDEOUT.GUN_BENCH_CRAFT_9MM;
-        const cfgShells = CONFIG.HIDEOUT.GUN_BENCH_CRAFT_SHELLS;
-        
-        const updateGunBenchUI = () => {
-            const job = this.stats.hideout.gunBench.crafting;
-            if (job && Date.now() >= job.finishTime) {
-                this.gunBenchTimerText.setText("COMPLETE!");
-            } else if (job) {
-                const sec = Math.ceil((job.finishTime - Date.now()) / 1000);
-                this.gunBenchTimerText.setText(`CRAFTING: ${Math.floor(sec/60)}:${(sec%60).toString().padStart(2,'0')}`);
-            } else {
-                this.gunBenchTimerText.setText("");
-            }
-        };
-        
-        const craftBtnY = level === 2 ? y + h - 52 : y + h - 38;
-        const craftBtn = this.add.rectangle(x + w/2, craftBtnY, w - 20, 24, 0x335533).setInteractive();
-        this.tabContent.push(craftBtn);
-        const craftBtnText = this.add.text(x + w/2, craftBtnY, "CRAFT 9MM (1 SCRAP)", { fontSize: '10px', fill: '#fff' }).setOrigin(0.5);
-        this.tabContent.push(craftBtnText);
-        
-        craftBtn.on('pointerdown', () => {
-            const gb = this.stats.hideout.gunBench;
-            if (gb.crafting) {
-                if (Date.now() >= gb.crafting.finishTime) {
-                    sfx.lootAmmo();
-                    tryAddItem(this.persistent.stash, gb.crafting.itemId, gb.crafting.count);
-                    gb.crafting = null;
-                    updateGunBenchUI();
-                    savePersistent(this.persistent);
-                    localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(this.stats));
-                    this.cameras.main.flash(100, 0, 255, 0);
-                }
-                return;
-            }
-            if ((this.persistent.scrap || 0) < cfg9.scrap) { sfx.error(); return; }
-            this.persistent.scrap = (this.persistent.scrap || 0) - cfg9.scrap;
-            gb.crafting = { itemId: cfg9.itemId, count: cfg9.count, finishTime: Date.now() + cfg9.timeMs };
-            this.updateResourceText();
-            updateGunBenchUI();
-            savePersistent(this.persistent);
-            localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(this.stats));
-            sfx.success();
-        });
-        craftBtn.on('pointerover', () => craftBtn.setFillStyle(0x447744));
-        craftBtn.on('pointerout', () => craftBtn.setFillStyle(0x335533));
-        
-        let shellsBtn, shellsBtnText, upgradeBtn, upgradeBtnText;
-        if (level === 1) {
-            const cost = CONFIG.HIDEOUT.GUN_BENCH_LEVEL2_COST;
-            upgradeBtn = this.add.rectangle(x + w/2, y + h - 22, w - 20, 22, 0x444444).setInteractive();
-            this.tabContent.push(upgradeBtn);
-            upgradeBtnText = this.add.text(x + w/2, y + h - 22, `UPGRADE (${cost} SCRAP)`, { fontSize: '10px', fill: '#fff' }).setOrigin(0.5);
-            this.tabContent.push(upgradeBtnText);
-            upgradeBtn.on('pointerdown', () => {
-                if ((this.persistent.scrap || 0) >= cost) {
-                    this.persistent.scrap = (this.persistent.scrap || 0) - cost;
-                    this.stats.hideout.gunBench.level = 2;
-                    this.updateResourceText();
-                    descText.setText("LVL 2\nCraft 9mm or shells (1 scrap, 90s)");
-                    upgradeBtn.destroy();
-                    upgradeBtnText.destroy();
-                    const row2Y = y;
-                    shellsBtn = this.add.rectangle(x + w/2, row2Y + h - 22, w - 20, 22, 0x335533).setInteractive();
-                    this.tabContent.push(shellsBtn);
-                    shellsBtnText = this.add.text(x + w/2, row2Y + h - 22, "CRAFT SHELLS (1 SCRAP)", { fontSize: '10px', fill: '#fff' }).setOrigin(0.5);
-                    this.tabContent.push(shellsBtnText);
-                    shellsBtn.on('pointerdown', () => {
-                        const gb2 = this.stats.hideout.gunBench;
-                        if (gb2.crafting) {
-                            if (Date.now() >= gb2.crafting.finishTime) {
-                                sfx.lootAmmo();
-                                tryAddItem(this.persistent.stash, gb2.crafting.itemId, gb2.crafting.count);
-                                gb2.crafting = null;
-                                updateGunBenchUI();
-                                savePersistent(this.persistent);
-                                localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(this.stats));
-                                this.cameras.main.flash(100, 0, 255, 0);
-                            }
-                            return;
-                        }
-                        if ((this.persistent.scrap || 0) < cfgShells.scrap) { sfx.error(); return; }
-                        this.persistent.scrap = (this.persistent.scrap || 0) - cfgShells.scrap;
-                        gb2.crafting = { itemId: cfgShells.itemId, count: cfgShells.count, finishTime: Date.now() + cfgShells.timeMs };
-                        this.updateResourceText();
-                        updateGunBenchUI();
-                        savePersistent(this.persistent);
-                        localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(this.stats));
-                        sfx.success();
-                    });
-                    shellsBtn.on('pointerover', () => shellsBtn.setFillStyle(0x447744));
-                    shellsBtn.on('pointerout', () => shellsBtn.setFillStyle(0x335533));
-                    savePersistent(this.persistent);
-                    localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(this.stats));
-                    sfx.success();
-                } else { sfx.error(); }
-            });
-            upgradeBtn.on('pointerover', () => upgradeBtn.setFillStyle(0x555555));
-            upgradeBtn.on('pointerout', () => upgradeBtn.setFillStyle(0x444444));
-        } else {
-            shellsBtn = this.add.rectangle(x + w/2, y + h - 22, w - 20, 22, 0x335533).setInteractive();
-            this.tabContent.push(shellsBtn);
-            shellsBtnText = this.add.text(x + w/2, y + h - 22, "CRAFT SHELLS (1 SCRAP)", { fontSize: '10px', fill: '#fff' }).setOrigin(0.5);
-            this.tabContent.push(shellsBtnText);
-            shellsBtn.on('pointerdown', () => {
-                const gb2 = this.stats.hideout.gunBench;
-                if (gb2.crafting) {
-                    if (Date.now() >= gb2.crafting.finishTime) {
-                        sfx.lootAmmo();
-                        tryAddItem(this.persistent.stash, gb2.crafting.itemId, gb2.crafting.count);
-                        gb2.crafting = null;
-                        updateGunBenchUI();
-                        savePersistent(this.persistent);
-                        localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(this.stats));
-                        this.cameras.main.flash(100, 0, 255, 0);
-                    }
-                    return;
-                }
-                if ((this.persistent.scrap || 0) < cfgShells.scrap) { sfx.error(); return; }
-                this.persistent.scrap = (this.persistent.scrap || 0) - cfgShells.scrap;
-                gb2.crafting = { itemId: cfgShells.itemId, count: cfgShells.count, finishTime: Date.now() + cfgShells.timeMs };
-                this.updateResourceText();
-                updateGunBenchUI();
-                savePersistent(this.persistent);
-                localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(this.stats));
-                sfx.success();
-            });
-            shellsBtn.on('pointerover', () => shellsBtn.setFillStyle(0x447744));
-            shellsBtn.on('pointerout', () => shellsBtn.setFillStyle(0x335533));
-        }
-    }
-    
-    createTinkerBenchFacilityCard(x, y, w, h) {
-        const card = this.add.rectangle(x + w/2, y + h/2, w, h, 0x2a2a2a).setStrokeStyle(2, 0x444444);
-        this.tabContent.push(card);
-        
-        const titleText = this.add.text(x + 10, y + 10, "TINKER BENCH", { fontSize: '16px', fill: '#00ccff', fontStyle: 'bold' });
-        this.tabContent.push(titleText);
-        
-        const tinker = this.stats.hideout.tinkerBench;
+        let armory = this.stats.hideout.armory;
         let descStr, btnStr;
-        if (tinker.crafting) {
-            if (Date.now() >= tinker.crafting.finishTime) {
-                descStr = "NVG ready\nClick to claim";
-                btnStr = "CLAIM NVG";
-            } else {
-                descStr = "Fabricating NVG...";
-                btnStr = "CRAFTING...";
-            }
+        if (armory.hasNVG) {
+            descStr = "NVG Equipped\nPress [N] in game";
+            btnStr = "EQUIPPED";
+        } else if (armory.crafting) {
+            descStr = "Fabricating NVG...";
+            btnStr = "CRAFTING...";
         } else {
-            descStr = "Craft NVG (item)\nCost: 3 Scrap, 90s";
-            btnStr = "CRAFT NVG (3 SCRAP)";
+            descStr = "Craft NVG\nCost: 3 Scrap";
+            btnStr = "CRAFT NVG";
         }
         
         const descText = this.add.text(x + 10, y + 35, descStr, { fontSize: '13px', fill: '#aaa', lineSpacing: 4 });
         this.tabContent.push(descText);
         
-        this.tinkerBenchTimerText = this.add.text(x + 10, y + 70, "", { fontSize: '12px', fill: '#00ff00' });
-        this.tabContent.push(this.tinkerBenchTimerText);
+        this.armoryTimerText = this.add.text(x + 10, y + 70, "", { fontSize: '12px', fill: '#00ff00' });
+        this.tabContent.push(this.armoryTimerText);
         
-        const btn = this.add.rectangle(x + w/2, y + h - 38, w - 20, 28, 0x444444).setInteractive();
-        this.tinkerBenchClaimBtn = btn;
+        const btn = this.add.rectangle(x + w/2, y + h - 45, w - 20, 28, armory.hasNVG ? 0x222222 : 0x444444);
+        if (!armory.hasNVG) btn.setInteractive();
+        this.armoryBtn = btn;
         this.tabContent.push(btn);
-        this.tinkerBenchBtnText = this.add.text(x + w/2, y + h - 38, btnStr, { fontSize: '12px', fill: '#fff' }).setOrigin(0.5);
-        this.tabContent.push(this.tinkerBenchBtnText);
+        
+        this.armoryBtnText = this.add.text(x + w/2, y + h - 45, btnStr, { fontSize: '12px', fill: '#fff' }).setOrigin(0.5);
+        this.tabContent.push(this.armoryBtnText);
+        
+        // Ammo press button
+        const ammoBtn = this.add.rectangle(x + w/2, y + h - 15, w - 20, 22, 0x335533).setInteractive();
+        this.tabContent.push(ammoBtn);
+        const ammoBtnText = this.add.text(x + w/2, y + h - 15, "AMMO PRESS (1 SCRAP = 4 AMMO)", { fontSize: '10px', fill: '#fff' }).setOrigin(0.5);
+        this.tabContent.push(ammoBtnText);
         
         btn.on('pointerdown', () => {
-            const tb = this.stats.hideout.tinkerBench;
-            if (tb.crafting && Date.now() >= tb.crafting.finishTime) {
+            if (armory.hasNVG) return;
+            if (armory.crafting && Date.now() >= armory.crafting.finishTime) {
                 sfx.lootWeapon();
-                if (this.persistent.stash) tryAddItem(this.persistent.stash, 'nvg', 1);
-                tb.crafting = null;
-                descText.setText("Craft NVG (item)\nCost: 3 Scrap, 90s");
-                this.tinkerBenchBtnText.setText("CRAFT NVG (3 SCRAP)");
-                this.tinkerBenchTimerText.setText("");
-                btn.setInteractive();
-                savePersistent(this.persistent);
+                armory.hasNVG = true;
+                armory.crafting = null;
+                descText.setText("NVG Equipped\nPress [N] in game");
+                this.armoryBtnText.setText("EQUIPPED");
+                btn.disableInteractive();
+                btn.setFillStyle(0x222222);
                 localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(this.stats));
-                this.cameras.main.flash(100, 0, 255, 0);
                 return;
             }
-            if (tb.crafting) return;
+            if (armory.crafting) return;
             if ((this.persistent.scrap || 0) >= 3) {
                 sfx.success();
                 this.persistent.scrap = (this.persistent.scrap || 0) - 3;
-                tb.crafting = { item: 'nvg', finishTime: Date.now() + CONFIG.TIMINGS.NVG_CRAFT };
+                armory.crafting = { item: 'nvg', finishTime: Date.now() + CONFIG.TIMINGS.NVG_CRAFT };
                 this.updateResourceText();
                 descText.setText("Fabricating NVG...");
-                this.tinkerBenchBtnText.setText("CRAFTING...");
+                this.armoryBtnText.setText("CRAFTING...");
                 btn.disableInteractive();
                 savePersistent(this.persistent);
                 localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(this.stats));
@@ -5505,8 +5216,22 @@ class HideoutScene extends Phaser.Scene {
                 this.cameras.main.shake(100, 0.005);
             }
         });
-        btn.on('pointerover', () => btn.setFillStyle(0x555555));
-        btn.on('pointerout', () => btn.setFillStyle(0x444444));
+        
+        ammoBtn.on('pointerdown', () => {
+            if ((this.persistent.scrap || 0) >= 1) {
+                sfx.lootAmmo();
+                this.persistent.scrap = (this.persistent.scrap || 0) - 1;
+                tryAddItem(this.persistent.stash, 'ammo', 4);
+                this.updateResourceText();
+                savePersistent(this.persistent);
+                localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(this.stats));
+                this.cameras.main.flash(100, 0, 255, 0);
+            } else {
+                sfx.error();
+            }
+        });
+        ammoBtn.on('pointerover', () => ammoBtn.setFillStyle(0x447744));
+        ammoBtn.on('pointerout', () => ammoBtn.setFillStyle(0x335533));
     }
     
     createWorkbenchFacilityCard(x, y, w, h) {
@@ -5728,7 +5453,7 @@ class HideoutScene extends Phaser.Scene {
         const stash = this.persistent.stash;
         const backpack = this.stats.backpack;
         stash.gridW = 14;
-        stash.gridH = 54;
+        stash.gridH = 24;
         backpack.gridW = 6;
         backpack.gridH = 9;
         ensureGridItems(stash);
@@ -5789,8 +5514,8 @@ class HideoutScene extends Phaser.Scene {
         const invPanelW = 479;
         const stashMargin = 14;
         const stashCols = 14;
-        const totalStashRows = stash.gridH || 54;
-        const visibleStashRows = 21;
+        const totalStashRows = stash.gridH || 24;
+        const visibleStashRows = 19;
         const scrollOffset = Math.max(0, Math.min(this._stashScrollOffset, totalStashRows - visibleStashRows));
         this._stashScrollOffset = scrollOffset;
         
@@ -5831,7 +5556,7 @@ class HideoutScene extends Phaser.Scene {
         
         // Resource line just under stash (Scrap | Credits | Mat)
         const stashGridBottomY = stashY + visibleStashRows * step;
-        this._stashResourceText = this.add.text(stashX + (stashCols * step) / 2, stashGridBottomY - 2 * step + 77, `SCRAP: ${this.persistent.scrap || 0}  |  CREDITS: ${this.persistent.credits || 0}  |  MAT: ${this.persistent.materials || 0}`, { fontSize: '11px', fill: '#ffaa00', fontStyle: 'bold' }).setOrigin(0.5).setDepth(STASH_DEPTH);
+        this._stashResourceText = this.add.text(stashX + (stashCols * step) / 2, stashGridBottomY + 12, `SCRAP: ${this.persistent.scrap || 0}  |  CREDITS: ${this.persistent.credits || 0}  |  MAT: ${this.persistent.materials || 0}`, { fontSize: '10px', fill: '#ffaa00', fontStyle: 'bold' }).setOrigin(0.5).setDepth(STASH_DEPTH);
         content.push(this._stashResourceText);
         
         const occupied = new Set();
@@ -5911,21 +5636,44 @@ class HideoutScene extends Phaser.Scene {
         const panelStep = 21;
         const backpackBounds = { left: invGridX, right: invGridX + 6 * panelStep, top: invGridY, bottom: invGridY + 9 * panelStep };
         
-        const btnBarY = stashGridBottomY - 2 * step + 54;
-        const btnW = 110;
+        // Backpack list: clickable items (below stash grid)
+        const packListY = stashGridBottomY + 12;
+        let packItemX = stashX;
+        const packItemH = 14;
+        (backpack.items || []).forEach((p, i) => {
+            const cfg = getInventoryItemConfig(p.itemId);
+            const lbl = (cfg && cfg.label) ? cfg.label : (p.itemId || '?').replace(/_/g, ' ');
+            const short = (p.count > 1 ? lbl + '×' + p.count : lbl).slice(0, 12);
+            const w = Math.min(70, short.length * 6 + 8);
+            const cx = packItemX + w / 2;
+            const cy = packListY + 16 + (Math.floor(i / 4) * (packItemH + 2)) + packItemH / 2;
+            const zone = { left: packItemX, right: packItemX + w, top: cy - packItemH / 2, bottom: cy + packItemH / 2, placementId: p.placementId, fromStash: false, itemId: p.itemId, count: p.count || 1, sizeW: p.sizeW || 1, sizeH: p.sizeH || 1 };
+            backpackItemZones.push(zone);
+            const btn = this.add.rectangle(cx, cy, w, packItemH, 0x333344).setStrokeStyle(1, 0x666666).setDepth(STASH_DEPTH).setInteractive();
+            const txt = this.add.text(cx, cy, short, { fontSize: '9px', fill: '#ccc' }).setOrigin(0.5).setDepth(STASH_DEPTH + 1);
+            content.push(btn, txt);
+            packItemX += w + 4;
+            if ((i + 1) % 4 === 0) { packItemX = stashX; }
+        });
+        
+        const btnBarY = packListY + 16 + Math.ceil(((backpack.items || []).length) / 4) * (packItemH + 2) + 14;
+        const btnW = 58;
         const btnH = 26;
         const btnMoveAll = { left: stashX, right: stashX + btnW, top: btnBarY - btnH / 2, bottom: btnBarY + btnH / 2 };
         
         const moveAllBtn = this.add.rectangle(stashX + btnW / 2, btnBarY, btnW, btnH, 0x334422).setDepth(STASH_DEPTH).setInteractive();
-        const moveAllTxt = this.add.text(stashX + btnW / 2, btnBarY, 'Empty Backpack', { fontSize: '10px', fill: '#ccc' }).setOrigin(0.5).setDepth(STASH_DEPTH + 1);
+        const moveAllTxt = this.add.text(stashX + btnW / 2, btnBarY, 'ALL→', { fontSize: '10px', fill: '#ccc' }).setOrigin(0.5).setDepth(STASH_DEPTH + 1);
         content.push(moveAllBtn, moveAllTxt);
         
         const hintY = btnBarY + 28;
+        const selectedLabel = this.add.text(stashX + (stashCols * step) / 2, hintY, 'Drag stash items to reorder. ALL→ = move all backpack to stash.', { fontSize: '10px', fill: '#888' }).setOrigin(0.5, 0).setDepth(STASH_DEPTH);
+        content.push(selectedLabel);
         
         const tooltipBg = this.add.rectangle(stashX + (stashCols * step) / 2, hintY + 28, 200, 32, 0x1a1a1a, 0.98).setStrokeStyle(2, 0x888888).setVisible(false).setDepth(STASH_DEPTH + 10);
         const tooltipText = this.add.text(stashX + (stashCols * step) / 2, hintY + 28, '', { fontSize: '12px', fill: '#eee' }).setOrigin(0.5).setVisible(false).setDepth(STASH_DEPTH + 11);
         content.push(tooltipBg, tooltipText);
         
+        this.stashDragging = null;
         this.ammoBoxWindowOpen = null;
         this.rigWindowOpen = null;
         let lastAmmoBoxClick = null;
@@ -5945,15 +5693,6 @@ class HideoutScene extends Phaser.Scene {
         const rerenderCharacterTab = () => {
             if (this.stashCleanup) this.stashCleanup();
             this.stashCleanup = null;
-            if (this.invListeners) {
-                this.input.off('pointermove', this.invListeners.move);
-                this.input.off('pointerdown', this.invListeners.down);
-                this.input.off('pointerup', this.invListeners.up);
-                if (this.invListeners.delKey) this.invListeners.delKey.off('down', this.invListeners.delKeyCallback);
-                if (this.invListeners.rKey) this.invListeners.rKey.off('down', this.invListeners.rKeyCallback);
-                if (this.invListeners.uKey) this.invListeners.uKey.off('down', this.invListeners.uKeyCallback);
-                this.invListeners = null;
-            }
             if (this._invContent && this._invContent.length) {
                 this._invContent.forEach(e => e.destroy());
                 this._invContent = [];
@@ -5975,8 +5714,8 @@ class HideoutScene extends Phaser.Scene {
             const scrollDownBtn = this.add.rectangle(scrollBtnX, scrollDownY, 20, scrollBtnH, 0x444444).setDepth(STASH_DEPTH).setInteractive();
             const scrollDownTxt = this.add.text(scrollBtnX, scrollDownY, '▼', { fontSize: '12px', fill: '#ccc' }).setOrigin(0.5).setDepth(STASH_DEPTH + 1);
             content.push(scrollUpBtn, scrollUpTxt, scrollDownBtn, scrollDownTxt);
-            scrollUpBtn.on('pointerdown', () => { this._stashScrollOffset = 0; rerenderCharacterTab(); });
-            scrollDownBtn.on('pointerdown', () => { this._stashScrollOffset = Math.max(0, totalStashRows - visibleStashRows); rerenderCharacterTab(); });
+            scrollUpBtn.on('pointerdown', () => { this._stashScrollOffset = Math.max(0, this._stashScrollOffset - 1); rerenderCharacterTab(); });
+            scrollDownBtn.on('pointerdown', () => { this._stashScrollOffset = Math.min(totalStashRows - visibleStashRows, this._stashScrollOffset + 1); rerenderCharacterTab(); });
         }
         
         this._hideoutStashBounds = stashViewportBounds;
@@ -6022,7 +5761,7 @@ class HideoutScene extends Phaser.Scene {
                 sfx.click();
                 localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(this.stats));
                 savePersistent(this.persistent);
-                this.scheduleRerenderCharacterTab();
+                if (this._rerenderCharacterTab) this.time.delayedCall(0, () => { if (this._rerenderCharacterTab) this._rerenderCharacterTab(); });
             }
             return added;
         };
@@ -6041,21 +5780,21 @@ class HideoutScene extends Phaser.Scene {
             sfx.click();
             localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(stats));
             savePersistent(this.persistent);
-            this.scheduleRerenderCharacterTab();
+            if (this._rerenderCharacterTab) this.time.delayedCall(0, () => { if (this._rerenderCharacterTab) this._rerenderCharacterTab(); });
         };
-        /** Move equipped armor (head/body/ears/nvg) to stash. slotId: 'head'|'body'|'ears'|'nvg'. */
+        /** Move equipped armor (head/body/ears) to stash. slotId: 'head'|'body'|'ears'. */
         this.addEquippedArmorToStash = (slotId) => {
-            const ARMOR_SLOT_ITEM = { head: 'helmet', body: 'vest', ears: 'headset', rig: 'rig', nvg: 'nvg' };
+            const ARMOR_SLOT_ITEM = { head: 'helmet', body: 'vest', ears: 'headset', rig: 'rig' };
             const armor = this.stats.armor && this.stats.armor[slotId];
             if (!armor) return;
-            const itemId = (slotId === 'head' && armor.itemId) ? armor.itemId : (slotId === 'ears' && armor.itemId) ? armor.itemId : (slotId === 'nvg' && armor.itemId) ? armor.itemId : (ARMOR_SLOT_ITEM[slotId] || armor.itemId);
+            const itemId = (slotId === 'head' && armor.itemId) ? armor.itemId : (slotId === 'ears' && armor.itemId) ? armor.itemId : (ARMOR_SLOT_ITEM[slotId] || armor.itemId);
             const extra = (armor.durability != null || armor.maxDurability != null) ? { durability: armor.durability, maxDurability: armor.maxDurability } : undefined;
             if (tryAddItem(this.persistent.stash, itemId, 1, extra)) {
                 this.stats.armor[slotId] = null;
                 sfx.click();
                 localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(this.stats));
                 savePersistent(this.persistent);
-                this.scheduleRerenderCharacterTab();
+                if (this._rerenderCharacterTab) this.time.delayedCall(0, () => { if (this._rerenderCharacterTab) this._rerenderCharacterTab(); });
             }
         };
         /** Move equipped backpack (and its grid) to stash. Call when user drops backpack slot onto stash. */
@@ -6079,7 +5818,7 @@ class HideoutScene extends Phaser.Scene {
             sfx.click();
             localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(this.stats));
             savePersistent(this.persistent);
-            this.scheduleRerenderCharacterTab();
+            if (this._rerenderCharacterTab) this.time.delayedCall(0, () => { if (this._rerenderCharacterTab) this._rerenderCharacterTab(); });
         };
         /** Move equipped secure container (and its grid) to stash. */
         this.addEquippedSecureContainerToStash = () => {
@@ -6095,7 +5834,7 @@ class HideoutScene extends Phaser.Scene {
             sfx.click();
             localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(this.stats));
             savePersistent(this.persistent);
-            this.scheduleRerenderCharacterTab();
+            if (this._rerenderCharacterTab) this.time.delayedCall(0, () => { if (this._rerenderCharacterTab) this._rerenderCharacterTab(); });
         };
         /** Move equipped med bag (and its grid) to stash. */
         this.addEquippedMedBagToStash = () => {
@@ -6111,7 +5850,7 @@ class HideoutScene extends Phaser.Scene {
             sfx.click();
             localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(this.stats));
             savePersistent(this.persistent);
-            this.scheduleRerenderCharacterTab();
+            if (this._rerenderCharacterTab) this.time.delayedCall(0, () => { if (this._rerenderCharacterTab) this._rerenderCharacterTab(); });
         };
         /** Testing: inject any item into stash. itemId e.g. 'backpack_default', 'rig', 'medkit', 'secure_container_default', 'med_bag_default'. Returns true if placed. */
         this.injectIntoStash = (itemId, count) => {
@@ -6142,7 +5881,7 @@ class HideoutScene extends Phaser.Scene {
                 ensureGridItems(this.persistent.medBagInventories['stash_' + newPlacementId]);
             }
             savePersistent(this.persistent);
-            this.scheduleRerenderCharacterTab();
+            if (this._rerenderCharacterTab) this.time.delayedCall(0, () => { if (this._rerenderCharacterTab) this._rerenderCharacterTab(); });
             return true;
         };
         /** Equip a stash backpack or rig onto the body slot. slotId: 'backpack'|'rig'. */
@@ -6202,11 +5941,6 @@ class HideoutScene extends Phaser.Scene {
                 else if (slotId === 'body') this.stats.armor.body = { name: 'VEST', durability: d, maxDurability: m };
                 else if (slotId === 'ears') this.stats.armor.ears = { name: 'HEADSET', durability: d, maxDurability: m, itemId: 'headset' };
                 if (oldArmor && this.stats.backpack) tryAddItem(this.stats.backpack, oldArmor.itemId || ARMOR_SLOT_ITEM[slotId], 1, { durability: oldArmor.durability, maxDurability: oldArmor.maxDurability });
-            } else if (slotId === 'nvg' && item.itemId === 'nvg') {
-                if (!this.stats.armor) this.stats.armor = {};
-                const oldNvg = this.stats.armor.nvg;
-                this.stats.armor.nvg = { itemId: 'nvg', name: 'NVG' };
-                if (oldNvg && this.stats.backpack) tryAddItem(this.stats.backpack, 'nvg', 1);
             } else if (slotId === 'secureContainer' && item.itemId === 'secure_container_default') {
                 const srcKey = 'stash_' + stashPlacementId;
                 if (this.persistent.secureContainerInventories && this.persistent.secureContainerInventories[srcKey]) {
@@ -6234,7 +5968,7 @@ class HideoutScene extends Phaser.Scene {
             sfx.click();
             localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(this.stats));
             savePersistent(this.persistent);
-            this.scheduleRerenderCharacterTab();
+            if (this._rerenderCharacterTab) this.time.delayedCall(0, () => { if (this._rerenderCharacterTab) this._rerenderCharacterTab(); });
         };
         /** Equip a weapon from stash to a weapon slot. slotId: 'primary'|'secondary'|'sidearm'|'melee'. If slot is occupied, the current weapon is moved to stash. */
         this.equipStashItemToWeaponSlot = (stashPlacementId, slotId) => {
@@ -6272,56 +6006,7 @@ class HideoutScene extends Phaser.Scene {
             sfx.click();
             localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(this.stats));
             savePersistent(this.persistent);
-            this.scheduleRerenderCharacterTab();
-        };
-        /** Equip a mod from stash to a weapon attachment slot. zone: { slotId?, slotName, weaponId, type, source? }. Mod must fit slot (modFitsSlot). */
-        this.equipStashModToWeaponSlot = (stashPlacementId, zone) => {
-            const st = this.persistent.stash;
-            const item = removeItem(st, stashPlacementId);
-            if (!item || !isModItem(item.itemId) || !modFitsSlot(item.itemId, zone.slotName, zone.weaponId)) {
-                if (item) st.items.push(item);
-                return;
-            }
-            const modId = item.itemId;
-            let displaced = null;
-            if (zone.type === 'slot' && zone.slotId) {
-                ensureWeaponSlotModsShape(this.stats);
-                const wsm = this.stats.weaponSlotMods;
-                if (wsm && wsm[zone.slotId] && wsm[zone.slotId][zone.slotName]) {
-                    displaced = { itemId: wsm[zone.slotId][zone.slotName], count: 1 };
-                }
-                if (!wsm[zone.slotId]) wsm[zone.slotId] = createDefaultEquippedModsForWeapon(zone.weaponId);
-                wsm[zone.slotId][zone.slotName] = modId;
-            } else if (zone.type === 'outfit' && zone.source) {
-                const src = zone.source;
-                let weaponItem = null;
-                if (src.type === 'backpack' && this.stats.backpack && this.stats.backpack.items) {
-                    weaponItem = this.stats.backpack.items.find(p => p.placementId === src.placementId);
-                } else if (src.type === 'rig' && this.stats.rigGrid && this.stats.rigGrid.items) {
-                    weaponItem = this.stats.rigGrid.items.find(p => p.placementId === src.placementId);
-                } else if (src.type === 'pocket' && this.stats.pockets) {
-                    const s = this.stats.pockets[src.pocketIndex] && this.stats.pockets[src.pocketIndex][src.slotIndex];
-                    weaponItem = s && s.itemId ? s : null;
-                } else if (src.type === 'stash' && this.persistent && this.persistent.stash && this.persistent.stash.items) {
-                    weaponItem = this.persistent.stash.items.find(p => p.placementId === src.placementId);
-                }
-                if (weaponItem) {
-                    if (!weaponItem.mods || typeof weaponItem.mods !== 'object') weaponItem.mods = createDefaultEquippedModsForWeapon(zone.weaponId);
-                    if (weaponItem.mods[zone.slotName]) displaced = { itemId: weaponItem.mods[zone.slotName], count: 1 };
-                    weaponItem.mods[zone.slotName] = modId;
-                } else {
-                    st.items.push(item);
-                    return;
-                }
-            } else {
-                st.items.push(item);
-                return;
-            }
-            if (displaced && this.addItemToStash) this.addItemToStash(displaced, { container: 'weaponMod', weaponId: zone.weaponId, slotName: zone.slotName });
-            sfx.click();
-            localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(this.stats));
-            savePersistent(this.persistent);
-            this.scheduleRerenderCharacterTab();
+            if (this._rerenderCharacterTab) this.time.delayedCall(0, () => { if (this._rerenderCharacterTab) this._rerenderCharacterTab(); });
         };
         /** Equip a magazine from stash to a weapon's mag slot. weaponId: 'pistol'|'smg'|'rifle'. Mag must match weapon (getMagazineWeapon(magItemId) === weaponId). */
         this.equipStashMagToWeaponSlot = (stashPlacementId, weaponId) => {
@@ -6338,7 +6023,7 @@ class HideoutScene extends Phaser.Scene {
             sfx.click();
             localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(this.stats));
             savePersistent(this.persistent);
-            this.scheduleRerenderCharacterTab();
+            if (this._rerenderCharacterTab) this.time.delayedCall(0, () => { if (this._rerenderCharacterTab) this._rerenderCharacterTab(); });
         };
         /** Move a stash item into a panel container. containerId: 'backpack'|'rig'|'secure'|'medBag'|'pockets'. pocketTarget: optional { pocketIndex, slotIndex } when containerId === 'pockets' to prefer that pocket. */
         this.addStashItemToContainer = (stashPlacementId, containerId, pocketTarget) => {
@@ -6440,7 +6125,7 @@ class HideoutScene extends Phaser.Scene {
                 sfx.click();
                 localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(this.stats));
                 savePersistent(this.persistent);
-                this.scheduleRerenderCharacterTab();
+                if (this._rerenderCharacterTab) this.time.delayedCall(0, () => { if (this._rerenderCharacterTab) this._rerenderCharacterTab(); });
             } else {
                 st.items.push(item);
             }
@@ -6481,7 +6166,7 @@ class HideoutScene extends Phaser.Scene {
                 sfx.click();
                 localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(this.stats));
                 savePersistent(this.persistent);
-                this.scheduleRerenderCharacterTab();
+                if (this._rerenderCharacterTab) this.time.delayedCall(0, () => { if (this._rerenderCharacterTab) this._rerenderCharacterTab(); });
             } else {
                 st.items.push(item);
             }
@@ -6522,6 +6207,8 @@ class HideoutScene extends Phaser.Scene {
                     ghostRect = this.add.rectangle(ghostX, ghostY, gw, gh, 0x446644, 0.9).setStrokeStyle(2, 0xaaffaa).setDepth(STASH_DEPTH + 5);
                     ghostText = this.add.text(ghostX, ghostY, (p.count > 1 ? lbl + p.count : lbl), { fontSize: '8px', fill: '#ccc' }).setOrigin(0.5).setDepth(STASH_DEPTH + 6);
                     content.push(ghostRect, ghostText);
+                    selectedLabel.setText('Dragging: ' + name + ' — drop on empty stash cell');
+                    selectedLabel.setFill('#ffaa00');
                     pendingStashContainerDrag = null;
                 }
             }
@@ -6572,32 +6259,16 @@ class HideoutScene extends Phaser.Scene {
             if (this.ammoBoxWindowOpen || this.rigWindowOpen) return;
             const w = getWorld(ptr);
             const px = w.x, py = w.y;
-            const isRightClick = ptr.event && ptr.event.button === 2;
-            const inStashViewport = px >= stashViewportBounds.left && px <= stashViewportBounds.right && py >= stashViewportBounds.top && py <= stashViewportBounds.bottom;
-            const overItemStash = inStashViewport ? itemZones.find(z => inZone(px, py, z)) : null;
-            if (isRightClick && overItemStash && isMagazineItem(overItemStash.itemId) && overItemStash.fromStash) {
-                const weaponId = getMagazineWeapon(overItemStash.itemId);
-                if (weaponId && this._showMagMenu) this._showMagMenu(px, py, { type: 'inventory_mag', dragRef: { fromStash: true, placementId: overItemStash.placementId, itemId: overItemStash.itemId }, weaponId });
-                return;
-            }
             const overBackpack = backpackItemZones.find(z => inZone(px, py, z));
             if (overBackpack) {
-                const now = Date.now();
-                if (CONFIG.WEAPON_SLOTS && CONFIG.WEAPON_SLOTS[overBackpack.itemId] && this.lastBackpackListWeaponClick && this.lastBackpackListWeaponClick.placementId === overBackpack.placementId && this.lastBackpackListWeaponClick.itemId === overBackpack.itemId && (now - this.lastBackpackListWeaponClick.time) < 450) {
-                    this.invFocusedWeapon = overBackpack.itemId;
-                    this.invFocusedWeaponSource = { type: 'backpack', placementId: overBackpack.placementId };
-                    this.lastBackpackListWeaponClick = null;
-                    sfx.menuOpen();
-                    rerenderCharacterTab();
-                    return;
-                }
-                if (CONFIG.WEAPON_SLOTS && CONFIG.WEAPON_SLOTS[overBackpack.itemId]) this.lastBackpackListWeaponClick = { placementId: overBackpack.placementId, itemId: overBackpack.itemId, time: now };
-                else this.lastBackpackListWeaponClick = null;
                 sfx.click();
                 this._stashSelected = { placementId: overBackpack.placementId, fromStash: false };
+                selectedLabel.setText('Selected (backpack): ' + (getInventoryItemConfig(overBackpack.itemId)?.label || overBackpack.itemId));
+                selectedLabel.setFill('#aaa');
                 return;
             }
-            const overItem = overItemStash;
+            const inStashViewport = px >= stashViewportBounds.left && px <= stashViewportBounds.right && py >= stashViewportBounds.top && py <= stashViewportBounds.bottom;
+            const overItem = inStashViewport ? itemZones.find(z => inZone(px, py, z)) : null;
             if (overItem) {
                 if (overItem.itemId === 'ammo_box') {
                     const now = Date.now();
@@ -6637,18 +6308,6 @@ class HideoutScene extends Phaser.Scene {
                     pendingStashContainerDrag = { placementId: overItem.placementId, fromStash: overItem.fromStash, itemId: overItem.itemId, count: overItem.count || 1, sizeW: overItem.sizeW || 1, sizeH: overItem.sizeH || 1, startX: px, startY: py };
                     return;
                 }
-                if (overItem.fromStash && CONFIG.WEAPON_SLOTS && CONFIG.WEAPON_SLOTS[overItem.itemId]) {
-                    const now = Date.now();
-                    if (this.lastStashGridWeaponClick && this.lastStashGridWeaponClick.placementId === overItem.placementId && this.lastStashGridWeaponClick.itemId === overItem.itemId && (now - this.lastStashGridWeaponClick.time) < 450) {
-                        this.invFocusedWeapon = overItem.itemId;
-                        this.invFocusedWeaponSource = { type: 'stash', placementId: overItem.placementId };
-                        this.lastStashGridWeaponClick = null;
-                        sfx.menuOpen();
-                        rerenderCharacterTab();
-                        return;
-                    }
-                    this.lastStashGridWeaponClick = { placementId: overItem.placementId, itemId: overItem.itemId, time: now };
-                }
                 lastAmmoBoxClick = null;
                 lastRigClick = null;
                 sfx.click();
@@ -6666,6 +6325,8 @@ class HideoutScene extends Phaser.Scene {
                 ghostRect = this.add.rectangle(ghostX, ghostY, gw, gh, 0x446644, 0.9).setStrokeStyle(2, 0xaaffaa).setDepth(STASH_DEPTH + 5);
                 ghostText = this.add.text(ghostX, ghostY, (overItem.count > 1 ? lbl + overItem.count : lbl), { fontSize: '8px', fill: '#ccc' }).setOrigin(0.5).setDepth(STASH_DEPTH + 6);
                 content.push(ghostRect, ghostText);
+                selectedLabel.setText('Dragging: ' + name + ' — drop on empty stash cell');
+                selectedLabel.setFill('#ffaa00');
                 return;
             }
             const emptyZone = emptyCellZones.find(z => inZone(px, py, z));
@@ -6738,11 +6399,6 @@ class HideoutScene extends Phaser.Scene {
         
         const onPointerUp = (ptr) => {
             if (this.ammoBoxWindowOpen || this.rigWindowOpen) return;
-            if (ptr.event && ptr.event.button === 2) {
-                this.invSelectedMag = null;
-                this.stashSelectedMag = null;
-                return;
-            }
             if (!this.stashDragging) {
                 pendingStashContainerDrag = null;
                 return;
@@ -6778,10 +6434,6 @@ class HideoutScene extends Phaser.Scene {
                     this.equipStashItemToSlot('ears', drag.placementId);
                     return;
                 }
-                if (b.nvgSlot && px >= b.nvgSlot.left && px <= b.nvgSlot.right && py >= b.nvgSlot.top && py <= b.nvgSlot.bottom && drag.itemId === 'nvg' && this.equipStashItemToSlot) {
-                    this.equipStashItemToSlot('nvg', drag.placementId);
-                    return;
-                }
                 if (b.secureSlot && px >= b.secureSlot.left && px <= b.secureSlot.right && py >= b.secureSlot.top && py <= b.secureSlot.bottom && drag.itemId === 'secure_container_default' && this.equipStashItemToSlot) {
                     this.equipStashItemToSlot('secureContainer', drag.placementId);
                     return;
@@ -6799,15 +6451,6 @@ class HideoutScene extends Phaser.Scene {
                         return;
                     }
                 }
-                if (drag.fromStash && isModItem(drag.itemId) && b.attachmentModSlotZones && b.attachmentModSlotZones.length && this.equipStashModToWeaponSlot) {
-                    const dropX = ghostCenterX, dropY = ghostCenterY;
-                    const inZoneStash = (x, y, z) => x >= z.left && x <= z.right && y >= z.top && y <= z.bottom;
-                    const overModSlot = b.attachmentModSlotZones.find(z => inZoneStash(dropX, dropY, z) && modFitsSlot(drag.itemId, z.slotName, z.weaponId));
-                    if (overModSlot) {
-                        this.equipStashModToWeaponSlot(drag.placementId, overModSlot);
-                        return;
-                    }
-                }
                 if (b.weaponSlots && b.weaponSlots.length && CONFIG.WEAPON_SLOTS && CONFIG.WEAPON_SLOTS[drag.itemId] && this.equipStashItemToWeaponSlot) {
                     const overW = b.weaponSlots.find(z => px >= z.left && px <= z.right && py >= z.top && py <= z.bottom);
                     if (overW) {
@@ -6822,31 +6465,7 @@ class HideoutScene extends Phaser.Scene {
                         }
                     }
                 }
-                if (isAmmoItemId(drag.itemId)) {
-                    const dropX = ghostCenterX, dropY = ghostCenterY;
-                    const inZoneStash = (x, y, z) => x >= z.left && x <= z.right && y >= z.top && y <= z.bottom;
-                    const overStashAmmoBox = itemZones.find(z => inZoneStash(dropX, dropY, z) && z.itemId === 'ammo_box');
-                    const overBackpackAmmoBox = b.backpackItemZonesAll && b.backpackItemZonesAll.find(z => inZoneStash(dropX, dropY, z) && z.itemId === 'ammo_box');
-                    const overAmmoBox = overStashAmmoBox || overBackpackAmmoBox;
-                    if (overAmmoBox) {
-                        const fromStash = !!overStashAmmoBox;
-                        const targetPlacementId = overAmmoBox.placementId;
-                        const invMap = fromStash ? this.persistent.ammoBoxInventories : this.stats.ammoBoxInventories;
-                        if (!invMap) (fromStash ? this.persistent : this.stats).ammoBoxInventories = {};
-                        const innerGrid = getOrCreateAmmoBoxInventory(invMap, (fromStash ? 'stash_' : 'backpack_') + targetPlacementId);
-                        ensureGridItems(innerGrid);
-                        const item = removeItem(this.persistent.stash, drag.placementId);
-                        if (item && tryAddItemAmmoBoxOnly(innerGrid, item.itemId, item.count || 1)) {
-                            sfx.click();
-                            localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(this.stats));
-                            savePersistent(this.persistent);
-                            this.scheduleRerenderCharacterTab();
-                            return;
-                        }
-                        if (item) this.persistent.stash.items.push(item);
-                    }
-                }
-                if ((drag.itemId === 'ammo_9mm' || drag.itemId === 'ammo_45' || drag.itemId === 'ammo_556') && (this.stats || (drag.fromStash && this.persistent && this.persistent.stash))) {
+                if ((drag.itemId === 'ammo_9mm' || drag.itemId === 'ammo_45' || drag.itemId === 'ammo_556') && this.stats) {
                     const dropX = ghostCenterX, dropY = ghostCenterY;
                     const inZoneStash = (x, y, z) => x >= z.left && x <= z.right && y >= z.top && y <= z.bottom;
                     let magTarget = null;
@@ -6858,7 +6477,7 @@ class HideoutScene extends Phaser.Scene {
                         const over = b.rigItemZones.find(z => inZoneStash(dropX, dropY, z) && isMagazineItem(z.itemId) && getMagazineAmmoId(z.itemId) === drag.itemId);
                         if (over) magTarget = { container: 'rig', placementId: over.placementId, itemId: over.itemId };
                     }
-                    if (!magTarget && b.pocketZones && b.pocketZones.length && this.stats) {
+                    if (!magTarget && b.pocketZones && b.pocketZones.length) {
                         const overPocket = b.pocketZones.find(z => inZoneStash(dropX, dropY, z));
                         if (overPocket) {
                             const slot = this.stats.pockets && this.stats.pockets[overPocket.pocketIndex] && this.stats.pockets[overPocket.pocketIndex][overPocket.slotIndex];
@@ -6866,14 +6485,10 @@ class HideoutScene extends Phaser.Scene {
                                 magTarget = { container: 'pocket', pocketIndex: overPocket.pocketIndex, slotIndex: overPocket.slotIndex, itemId: slot.itemId };
                         }
                     }
-                    if (!magTarget && drag.fromStash && itemZones.length) {
-                        const overStashMag = itemZones.find(z => inZoneStash(dropX, dropY, z) && isMagazineItem(z.itemId) && getMagazineAmmoId(z.itemId) === drag.itemId);
-                        if (overStashMag) magTarget = { container: 'stash', placementId: overStashMag.placementId, itemId: overStashMag.itemId };
-                    }
                     if (magTarget) {
                         const stats = this.stats;
-                        const backpack = stats && stats.backpack;
-                        const rigGrid = stats && stats.armor && stats.armor.rig && stats.rigGrid;
+                        const backpack = stats.backpack;
+                        const rigGrid = stats.armor && stats.armor.rig && stats.rigGrid;
                         let magRounds = 0, magMaxRounds = getMagazineCapacity(magTarget.itemId);
                         if (magTarget.container === 'backpack' && backpack && backpack.items) {
                             const p = backpack.items.find(i => i.placementId === magTarget.placementId);
@@ -6881,12 +6496,9 @@ class HideoutScene extends Phaser.Scene {
                         } else if (magTarget.container === 'rig' && rigGrid && rigGrid.items) {
                             const p = rigGrid.items.find(i => i.placementId === magTarget.placementId);
                             if (p) { magRounds = p.rounds ?? 0; magMaxRounds = p.maxRounds ?? magMaxRounds; }
-                        } else if (magTarget.container === 'pocket' && stats) {
-                            const s = stats.pockets && stats.pockets[magTarget.pocketIndex] && stats.pockets[magTarget.pocketIndex][magTarget.slotIndex];
+                        } else if (magTarget.container === 'pocket') {
+                            const s = stats.pockets[magTarget.pocketIndex] && stats.pockets[magTarget.pocketIndex][magTarget.slotIndex];
                             if (s) { magRounds = s.rounds ?? 0; magMaxRounds = s.maxRounds ?? magMaxRounds; }
-                        } else if (magTarget.container === 'stash' && this.persistent && this.persistent.stash && this.persistent.stash.items) {
-                            const p = this.persistent.stash.items.find(i => i.placementId === magTarget.placementId);
-                            if (p) { magRounds = p.rounds ?? 0; magMaxRounds = p.maxRounds ?? magMaxRounds; }
                         }
                         const room = magMaxRounds - magRounds;
                         const ammoCount = drag.count || 1;
@@ -6898,23 +6510,20 @@ class HideoutScene extends Phaser.Scene {
                             } else if (magTarget.container === 'rig' && rigGrid && rigGrid.items) {
                                 const p = rigGrid.items.find(i => i.placementId === magTarget.placementId);
                                 if (p) { p.rounds = (p.rounds ?? 0) + toAdd; p.maxRounds = p.maxRounds ?? magMaxRounds; }
-                            } else if (magTarget.container === 'pocket' && stats) {
+                            } else if (magTarget.container === 'pocket') {
                                 ensurePockets(stats);
                                 const s = stats.pockets[magTarget.pocketIndex] && stats.pockets[magTarget.pocketIndex][magTarget.slotIndex];
                                 if (s) { s.rounds = (s.rounds ?? 0) + toAdd; s.maxRounds = s.maxRounds ?? magMaxRounds; }
-                            } else if (magTarget.container === 'stash' && this.persistent && this.persistent.stash && this.persistent.stash.items) {
-                                const p = this.persistent.stash.items.find(i => i.placementId === magTarget.placementId);
-                                if (p) { p.rounds = (p.rounds ?? 0) + toAdd; p.maxRounds = p.maxRounds ?? magMaxRounds; }
                             }
                             const st = this.persistent.stash;
-                            const placement = st && st.items && st.items.find(i => i.placementId === drag.placementId);
+                            const placement = st.items && st.items.find(i => i.placementId === drag.placementId);
                             if (placement && (placement.count || 1) >= toAdd) {
                                 placement.count = (placement.count || 1) - toAdd;
                                 if ((placement.count || 0) <= 0) removeItem(st, drag.placementId);
                                 sfx.click();
-                                if (this.stats) localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(this.stats));
-                                if (this.persistent) savePersistent(this.persistent);
-                                this.scheduleRerenderCharacterTab();
+                                localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(this.stats));
+                                savePersistent(this.persistent);
+                                if (this._rerenderCharacterTab) this.time.delayedCall(0, () => { if (this._rerenderCharacterTab) this._rerenderCharacterTab(); });
                                 return;
                             }
                         }
@@ -6986,8 +6595,8 @@ class HideoutScene extends Phaser.Scene {
             const w = getWorld(pointer);
             const inStashColumn = w.x >= stashViewportBounds.left && w.x <= stashViewportBounds.right;
             const inStashViewport = inStashColumn && w.y >= stashViewportBounds.top && w.y <= stashViewportBounds.bottom;
-            // Allow scroll when cursor is in stash area, or when dragging (item stays selected/dragged while scrolling)
-            if (totalStashRows > visibleStashRows && (inStashViewport || inStashColumn || this.stashDragging || this.invDragging)) {
+            // Allow scroll when cursor is in stash viewport, or when dragging so wheel can scroll while drag is active
+            if (totalStashRows > visibleStashRows && (inStashViewport || (this.stashDragging && inStashColumn))) {
                 if (deltaY > 0) this._stashScrollOffset = Math.min(totalStashRows - visibleStashRows, this._stashScrollOffset + 1);
                 else if (deltaY < 0) this._stashScrollOffset = Math.max(0, this._stashScrollOffset - 1);
                 rerenderCharacterTab();
@@ -6998,20 +6607,6 @@ class HideoutScene extends Phaser.Scene {
         this.input.on('pointerup', onPointerUp);
         this.input.on('wheel', onWheel);
         this._clearStashDrag = () => { destroyGhost(); this.stashDragging = null; };
-        // Preserve drag state across scroll: if we rerendered due to scroll while dragging, recreate the ghost
-        if (this.stashDragging && !ghostRect) {
-            const ptr = this.input.activePointer;
-            const w = getWorld(ptr);
-            const gx = this.stashDragging.grabOffsetX != null ? this.stashDragging.grabOffsetX : 0;
-            const gy = this.stashDragging.grabOffsetY != null ? this.stashDragging.grabOffsetY : 0;
-            const ghostX = w.x - gx, ghostY = w.y - gy;
-            const cfg = getInventoryItemConfig(this.stashDragging.itemId);
-            const lbl = (cfg && cfg.icon) ? cfg.icon : (this.stashDragging.itemId || '?').slice(0, 2).toUpperCase();
-            const gw = (this.stashDragging.sizeW || 1) * step, gh = (this.stashDragging.sizeH || 1) * step;
-            ghostRect = this.add.rectangle(ghostX, ghostY, gw, gh, 0x446644, 0.9).setStrokeStyle(2, 0xaaffaa).setDepth(STASH_DEPTH + 5);
-            ghostText = this.add.text(ghostX, ghostY, (this.stashDragging.count > 1 ? lbl + this.stashDragging.count : lbl), { fontSize: '8px', fill: '#ccc' }).setOrigin(0.5).setDepth(STASH_DEPTH + 6);
-            content.push(ghostRect, ghostText);
-        }
         this.stashCleanup = () => {
             this.input.off('pointermove', onPointerMove);
             this.input.off('pointerdown', onPointerDown);
@@ -7034,30 +6629,22 @@ class HideoutScene extends Phaser.Scene {
         const overlay = this.add.rectangle(400, 300, 800, 600, 0x000000, 0.6).setDepth(AMMO_BOX_DEPTH).setInteractive();
         elements.push(overlay);
         const gridCols = innerGrid.gridW || 16, gridRows = innerGrid.gridH || 16;
-        const cellSize = 20;
+        const maxGridPx = 360;
+        const cellSize = Math.max(8, Math.floor(maxGridPx / gridCols) - 1);
         const gap = 1;
         const step = cellSize + gap;
         const gridW = gridCols * step - gap, gridH = gridRows * step - gap;
         const panelW = gridW + 40, panelH = gridH + 50;
-        const panelOrigin = { x: 400, y: 300 };
-        const container = this.add.container(panelOrigin.x, panelOrigin.y);
-        container.setDepth(AMMO_BOX_DEPTH + 1);
-        elements.push(container);
-        const panel = this.add.rectangle(0, 0, panelW, panelH, 0x2a2a2a).setStrokeStyle(3, 0xcc6600);
-        container.add(panel);
-        const title = this.add.text(0, -panelH/2 + 14, 'Ammo Box', { fontSize: '16px', fill: '#ffaa00', fontStyle: 'bold' }).setOrigin(0.5);
-        container.add(title);
-        const hint = this.add.text(0, -panelH/2 + 30, 'Drag items to stash or backpack to take them out.', { fontSize: '10px', fill: '#888' }).setOrigin(0.5);
-        container.add(hint);
+        const panel = this.add.rectangle(400, 300, panelW, panelH, 0x2a2a2a).setStrokeStyle(3, 0xcc6600).setDepth(AMMO_BOX_DEPTH + 1);
+        elements.push(panel);
+        const title = this.add.text(400, 300 - panelH/2 + 14, 'Ammo Box', { fontSize: '16px', fill: '#ffaa00', fontStyle: 'bold' }).setOrigin(0.5).setDepth(AMMO_BOX_DEPTH + 2);
+        elements.push(title);
         const closeW = 24, closeH = 24;
-        const closeX = panelW/2 - closeW/2 - 4, closeY = -panelH/2 + 14;
-        const titleBarH = 36;
-        const titleBar = this.add.rectangle(0, -panelH/2 + titleBarH/2, panelW - 8, titleBarH, 0x333322, 0.01).setInteractive();
-        container.add(titleBar);
-        const closeBtn = this.add.rectangle(closeX, closeY, closeW, closeH, 0xaa2222).setInteractive();
-        const closeTxt = this.add.text(closeX, closeY, 'X', { fontSize: '14px', fill: '#fff', fontStyle: 'bold' }).setOrigin(0.5);
-        container.add(closeBtn, closeTxt);
-        const gridX0Local = -gridW/2, gridY0Local = -gridH/2 + 20;
+        const closeX = 400 + panelW/2 - closeW/2 - 4, closeY = 300 - panelH/2 + 14;
+        const closeBtn = this.add.rectangle(closeX, closeY, closeW, closeH, 0xaa2222).setDepth(AMMO_BOX_DEPTH + 2).setInteractive();
+        const closeTxt = this.add.text(closeX, closeY, 'X', { fontSize: '14px', fill: '#fff', fontStyle: 'bold' }).setOrigin(0.5).setDepth(AMMO_BOX_DEPTH + 3);
+        elements.push(closeBtn, closeTxt);
+        const gridX0 = 400 - gridW/2, gridY0 = 300 - gridH/2 + 20;
         const occupied = new Set();
         (innerGrid.items || []).forEach(p => {
             for (let r = 0; r < (p.sizeH || 1); r++)
@@ -7065,50 +6652,36 @@ class HideoutScene extends Phaser.Scene {
         });
         for (let row = 0; row < gridRows; row++) {
             for (let col = 0; col < gridCols; col++) {
-                const x = gridX0Local + col * step, y = gridY0Local + row * step;
+                const x = gridX0 + col * step, y = gridY0 + row * step;
                 const isOcc = occupied.has(`${row},${col}`);
-                const r = this.add.rectangle(x + cellSize/2, y + cellSize/2, cellSize, cellSize, isOcc ? 0x334433 : 0x222222).setStrokeStyle(1, 0x555555);
-                container.add(r);
+                const r = this.add.rectangle(x + cellSize/2, y + cellSize/2, cellSize, cellSize, isOcc ? 0x334433 : 0x222222).setStrokeStyle(1, 0x555555).setDepth(AMMO_BOX_DEPTH + 1);
+                elements.push(r);
             }
         }
         const innerItemZones = [];
         (innerGrid.items || []).forEach(p => {
             const hw = (p.sizeW || 1) * step, hh = (p.sizeH || 1) * step;
-            const cx = gridX0Local + p.col * step + hw/2, cy = gridY0Local + p.row * step + hh/2;
-            innerItemZones.push({ leftL: cx - hw/2, rightL: cx + hw/2, topL: cy - hh/2, bottomL: cy + hh/2, placementId: p.placementId, itemId: p.itemId, count: p.count || 1, sizeW: p.sizeW || 1, sizeH: p.sizeH || 1 });
+            const cx = gridX0 + p.col * step + hw/2, cy = gridY0 + p.row * step + hh/2;
+            innerItemZones.push({ left: cx - hw/2, right: cx + hw/2, top: cy - hh/2, bottom: cy + hh/2, placementId: p.placementId, itemId: p.itemId, count: p.count || 1, sizeW: p.sizeW || 1, sizeH: p.sizeH || 1 });
         });
-        const labelFontSize = '10px';
+        const labelFontSize = cellSize <= 12 ? '6px' : '10px';
         (innerGrid.items || []).forEach(p => {
             const cfg = getInventoryItemConfig(p.itemId);
             const lbl = (cfg && cfg.icon) ? cfg.icon : (p.itemId || '?').slice(0, 2).toUpperCase();
-            const cx = gridX0Local + p.col * step + (p.sizeW || 1) * step / 2, cy = gridY0Local + p.row * step + (p.sizeH || 1) * step / 2;
-            const txt = this.add.text(cx, cy, (p.count > 1 ? lbl + p.count : lbl), { fontSize: labelFontSize, fill: '#ccc' }).setOrigin(0.5);
-            container.add(txt);
+            const cx = gridX0 + p.col * step + (p.sizeW || 1) * step / 2, cy = gridY0 + p.row * step + (p.sizeH || 1) * step / 2;
+            const txt = this.add.text(cx, cy, (p.count > 1 ? lbl + p.count : lbl), { fontSize: labelFontSize, fill: '#ccc' }).setOrigin(0.5).setDepth(AMMO_BOX_DEPTH + 2);
+            elements.push(txt);
         });
         const innerEmptyZones = [];
         for (let row = 0; row < gridRows; row++)
             for (let col = 0; col < gridCols; col++)
                 if (!occupied.has(`${row},${col}`))
                     innerEmptyZones.push({
-                        leftL: gridX0Local + col * step, rightL: gridX0Local + (col + 1) * step,
-                        topL: gridY0Local + row * step, bottomL: gridY0Local + (row + 1) * step,
+                        left: gridX0 + col * step, right: gridX0 + (col + 1) * step,
+                        top: gridY0 + row * step, bottom: gridY0 + (row + 1) * step,
                         row, col
                     });
-        const inZone = (px, py, z) => {
-            const lx = px - panelOrigin.x, ly = py - panelOrigin.y;
-            return lx >= z.leftL && lx <= z.rightL && ly >= z.topL && ly <= z.bottomL;
-        };
-        let panelDragStart = null;
-        const startPanelDrag = (wx, wy) => {
-            panelDragStart = { x: wx, y: wy, ox: panelOrigin.x, oy: panelOrigin.y };
-        };
-        const updatePanelDrag = (wx, wy) => {
-            if (!panelDragStart) return;
-            panelOrigin.x = panelDragStart.ox + (wx - panelDragStart.x);
-            panelOrigin.y = panelDragStart.oy + (wy - panelDragStart.y);
-            container.setPosition(panelOrigin.x, panelOrigin.y);
-        };
-        const endPanelDrag = () => { panelDragStart = null; };
+        const inZone = (px, py, z) => px >= z.left && px <= z.right && py >= z.top && py <= z.bottom;
         const getWorld = (ptr) => {
             if (ptr.worldX != null) return { x: ptr.worldX, y: ptr.worldY };
             const p = this.cameras.main.getWorldPoint(ptr.x, ptr.y);
@@ -7134,20 +6707,17 @@ class HideoutScene extends Phaser.Scene {
             });
             (innerGrid.items || []).forEach(p => {
                 const hw = (p.sizeW || 1) * step, hh = (p.sizeH || 1) * step;
-                const cx = gridX0Local + p.col * step + hw/2, cy = gridY0Local + p.row * step + hh/2;
-                innerItemZones.push({ leftL: cx - hw/2, rightL: cx + hw/2, topL: cy - hh/2, bottomL: cy + hh/2, placementId: p.placementId, itemId: p.itemId, count: p.count || 1, sizeW: p.sizeW || 1, sizeH: p.sizeH || 1 });
+                const cx = gridX0 + p.col * step + hw/2, cy = gridY0 + p.row * step + hh/2;
+                innerItemZones.push({ left: cx - hw/2, right: cx + hw/2, top: cy - hh/2, bottom: cy + hh/2, placementId: p.placementId, itemId: p.itemId, count: p.count || 1, sizeW: p.sizeW || 1, sizeH: p.sizeH || 1 });
             });
             for (let row = 0; row < gridRows; row++)
                 for (let col = 0; col < gridCols; col++)
                     if (!occ2.has(`${row},${col}`))
-                        innerEmptyZones.push({ leftL: gridX0Local + col * step, rightL: gridX0Local + (col + 1) * step, topL: gridY0Local + row * step, bottomL: gridY0Local + (row + 1) * step, row, col });
+                        innerEmptyZones.push({ left: gridX0 + col * step, right: gridX0 + (col + 1) * step, top: gridY0 + row * step, bottom: gridY0 + (row + 1) * step, row, col });
         };
         const closeWindow = () => {
-            endPanelDrag();
             if (innerMoveHandler) { this.input.off('pointermove', innerMoveHandler); innerMoveHandler = null; }
             if (innerUpHandler) { this.input.off('pointerup', innerUpHandler); innerUpHandler = null; }
-            if (panelDragMove) this.input.off('pointermove', panelDragMove);
-            if (panelDragUp) this.input.off('pointerup', panelDragUp);
             destroyInnerGhost();
             innerDragging = null;
             innerSelected = null;
@@ -7157,21 +6727,11 @@ class HideoutScene extends Phaser.Scene {
             this.ammoBoxWindowOpen = null;
             if (onCloseCallback) onCloseCallback();
         };
-        let panelDragMove = null, panelDragUp = null;
-        closeBtn.on('pointerdown', (ptr) => { sfx.click(); closeWindow(); });
-        titleBar.on('pointerdown', (ptr) => {
-            const w = getWorld(ptr);
-            startPanelDrag(w.x, w.y);
-            panelDragMove = (p) => { const ww = getWorld(p); updatePanelDrag(ww.x, ww.y); };
-            panelDragUp = () => { endPanelDrag(); if (panelDragMove) this.input.off('pointermove', panelDragMove); if (panelDragUp) this.input.off('pointerup', panelDragUp); panelDragMove = null; panelDragUp = null; };
-            this.input.on('pointermove', panelDragMove);
-            this.input.on('pointerup', panelDragUp);
-        });
+        closeBtn.on('pointerdown', () => { sfx.click(); closeWindow(); });
         overlay.on('pointerdown', (ptr) => {
             const w = getWorld(ptr);
             const px = w.x, py = w.y;
-            const lx = px - panelOrigin.x, ly = py - panelOrigin.y;
-            if (lx >= closeX - closeW/2 && lx <= closeX + closeW/2 && ly >= closeY - closeH/2 && ly <= closeY + closeH/2) return;
+            if (px >= closeX - closeW/2 && px <= closeX + closeW/2 && py >= closeY - closeH/2 && py <= closeY + closeH/2) return;
             const overItem = innerItemZones.find(z => inZone(px, py, z));
             if (overItem) {
                 sfx.click();
@@ -7197,15 +6757,15 @@ class HideoutScene extends Phaser.Scene {
                     innerUpHandler = null;
                     const dragItem = innerDragging;
                     innerDragging = null;
-                    const stashBounds = this._hideoutStashBounds || { left: 120, right: 120 + 12 * 19, top: 100, bottom: 100 + 16 * 19 };
-                    const backpackBounds = (this._hideoutContainerBounds && this._hideoutContainerBounds.backpack) || { left: 420, right: 420 + 6 * 19, top: 100, bottom: 100 + 9 * 19 };
-                    const inStash = stashBounds && ex >= stashBounds.left && ex <= stashBounds.right && ey >= stashBounds.top && ey <= stashBounds.bottom;
-                    const inBackpack = backpackBounds && ex >= backpackBounds.left && ex <= backpackBounds.right && ey >= backpackBounds.top && ey <= backpackBounds.bottom;
+                    const stashBounds = { left: 120, right: 120 + 12 * 19, top: 100, bottom: 100 + 16 * 19 };
+                    const backpackBounds = { left: 420, right: 420 + 6 * 19, top: 100, bottom: 100 + 9 * 19 };
+                    const inStash = ex >= stashBounds.left && ex <= stashBounds.right && ey >= stashBounds.top && ey <= stashBounds.bottom;
+                    const inBackpack = ex >= backpackBounds.left && ex <= backpackBounds.right && ey >= backpackBounds.top && ey <= backpackBounds.bottom;
                     if (innerSelected && (inStash || inBackpack)) {
                         const item = removeItem(innerGrid, innerSelected.placementId);
                         if (item) {
                             const targetGrid = inStash ? this.persistent.stash : this.stats.backpack;
-                            if (targetGrid && tryAddItem(targetGrid, item.itemId, item.count, extraFromPlacement(item))) {
+                            if (tryAddItem(targetGrid, item.itemId, item.count, extraFromPlacement(item))) {
                                 sfx.click();
                                 if (fromStash) savePersistent(this.persistent);
                                 else localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(this.stats));
@@ -7213,7 +6773,6 @@ class HideoutScene extends Phaser.Scene {
                                 elements.forEach(e => e.destroy());
                                 this.ammoBoxWindowOpen = null;
                                 if (onCloseCallback) onCloseCallback();
-                                this.showAmmoBoxWindow(placementId, fromStash, onCloseCallback);
                                 return;
                             }
                             innerGrid.items.push(item);
@@ -7384,15 +6943,15 @@ class HideoutScene extends Phaser.Scene {
                     innerUpHandler = null;
                     const dragItem = innerDragging;
                     innerDragging = null;
-                    const stashBounds = this._hideoutStashBounds || { left: 120, right: 120 + 12 * 19, top: 100, bottom: 100 + 16 * 19 };
-                    const backpackBounds = (this._hideoutContainerBounds && this._hideoutContainerBounds.backpack) || { left: 420, right: 420 + 6 * 19, top: 100, bottom: 100 + 9 * 19 };
-                    const inStash = stashBounds && ex >= stashBounds.left && ex <= stashBounds.right && ey >= stashBounds.top && ey <= stashBounds.bottom;
-                    const inBackpack = backpackBounds && ex >= backpackBounds.left && ex <= backpackBounds.right && ey >= backpackBounds.top && ey <= backpackBounds.bottom;
+                    const stashBounds = { left: 120, right: 120 + 12 * 19, top: 100, bottom: 100 + 16 * 19 };
+                    const backpackBounds = { left: 420, right: 420 + 6 * 19, top: 100, bottom: 100 + 9 * 19 };
+                    const inStash = ex >= stashBounds.left && ex <= stashBounds.right && ey >= stashBounds.top && ey <= stashBounds.bottom;
+                    const inBackpack = ex >= backpackBounds.left && ex <= backpackBounds.right && ey >= backpackBounds.top && ey <= backpackBounds.bottom;
                     if (innerSelected && (inStash || inBackpack)) {
                         const item = removeItem(innerGrid, innerSelected.placementId);
                         if (item) {
                             const targetGrid = inStash ? this.persistent.stash : this.stats.backpack;
-                            if (targetGrid && tryAddItem(targetGrid, item.itemId, item.count, extraFromPlacement(item))) {
+                            if (tryAddItem(targetGrid, item.itemId, item.count, extraFromPlacement(item))) {
                                 sfx.click();
                                 if (fromStash) savePersistent(this.persistent);
                                 else localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(this.stats));
@@ -9388,60 +8947,48 @@ class HideoutScene extends Phaser.Scene {
     }
 
     update(time, delta) {
-        const tb = this.stats.hideout.tinkerBench;
-        if (this.tinkerBenchTimerText && tb && tb.crafting) {
-            const remaining = tb.crafting.finishTime - Date.now();
+        if (this.armoryTimerText && this.stats.hideout.armory.crafting) {
+            let remaining = this.stats.hideout.armory.crafting.finishTime - Date.now();
             if (remaining > 0) {
-                const seconds = Math.floor(remaining / 1000);
-                this.tinkerBenchTimerText.setText(`CRAFTING: ${Math.floor(seconds/60)}:${(seconds%60).toString().padStart(2,'0')}`);
-                if (this.tinkerBenchBtnText) this.tinkerBenchBtnText.setText("WAIT...");
+                let seconds = Math.floor(remaining / 1000);
+                this.armoryTimerText.setText(`CRAFTING: ${Math.floor(seconds/60)}:${(seconds%60).toString().padStart(2,'0')}`);
+                this.armoryBtnText.setText("WAIT...");
             } else {
-                this.tinkerBenchTimerText.setText("COMPLETE!");
-                if (this.tinkerBenchBtnText) this.tinkerBenchBtnText.setText("CLAIM NVG");
-                if (this.tinkerBenchClaimBtn) this.tinkerBenchClaimBtn.setInteractive();
-            }
-        }
-        const gb = this.stats.hideout.gunBench;
-        if (this.gunBenchTimerText && gb && gb.crafting) {
-            const remaining = gb.crafting.finishTime - Date.now();
-            if (remaining > 0) {
-                const seconds = Math.floor(remaining / 1000);
-                this.gunBenchTimerText.setText(`CRAFTING: ${Math.floor(seconds/60)}:${(seconds%60).toString().padStart(2,'0')}`);
-            } else {
-                this.gunBenchTimerText.setText("COMPLETE!");
+                this.armoryTimerText.setText("COMPLETE!");
+                this.armoryBtnText.setText("CLAIM NVG");
+                if (this.armoryBtn) this.armoryBtn.setInteractive();
             }
         }
     }
 
     createArmoryCard(x, y) {
         this.add.rectangle(x + 100, y + 75, 220, 160, 0x333333).setStrokeStyle(2, 0x555555);
-        this.add.text(x + 10, y + 10, "GUN BENCH / TINKER", { fontSize: '18px', fill: '#ff00ff' });
+        this.add.text(x + 10, y + 10, "ARMORY", { fontSize: '20px', fill: '#ff00ff' });
         this.armoryDesc = this.add.text(x + 10, y + 40, "", { fontSize: '14px', fill: '#aaa' });
         this.armoryTimerText = this.add.text(x + 10, y + 80, "", { fontSize: '14px', fill: '#00ff00' });
         this.armoryBtn = this.add.rectangle(x + 100, y + 130, 200, 30, 0x555555).setInteractive();
         this.armoryBtnText = this.add.text(x + 100, y + 130, "", { fontSize: '14px', fill: '#fff' }).setOrigin(0.5);
         const ammoBtn = this.add.rectangle(x + 100, y + 165, 200, 20, 0x444444).setInteractive();
-        this.add.text(x + 100, y + 165, "CRAFT 9MM (1 SCRAP)", { fontSize: '10px', fill: '#fff' }).setOrigin(0.5);
+        this.add.text(x + 100, y + 165, "AMMO PRESS (1 SCRAP -> 4 AMMO)", { fontSize: '10px', fill: '#fff' }).setOrigin(0.5);
 
         this.updateArmoryUI();
 
         this.armoryBtn.on('pointerdown', () => {
-            const tb = this.stats.hideout.tinkerBench;
-            if (!tb) return;
-            if (tb.crafting && Date.now() >= tb.crafting.finishTime) {
+            let armory = this.stats.hideout.armory;
+            if (armory.hasNVG) return;
+            if (armory.crafting && Date.now() >= armory.crafting.finishTime) {
                 sfx.lootWeapon();
-                if (this.persistent.stash) tryAddItem(this.persistent.stash, 'nvg', 1);
-                tb.crafting = null;
+                armory.hasNVG = true;
+                armory.crafting = null;
                 this.updateArmoryUI();
-                savePersistent(this.persistent);
                 localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(this.stats));
                 return;
             }
-            if (tb.crafting) return;
+            if (armory.crafting) return;
             if ((this.persistent.scrap || 0) >= 3) {
                 sfx.success();
                 this.persistent.scrap = (this.persistent.scrap || 0) - 3;
-                tb.crafting = { item: 'nvg', finishTime: Date.now() + CONFIG.TIMINGS.NVG_CRAFT };
+                armory.crafting = { item: 'nvg', finishTime: Date.now() + CONFIG.TIMINGS.NVG_CRAFT };
                 this.updateStatText();
                 this.updateArmoryUI();
                 savePersistent(this.persistent);
@@ -9453,13 +9000,10 @@ class HideoutScene extends Phaser.Scene {
         });
 
         ammoBtn.on('pointerdown', () => {
-            const gb = this.stats.hideout.gunBench;
-            if (!gb || gb.crafting) return;
-            const cfg = CONFIG.HIDEOUT.GUN_BENCH_CRAFT_9MM;
-            if ((this.persistent.scrap || 0) >= cfg.scrap) {
+            if ((this.persistent.scrap || 0) >= 1) {
                 sfx.lootAmmo();
-                this.persistent.scrap = (this.persistent.scrap || 0) - cfg.scrap;
-                gb.crafting = { itemId: cfg.itemId, count: cfg.count, finishTime: Date.now() + cfg.timeMs };
+                this.persistent.scrap = (this.persistent.scrap || 0) - 1;
+                tryAddItem(this.persistent.stash, 'ammo', 4);
                 this.updateStatText();
                 savePersistent(this.persistent);
                 localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(this.stats));
@@ -9471,28 +9015,21 @@ class HideoutScene extends Phaser.Scene {
     }
 
     updateArmoryUI() {
-        const tb = this.stats.hideout.tinkerBench;
-        const gb = this.stats.hideout.gunBench;
+        let armory = this.stats.hideout.armory;
         if (!this.armoryBtnText) return;
-        if (tb && tb.crafting) {
-            if (Date.now() >= tb.crafting.finishTime) {
-                if (this.armoryDesc) this.armoryDesc.setText("NVG ready\nClick to claim");
-                this.armoryBtnText.setText("CLAIM NVG");
-            } else {
-                if (this.armoryDesc) this.armoryDesc.setText("Fabricating NVG...");
-                if (this.armoryBtn) this.armoryBtn.disableInteractive();
-            }
-            const rem = tb.crafting.finishTime - Date.now();
-            if (this.armoryTimerText) this.armoryTimerText.setText(rem > 0 ? `NVG: ${Math.floor(rem/60000)}:${((rem/1000)%60).toFixed(0).padStart(2,'0')}` : "COMPLETE!");
+        if (armory.hasNVG) {
+            if (this.armoryDesc) this.armoryDesc.setText("NVG UNLOCKED\nPress [N] in game.");
+            this.armoryBtnText.setText("EQUIPPED");
+            if (this.armoryTimerText) this.armoryTimerText.setText("");
+            if (this.armoryBtn) { this.armoryBtn.disableInteractive(); this.armoryBtn.setFillStyle(0x222222); }
+        } else if (armory.crafting) {
+            if (this.armoryDesc) this.armoryDesc.setText("Fabricating NVG...");
+            if (this.armoryBtn) this.armoryBtn.disableInteractive();
         } else {
-            if (this.armoryDesc) this.armoryDesc.setText("Craft NVG (item)\nCost: 3 Scrap, 90s");
-            this.armoryBtnText.setText("CRAFT NVG (3 SCRAP)");
+            if (this.armoryDesc) this.armoryDesc.setText("Craft Night Vision\nCost: 3 Scrap\nTime: 1m 30s");
+            this.armoryBtnText.setText("CRAFT (3 SCRAP)");
             if (this.armoryTimerText) this.armoryTimerText.setText("");
             if (this.armoryBtn) this.armoryBtn.setInteractive();
-        }
-        if (gb && gb.crafting && this.armoryTimerText) {
-            const rem = gb.crafting.finishTime - Date.now();
-            this.armoryTimerText.setText((this.armoryTimerText.text || '') + (rem > 0 ? ` | 9mm: ${Math.floor(rem/60000)}:${((rem/1000)%60).toFixed(0).padStart(2,'0')}` : " | 9mm COMPLETE"));
         }
     }
 
@@ -9628,7 +9165,6 @@ class GameScene extends Phaser.Scene {
                     this.input.off('pointerup', this.invListeners.up);
                     if (this.invListeners.delKey) this.invListeners.delKey.off('down', this.invListeners.delKeyCallback);
                     if (this.invListeners.rKey) this.invListeners.rKey.off('down', this.invListeners.rKeyCallback);
-                    if (this.invListeners.uKey) this.invListeners.uKey.off('down', this.invListeners.uKeyCallback);
                     this.invListeners = null;
                 }
                 if (this.invContent && this.invContent.length) {
@@ -9652,7 +9188,6 @@ class GameScene extends Phaser.Scene {
                     this.input.off('pointerup', this.invListeners.up);
                     if (this.invListeners.delKey) this.invListeners.delKey.off('down', this.invListeners.delKeyCallback);
                     if (this.invListeners.rKey) this.invListeners.rKey.off('down', this.invListeners.rKeyCallback);
-                    if (this.invListeners.uKey) this.invListeners.uKey.off('down', this.invListeners.uKeyCallback);
                     this.invListeners = null;
                 }
                 if (this.invContent && this.invContent.length) {
@@ -9682,7 +9217,6 @@ class GameScene extends Phaser.Scene {
                     this.input.off('pointerup', this.invListeners.up);
                     if (this.invListeners.delKey) this.invListeners.delKey.off('down', this.invListeners.delKeyCallback);
                     if (this.invListeners.rKey) this.invListeners.rKey.off('down', this.invListeners.rKeyCallback);
-                    if (this.invListeners.uKey) this.invListeners.uKey.off('down', this.invListeners.uKeyCallback);
                     this.invListeners = null;
                 }
                 if (this.invContent && this.invContent.length) {
@@ -11165,7 +10699,7 @@ class GameScene extends Phaser.Scene {
         this.invContent = [];
         this.invListeners = null;
         this.invDragging = null;
-        if (this.invBodyView !== 'gear') this.invBodyView = 'gear';
+        if (this.invBodyView !== 'gear' && this.invBodyView !== 'health') this.invBodyView = 'gear';
     }
 
     renderInventoryPanel() {
@@ -11176,12 +10710,11 @@ class GameScene extends Phaser.Scene {
             this.input.off('pointerdown', this.invListeners.down);
             this.input.off('pointerup', this.invListeners.up);
             if (this.invListeners.delKey) this.invListeners.delKey.off('down', this.invListeners.delKeyCallback);
-            if (this.invListeners.rKey) this.invListeners.rKey.off('down', this.invListeners.rKeyCallback);
-            if (this.invListeners.uKey) this.invListeners.uKey.off('down', this.invListeners.uKeyCallback);
             this.invListeners = null;
         }
         const contentArray = this._invContent !== undefined ? this._invContent : this.invContent;
         const stats = this._invStats !== undefined ? this._invStats : this.playerStats;
+        const bodyView = this._invBodyView !== undefined ? this._invBodyView : (this.invBodyView || 'gear');
         if (contentArray && contentArray.length) {
             contentArray.forEach(e => e.destroy());
             contentArray.length = 0;
@@ -11238,13 +10771,14 @@ class GameScene extends Phaser.Scene {
         const weapon = stats.currentWeapon;
         // Layout: left = body section, right = inventory section. Body section must not extend left of panel (invPanelLeft).
         // --- BODY SECTION: left area of the panel (leftEdge to rightStart). Includes: leftEdge, bodyWidth, bodyCenterX, bodyAreaTop, bodyAreaH,
-        //     bodyOffsetY, bodyScale, body figure (helmet, ears, chest, arms, abdomen, crotch, legs, feet), limb HP bars and effect labels. "Body section" = all of the above.
+        //     bodyOffsetY, bodyScale, all body-prefixed layout vars, Gear/Health toggle (invBodyView), and everything drawn there
+        //     (gear view: helmet, ears, chest, arms, abdomen, crotch, legs, feet; health view: skeleton, limb HP bars). "Body section" = all of the above.
         const leftEdge = invPanelLeft;   // align body section to panel left so nothing sticks out
         const bodyWidth = 280;
         const rightStart = leftEdge + bodyWidth + 5;
         invGridX = rightStart + 8 + 20;
         invGridY = invPanelTop + 175;   // was 235; lowered with panel (invPanelTop 60 + 175)
-        const bodyScale = 1.35;   // body section scale (was 1.2; larger figure)
+        const bodyScale = 1.2;
         const BODY_GROW_H = 1.25;   // body 25% wider
         const BODY_GROW_V = 1.25;   // body 25% taller
         const bodySlotW = Math.round(44 * bodyScale * BODY_GROW_H);
@@ -11252,9 +10786,9 @@ class GameScene extends Phaser.Scene {
         const bodyOffsetX = 50;   // shift body section horizontally (30 + 20)
         const bodyCenterX = leftEdge + 90 + bodyOffsetX;
         const panelH = invPanelH;
-        const bodyOffsetY = -10;   // shift body section up 30px (was 20; extends section upward)
+        const bodyOffsetY = 20;   // shift body section down
         const bodyAreaTop = invPanelTop + bodyOffsetY;
-        const bodyAreaH = Math.floor(panelH * 0.6) + 30;   // +30px height for body section only
+        const bodyAreaH = Math.floor(panelH * 0.6);
         const bodyAreaBottom = bodyAreaTop + bodyAreaH;
         const bodyLabelY = bodyAreaTop + 18 * BODY_GROW_V;
         const accSize = Math.round(28 * bodyScale * BODY_GROW_H);
@@ -11294,28 +10828,28 @@ class GameScene extends Phaser.Scene {
         const itemHead = stats.armor && stats.armor['head'];
         const itemEars = stats.armor && stats.armor.ears;
         contentArray.push(this.add.rectangle(leftEdge + bodyWidth / 2, bodyAreaTop + bodyAreaH / 2, bodyWidth, bodyAreaH, 0x000000, 0).setStrokeStyle(2, 0x666666).setDepth(INV_DEPTH - 1));
+        const bodyViewY = bodyAreaTop + 12;
+        const btnW = 52;
+        const btnH = 22;
+        const gearBtnX = bodyCenterX - btnW / 2 - 4;
+        const healthBtnX = bodyCenterX + btnW / 2 + 4;
+        const isGear = bodyView === 'gear';
+        const gearBg = this.add.rectangle(gearBtnX, bodyViewY, btnW, btnH, isGear ? 0x505050 : 0x353535).setStrokeStyle(1, isGear ? 0xaaaaaa : 0x666666).setDepth(INV_DEPTH).setInteractive();
+        const healthBg = this.add.rectangle(healthBtnX, bodyViewY, btnW, btnH, !isGear ? 0x505050 : 0x353535).setStrokeStyle(1, !isGear ? 0xaaaaaa : 0x666666).setDepth(INV_DEPTH).setInteractive();
+        const gearTxt = this.add.text(gearBtnX, bodyViewY, 'Gear', { fontSize: '11px', fill: isGear ? '#fff' : '#aaa' }).setOrigin(0.5).setDepth(INV_DEPTH + 1);
+        const healthTxt = this.add.text(healthBtnX, bodyViewY, 'Health', { fontSize: '11px', fill: !isGear ? '#fff' : '#aaa' }).setOrigin(0.5).setDepth(INV_DEPTH + 1);
+        contentArray.push(gearBg, healthBg, gearTxt, healthTxt);
+        gearBg.on('pointerdown', () => { if (this._invBodyView !== undefined) this._invBodyView = 'gear'; else this.invBodyView = 'gear'; this.renderInventoryPanel(); });
+        healthBg.on('pointerdown', () => { if (this._invBodyView !== undefined) this._invBodyView = 'health'; else this.invBodyView = 'health'; this.renderInventoryPanel(); });
         let limbZones = [];
         const headEdgeW = chestTopWidth * 0.5;
         const headRadius = headEdgeW / 2;
         const helmetSlotRadius = 1.5 * headRadius * 0.8;
         const helmetSlotY = helmetY - 20 * BODY_GROW_V;
+        if (bodyView === 'gear') {
         contentArray.push(this.add.rectangle(earsX, earsY, accBoxW, accBoxH, 0x353535).setStrokeStyle(1, 0x777777).setDepth(INV_DEPTH));
+        contentArray.push(this.add.text(earsX, earsY - 4, 'EARS', { fontSize: '8px', fill: '#aaa' }).setOrigin(0.5).setDepth(INV_DEPTH + 1));
         contentArray.push(this.add.text(earsX, earsY + 6, itemEars ? `${itemEars.name} ${itemEars.durability}/${itemEars.maxDurability}` : "EMPTY", { fontSize: '7px', fill: itemEars ? '#00ff00' : '#999' }).setOrigin(0.5).setDepth(INV_DEPTH + 1));
-        const itemBody = stats.armor && stats.armor['body'];
-        // Helmet box to the right of head; vest box in the middle of the chest
-        const equipBoxW = 38;
-        const equipBoxH = 26;
-        const equipBoxGap = 12;
-        const helmetBoxX = bodyCenterX + helmetSlotRadius + equipBoxGap + equipBoxW / 2;
-        const helmetBoxY = helmetY;
-        const vestBoxX = bodyCenterX;
-        const vestBoxY = chestY;
-        contentArray.push(this.add.text(helmetBoxX, helmetBoxY - equipBoxH / 2 - 8, 'HELMET', { fontSize: '8px', fill: '#bbb' }).setOrigin(0.5).setDepth(INV_DEPTH));
-        contentArray.push(this.add.rectangle(helmetBoxX, helmetBoxY, equipBoxW, equipBoxH, itemHead ? 0x454535 : 0x353535).setStrokeStyle(1, 0x777777).setDepth(INV_DEPTH));
-        contentArray.push(this.add.text(helmetBoxX, helmetBoxY, itemHead ? `${itemHead.name}\n${itemHead.durability}/${itemHead.maxDurability}` : '—', { fontSize: '8px', fill: itemHead ? '#00ff00' : '#999' }).setOrigin(0.5).setDepth(INV_DEPTH + 1));
-        contentArray.push(this.add.text(vestBoxX, vestBoxY - equipBoxH / 2 - 8, 'VEST', { fontSize: '8px', fill: '#bbb' }).setOrigin(0.5).setDepth(INV_DEPTH));
-        contentArray.push(this.add.rectangle(vestBoxX, vestBoxY, equipBoxW, equipBoxH, itemBody ? 0x454535 : 0x353535).setStrokeStyle(1, 0x777777).setDepth(INV_DEPTH));
-        contentArray.push(this.add.text(vestBoxX, vestBoxY, itemBody ? `${itemBody.name}\n${itemBody.durability}/${itemBody.maxDurability}` : '—', { fontSize: '8px', fill: itemBody ? '#00ff00' : '#999' }).setOrigin(0.5).setDepth(INV_DEPTH + 1));
         // Head oval: width matches neck top (chestTopWidth * 0.5), height = bodySlotH
         const headTopY = helmetY - bodySlotH / 2;
         const headG = this.add.graphics();
@@ -11348,9 +10882,10 @@ class GameScene extends Phaser.Scene {
         helmetHalfG.setDepth(INV_DEPTH);
         contentArray.push(helmetHalfG);
         const nvgY = helmetY - 33 * BODY_GROW_V - 2;   // raised 2px
-        const itemNvg = stats.armor && stats.armor.nvg;
-        contentArray.push(this.add.rectangle(bodyCenterX, nvgY, accBoxW, accBoxH, itemNvg ? 0x354535 : 0x353535).setStrokeStyle(1, 0x777777).setDepth(INV_DEPTH));
-        contentArray.push(this.add.text(bodyCenterX, nvgY, itemNvg ? 'NVG' : 'EMPTY', { fontSize: '9px', fill: itemNvg ? '#00cc66' : '#aaa' }).setOrigin(0.5).setDepth(INV_DEPTH + 1));
+        contentArray.push(this.add.rectangle(bodyCenterX, nvgY, accBoxW, accBoxH, 0x353535).setStrokeStyle(1, 0x777777).setDepth(INV_DEPTH));
+        contentArray.push(this.add.text(bodyCenterX, nvgY, 'NVG', { fontSize: '9px', fill: '#aaa' }).setOrigin(0.5).setDepth(INV_DEPTH + 1));
+        contentArray.push(this.add.text(bodyCenterX, helmetSlotY + helmetSlotRadius / 2, itemHead ? `${itemHead.name}\n${itemHead.durability}/${itemHead.maxDurability}` : "EMPTY", { fontSize: '9px', fill: itemHead ? '#00ff00' : '#999' }).setOrigin(0.5).setDepth(INV_DEPTH));
+        const itemBody = stats.armor && stats.armor['body'];
         // Chest hexagon: tapered from shoulders (wider) down to bottom (narrower); no arms for now. All values from chest/bodySlotW/chestTopWidth only.
         const chestHexTopEdgeW = chestTopWidth * 0.5;  // chest top edge width
         const chestShoulderOutset = 4 * BODY_GROW_H;   // shoulder width (wider at top)
@@ -11374,6 +10909,8 @@ class GameScene extends Phaser.Scene {
         chestG.strokePath();
         chestG.setDepth(INV_DEPTH);
         contentArray.push(chestG);
+        contentArray.push(this.add.text(bodyCenterX, chestY - chestSlotH / 2 - 5 * BODY_GROW_V, 'CHEST', { fontSize: '9px', fill: '#bbb' }).setOrigin(0.5).setDepth(INV_DEPTH));
+        contentArray.push(this.add.text(bodyCenterX, chestY, itemBody ? `${itemBody.name}\n${itemBody.durability}/${itemBody.maxDurability}` : "EMPTY", { fontSize: '9px', fill: itemBody ? '#00ff00' : '#999' }).setOrigin(0.5).setDepth(INV_DEPTH));
         // Abdomen trapezoid: top longer (wider), bottom shorter = chest/crotch width (bodySlotW)
         const abdomenTopOutset = 1.5 * BODY_GROW_H;  // extra half-width at top (each side)
         const abdomenG = this.add.graphics();
@@ -11389,6 +10926,7 @@ class GameScene extends Phaser.Scene {
         abdomenG.strokePath();
         abdomenG.setDepth(INV_DEPTH);
         contentArray.push(abdomenG);
+        contentArray.push(this.add.text(bodyCenterX, abdomenY, 'ABDOMEN', { fontSize: '8px', fill: '#aaa' }).setOrigin(0.5).setDepth(INV_DEPTH + 1));
         // Wonky hexagonal arms: start at top of chest, wrap along side to abdomen bottom; 5px padding from chest/abdomen; taper for arrow look
         const armChestPad = 5 * BODY_GROW_H;
         const armWAtShoulder = 14 * BODY_GROW_H;
@@ -11437,6 +10975,7 @@ class GameScene extends Phaser.Scene {
         crotchG.strokePath();
         crotchG.setDepth(INV_DEPTH);
         contentArray.push(crotchG);
+        contentArray.push(this.add.text(bodyCenterX, crotchCenterY - 4 * BODY_GROW_V, 'CROTCH', { fontSize: '7px', fill: '#aaa' }).setOrigin(0.5).setDepth(INV_DEPTH + 1));
 
         // --- CROTCH TRIANGLE (reference shape) ---
         const triTopLeftX = bodyCenterX - crotchW / 2;
@@ -11525,6 +11064,7 @@ class GameScene extends Phaser.Scene {
         rightLegG.strokePath();
         rightLegG.setDepth(INV_DEPTH);
         contentArray.push(rightLegG);
+        contentArray.push(this.add.text(bodyCenterX, legY + 30 * BODY_GROW_V, 'LEGS', { fontSize: '8px', fill: '#bbb' }).setOrigin(0.5).setDepth(INV_DEPTH));
         const itemFeet = stats.armor && stats.armor['feet'];
         const leftFootG = this.add.graphics();
         leftFootG.fillStyle(0x404040, 1);
@@ -11552,73 +11092,208 @@ class GameScene extends Phaser.Scene {
         rightFootG.strokePath();
         rightFootG.setDepth(INV_DEPTH);
         contentArray.push(rightFootG);
+        contentArray.push(this.add.text(leftFootCenterX, leftFootCenterY - leftFootW / 2 - 2 * BODY_GROW_V, 'L', { fontSize: '8px', fill: '#bbb' }).setOrigin(0.5).setDepth(INV_DEPTH));
+        contentArray.push(this.add.text(rightFootCenterX, rightFootCenterY - rightFootW / 2 - 2 * BODY_GROW_V, 'R', { fontSize: '8px', fill: '#bbb' }).setOrigin(0.5).setDepth(INV_DEPTH));
         contentArray.push(this.add.text(leftFootCenterX, leftFootCenterY, itemFeet ? 'EQ' : "—", { fontSize: '8px', fill: itemFeet ? '#00ff00' : '#999' }).setOrigin(0.5).setDepth(INV_DEPTH));
         contentArray.push(this.add.text(rightFootCenterX, rightFootCenterY, itemFeet ? 'EQ' : "—", { fontSize: '8px', fill: itemFeet ? '#00ff00' : '#999' }).setOrigin(0.5).setDepth(INV_DEPTH));
-        const skullRy = (headEdgeW / 2) * 0.85;
-        const thoraxMidY = (chestTopY + chestBottomY) / 2;
-        const elbowY = chestY + (abdomenY - chestY) * 0.7;
-        const leftElbowX = leftArmX - armW - 2;
-        const rightElbowX = rightArmX + armW + 2;
-        const kneeY = (triBottomTipY + leftLegOuterBottomY) / 2;
-        const leftKneeX = leftLegX - legW / 2 - 2;
-        const rightKneeX = rightLegX + legW / 2 + 2;
-        const limbLabels = { head: 'HEAD', leftArm: 'L ARM', rightArm: 'R ARM', chest: 'CHEST', abdomen: 'ABDOMEN', crotch: 'CROTCH', leftLeg: 'L LEG', rightLeg: 'R LEG' };
-        // Bar a little taller than 11px text; width ~10px padding each side of "30/30"
-        const limbBarW = 52;
-        const limbBarH = 14;
-        const limbHp = stats.limbHp || getDefaultLimbHp();
-        const limbPositions = [
-            { id: 'head', x: bodyCenterX, y: helmetY - skullRy - 6 },
-            { id: 'chest', x: bodyCenterX, y: thoraxMidY },
-            { id: 'abdomen', x: bodyCenterX, y: abdomenY },
-            { id: 'crotch', x: bodyCenterX, y: crotchCenterY },
-            { id: 'leftArm', x: leftElbowX - 8, y: elbowY },
-            { id: 'rightArm', x: rightElbowX + 8, y: elbowY },
-            { id: 'leftLeg', x: leftKneeX, y: kneeY },
-            { id: 'rightLeg', x: rightKneeX, y: kneeY }
-        ];
-        limbPositions.forEach((pos) => {
-            const limbId = pos.id;
-            const data = limbHp[limbId] || { hp: LIMB_MAX_HP[limbId], maxHp: LIMB_MAX_HP[limbId], status: '', effects: [] };
-            const x = pos.x;
-            const y = limbId === 'head' ? pos.y + 15
-                : (limbId === 'leftArm' || limbId === 'rightArm') ? pos.y - 50
-                : limbId === 'chest' ? pos.y - 35
-                : limbId === 'abdomen' ? pos.y - 15
-                : limbId === 'crotch' ? pos.y - 8
-                : pos.y;
-            const maxH = data.maxHp || 1;
-            const cur = Math.min(data.hp || 0, maxH);
-            const pct = maxH > 0 ? cur / maxH : 0;
-            const barColor = pct >= 0.5 ? 0x00aa00 : pct >= 0.35 ? 0xcc6600 : 0xaa0000;
-            const barBg = this.add.rectangle(x, y, limbBarW, limbBarH, 0x333333).setStrokeStyle(1, 0x666666).setDepth(INV_DEPTH + 1);
-            contentArray.push(barBg);
-            if (pct > 0) {
-                const fillW = Math.max(1, limbBarW * pct);
-                const barFill = this.add.rectangle(x - limbBarW / 2 + fillW / 2, y, fillW, Math.max(1, limbBarH - 2), barColor).setDepth(INV_DEPTH + 2);
-                contentArray.push(barFill);
+        } else {
+            const headEdgeW = chestTopWidth * 0.5;
+            const chestBottomY = chestY + chestSlotH / 2;
+            const crotchW = bodySlotW;
+            const crotchCenterY = crotchTopY + crotchH / 2;
+            const chestShoulderOutset = 4 * BODY_GROW_H;
+            const chestTopLeftX = bodyCenterX - bodySlotW / 2 - chestShoulderOutset;
+            const chestTopRightX = bodyCenterX + bodySlotW / 2 + chestShoulderOutset;
+            const chestShoulderY = chestY - chestSlotH / 2 + 5 * BODY_GROW_V;
+            const triBottomTipX = bodyCenterX;
+            const triBottomTipY = crotchTopY + crotchH;
+            const legTrianglePad = 7 * BODY_GROW_H;
+            const legDrop = 44 * BODY_GROW_V;
+            const legInnerBottomInset = 22 * BODY_GROW_H;
+            const leftLegOuterTopX = bodyCenterX - crotchW / 2 - legTrianglePad + 2 * BODY_GROW_H;
+            const leftLegOuterTopY = crotchTopY + 4 * BODY_GROW_V;
+            const rightLegOuterTopX = bodyCenterX + crotchW / 2 + legTrianglePad - 2 * BODY_GROW_H;
+            const rightLegOuterTopY = leftLegOuterTopY;
+            const leftLegInnerTopX = leftLegOuterTopX + 0.9 * (triBottomTipX - legTrianglePad - 2 * BODY_GROW_H - leftLegOuterTopX);
+            const leftLegInnerTopY = leftLegOuterTopY + 0.9 * (triBottomTipY - leftLegOuterTopY);
+            const rightLegInnerTopX = rightLegOuterTopX + 0.9 * (triBottomTipX + legTrianglePad + 2 * BODY_GROW_H - rightLegOuterTopX);
+            const rightLegInnerTopY = rightLegOuterTopY + 0.9 * (triBottomTipY - rightLegOuterTopY);
+            const leftLegOuterBottomY = legY + legH / 2 + legDrop;
+            const rightLegOuterBottomY = leftLegOuterBottomY;
+            const leftLegInnerBottomX = leftLegX - legW / 2 + legInnerBottomInset;
+            const rightLegInnerBottomX = rightLegX + legW / 2 - legInnerBottomInset;
+            const leftLegInnerBottomY = leftLegOuterBottomY;
+            const rightLegInnerBottomY = rightLegOuterBottomY;
+            const footPad = 4 * BODY_GROW_V;
+            const leftFootW = Math.abs(leftLegInnerBottomX - (leftLegOuterTopX - 4 * BODY_GROW_H));
+            const leftFootTopY = leftLegOuterBottomY + footPad;
+            const leftFootBottomY = leftFootTopY + leftFootW;
+            const rightFootW = Math.abs((rightLegOuterTopX + 4 * BODY_GROW_H) - rightLegInnerBottomX);
+            const rightFootTopY = rightLegOuterBottomY + footPad;
+            const rightFootBottomY = rightFootTopY + rightFootW;
+            const leftFootCenterX = (leftLegOuterTopX - 4 * BODY_GROW_H + leftLegInnerBottomX) / 2;
+            const rightFootCenterX = (rightLegInnerBottomX + rightLegOuterTopX + 4 * BODY_GROW_H) / 2;
+            const skG = this.add.graphics();
+            const boneColor = 0xe8e8e8;
+            const boneLine = 1.5;
+            skG.lineStyle(boneLine, boneColor);
+            skG.setDepth(INV_DEPTH);
+            const skullRx = headEdgeW / 2 * 0.85;
+            const skullRy = bodySlotH / 2 * 0.85;
+            const skullGeom = new Phaser.Geom.Ellipse(bodyCenterX, helmetY, skullRx * 2, skullRy * 2);
+            skG.strokeEllipseShape(skullGeom);
+            const leftEyeGeom = new Phaser.Geom.Ellipse(bodyCenterX - skullRx * 0.35, helmetY - skullRy * 0.2, skullRx * 0.44, skullRy * 0.5);
+            skG.strokeEllipseShape(leftEyeGeom);
+            const rightEyeGeom = new Phaser.Geom.Ellipse(bodyCenterX + skullRx * 0.35, helmetY - skullRy * 0.2, skullRx * 0.44, skullRy * 0.5);
+            skG.strokeEllipseShape(rightEyeGeom);
+            const jawY = helmetY + skullRy * 0.95;
+            skG.beginPath();
+            skG.arc(bodyCenterX, jawY, skullRx * 0.55, Math.PI * 0.35, Math.PI * 0.65, false);
+            skG.strokePath();
+            const ribTop = chestTopY;
+            const ribBottom = chestBottomY;
+            const ribW = bodySlotW * 0.48;
+            const spineTop = ribTop;
+            const spineBottom = crotchTopY + crotchH * 0.95;
+            for (let i = 0; i < 5; i++) {
+                const t = (i + 1) / 6;
+                const y = ribTop + (ribBottom - ribTop) * t;
+                const w = ribW * (0.3 + 0.7 * (1 - Math.abs(t - 0.5) * 2));
+                skG.beginPath();
+                skG.moveTo(bodyCenterX, y);
+                skG.lineTo(bodyCenterX - w * 0.5, y - 4);
+                skG.lineTo(bodyCenterX - w * 0.85, y);
+                skG.strokePath();
+                skG.beginPath();
+                skG.moveTo(bodyCenterX, y);
+                skG.lineTo(bodyCenterX + w * 0.5, y - 4);
+                skG.lineTo(bodyCenterX + w * 0.85, y);
+                skG.strokePath();
             }
-            // HP numbers inside the bar to save space (same size as limb label)
-            const numbersTxt = this.add.text(x, y, `${cur}/${maxH}`, { fontSize: '11px', fill: '#fff' }).setOrigin(0.5).setDepth(INV_DEPTH + 3);
-            numbersTxt.setStroke('#000', 2);
-            contentArray.push(numbersTxt);
-            const labelY = y - limbBarH / 2 - 4;
-            contentArray.push(this.add.text(x, labelY, limbLabels[limbId] || limbId, { fontSize: '11px', fill: '#ccc' }).setOrigin(0.5, 1).setDepth(INV_DEPTH + 1));
-            const statusY = y + limbBarH / 2 + 4;
-            const statusStr = limbEffectsToStatusString(data.effects) || (data.status && String(data.status).trim() ? String(data.status) : '') || '—';
-            contentArray.push(this.add.text(x, statusY, statusStr, { fontSize: '9px', fill: '#999' }).setOrigin(0.5, 0).setDepth(INV_DEPTH + 1));
-            const zonePad = 10;
-            limbZones.push({
-                id: limbId,
-                left: x - limbBarW / 2 - 15,
-                right: x + limbBarW / 2 + 15,
-                top: labelY - 12,
-                bottom: statusY + 10
+            skG.lineStyle(boneLine, boneColor);
+            skG.beginPath();
+            skG.moveTo(bodyCenterX, spineTop);
+            skG.lineTo(bodyCenterX, spineBottom);
+            skG.strokePath();
+            const pelvisW = crotchW * 0.7;
+            const pelvisTop = crotchTopY + crotchH * 0.4;
+            skG.beginPath();
+            skG.moveTo(bodyCenterX - pelvisW * 0.5, pelvisTop);
+            skG.lineTo(bodyCenterX - pelvisW * 0.48, crotchTopY + crotchH);
+            skG.lineTo(bodyCenterX, crotchTopY + crotchH + 5);
+            skG.lineTo(bodyCenterX + pelvisW * 0.48, crotchTopY + crotchH);
+            skG.lineTo(bodyCenterX + pelvisW * 0.5, pelvisTop);
+            skG.closePath();
+            skG.strokePath();
+            const humerusW = 3;
+            const leftShoulderX = bodyCenterX - chestTopWidth * 0.45;
+            const rightShoulderX = bodyCenterX + chestTopWidth * 0.45;
+            const elbowY = chestY + (abdomenY - chestY) * 0.7;
+            const leftElbowX = leftArmX - armW - 2;
+            const rightElbowX = rightArmX + armW + 2;
+            const wristY = abdomenY + 4;
+            skG.lineStyle(2.5, boneColor);
+            skG.beginPath();
+            skG.moveTo(leftShoulderX, chestShoulderY + 2);
+            skG.lineTo(leftElbowX, elbowY);
+            skG.strokePath();
+            skG.beginPath();
+            skG.moveTo(leftElbowX, elbowY);
+            skG.lineTo(leftElbowX - 6, wristY);
+            skG.strokePath();
+            skG.beginPath();
+            skG.moveTo(rightShoulderX, chestShoulderY + 2);
+            skG.lineTo(rightElbowX, elbowY);
+            skG.strokePath();
+            skG.beginPath();
+            skG.moveTo(rightElbowX, elbowY);
+            skG.lineTo(rightElbowX + 6, wristY);
+            skG.strokePath();
+            skG.lineStyle(2.5, boneColor);
+            const leftHipX = triBottomTipX - pelvisW * 0.28;
+            const rightHipX = triBottomTipX + pelvisW * 0.28;
+            const kneeY = (triBottomTipY + leftLegInnerBottomY) / 2;
+            const leftKneeX = leftLegX - legW / 2 - 2;
+            const rightKneeX = rightLegX + legW / 2 + 2;
+            skG.lineStyle(3, boneColor);
+            skG.beginPath();
+            skG.moveTo(leftHipX, triBottomTipY);
+            skG.lineTo(leftKneeX, kneeY);
+            skG.strokePath();
+            skG.beginPath();
+            skG.moveTo(leftKneeX, kneeY);
+            skG.lineTo(leftFootCenterX, leftFootBottomY - 3);
+            skG.strokePath();
+            skG.beginPath();
+            skG.moveTo(rightHipX, triBottomTipY);
+            skG.lineTo(rightKneeX, kneeY);
+            skG.strokePath();
+            skG.beginPath();
+            skG.moveTo(rightKneeX, kneeY);
+            skG.lineTo(rightFootCenterX, rightFootBottomY - 3);
+            skG.strokePath();
+            skG.lineStyle(boneLine, boneColor);
+            const footLen = 8;
+            skG.beginPath();
+            skG.moveTo(leftFootCenterX, leftFootBottomY - 3);
+            skG.lineTo(leftFootCenterX - 3, leftFootBottomY + footLen);
+            skG.strokePath();
+            skG.beginPath();
+            skG.moveTo(rightFootCenterX, rightFootBottomY - 3);
+            skG.lineTo(rightFootCenterX + 3, rightFootBottomY + footLen);
+            skG.strokePath();
+            contentArray.push(skG);
+            const limbLabels = { head: 'HEAD', leftArm: 'L ARM', rightArm: 'R ARM', chest: 'CHEST', abdomen: 'ABDOMEN', crotch: 'CROTCH', leftLeg: 'L LEG', rightLeg: 'R LEG' };
+            const limbBarW = 31;
+            const limbBarH = 8;
+            const limbHp = stats.limbHp || getDefaultLimbHp();
+            const thoraxMidY = (ribTop + ribBottom) / 2;
+            const limbPositions = [
+                { id: 'head', x: bodyCenterX, y: helmetY - skullRy - 6 },
+                { id: 'chest', x: bodyCenterX, y: thoraxMidY },
+                { id: 'abdomen', x: bodyCenterX, y: abdomenY },
+                { id: 'crotch', x: bodyCenterX, y: crotchCenterY },
+                { id: 'leftArm', x: leftElbowX - 8, y: elbowY },
+                { id: 'rightArm', x: rightElbowX + 8, y: elbowY },
+                { id: 'leftLeg', x: leftKneeX, y: kneeY },
+                { id: 'rightLeg', x: rightKneeX, y: kneeY }
+            ];
+            limbPositions.forEach((pos) => {
+                const limbId = pos.id;
+                const data = limbHp[limbId] || { hp: LIMB_MAX_HP[limbId], maxHp: LIMB_MAX_HP[limbId], status: '', effects: [] };
+                const x = pos.x;
+                const y = pos.y;
+                const maxH = data.maxHp || 1;
+                const cur = Math.min(data.hp || 0, maxH);
+                const pct = maxH > 0 ? cur / maxH : 0;
+                const barColor = pct >= 0.5 ? 0x00aa00 : pct >= 0.35 ? 0xcc6600 : 0xaa0000;
+                const barBg = this.add.rectangle(x, y, limbBarW, limbBarH, 0x333333).setStrokeStyle(1, 0x666666).setDepth(INV_DEPTH + 1);
+                contentArray.push(barBg);
+                if (pct > 0) {
+                    const fillW = Math.max(1, limbBarW * pct);
+                    const barFill = this.add.rectangle(x - limbBarW / 2 + fillW / 2, y, fillW, Math.max(1, limbBarH - 2), barColor).setDepth(INV_DEPTH + 2);
+                    contentArray.push(barFill);
+                }
+                const labelY = y + limbBarH / 2 + 4;
+                contentArray.push(this.add.text(x, labelY, limbLabels[limbId] || limbId, { fontSize: '11px', fill: '#ccc' }).setOrigin(0.5, 0).setDepth(INV_DEPTH + 1));
+                const numbersY = labelY + 11;
+                contentArray.push(this.add.text(x, numbersY, `${cur}/${maxH}`, { fontSize: '10px', fill: '#eee' }).setOrigin(0.5, 0).setDepth(INV_DEPTH + 1));
+                const statusStr = limbEffectsToStatusString(data.effects) || (data.status && String(data.status).trim() ? String(data.status) : '') || '—';
+                contentArray.push(this.add.text(x, numbersY + 10, statusStr, { fontSize: '9px', fill: '#999' }).setOrigin(0.5, 0).setDepth(INV_DEPTH + 1));
+                const zonePad = 10;
+                limbZones.push({
+                    id: limbId,
+                    left: x - limbBarW / 2 - 15,
+                    right: x + limbBarW / 2 + 15,
+                    top: y - zonePad,
+                    bottom: numbersY + 22
+                });
             });
-            });
+        }
         const hpPct = stats.maxHp > 0 ? stats.hp / stats.maxHp : 0;
         const hpColor = hpPct >= 0.5 ? '#00ff00' : hpPct >= 0.35 ? '#ff8800' : '#ff0000';  // green 50%+, orange 35-49%, red 0-34%
         contentArray.push(this.add.text(bodyCenterX, bodyAreaBottom + 114, `HP: ${stats.hp}/${stats.maxHp}`, { fontSize: '24px', fontStyle: 'bold', fill: hpColor }).setOrigin(0.5).setDepth(INV_DEPTH));
+        const invBodyView = this.invBodyView || 'gear';
         const rigSlotSize = 25;
         const rigX = invGridX - rigSlotSize / 2 - 5;
         // Block (rig, pockets, backpack, secure) 8px below primary weapon slot; same relative spacing within block.
@@ -11627,14 +11302,13 @@ class GameScene extends Phaser.Scene {
         const primarySlotY = invPanelTop + 35; // primary weapon slot Y (was 95; lowered with panel)
         invGridY = invPanelTop + 155; // block (rig, pockets, backpack, secure) - was 215; lowered with panel
         const rigY = invGridY - 73.5;
-        const armorSlotZones = [
-            { id: 'head', left: helmetBoxX - equipBoxW / 2, right: helmetBoxX + equipBoxW / 2, top: helmetBoxY - equipBoxH / 2 - 10, bottom: helmetBoxY + equipBoxH / 2 },
-            { id: 'body', left: vestBoxX - equipBoxW / 2, right: vestBoxX + equipBoxW / 2, top: vestBoxY - equipBoxH / 2 - 10, bottom: vestBoxY + equipBoxH / 2 },
+        const armorSlotZones = invBodyView === 'gear' ? [
+            { id: 'head', left: bodyCenterX - helmetSlotRadius, right: bodyCenterX + helmetSlotRadius, top: helmetSlotY, bottom: helmetSlotY + helmetSlotRadius },
+            { id: 'body', left: bodyCenterX - bodySlotW / 2, right: bodyCenterX + bodySlotW / 2, top: chestY - chestSlotH / 2, bottom: chestY + chestSlotH / 2 },
             { id: 'ears', left: earsX - accBoxW / 2, right: earsX + accBoxW / 2, top: earsY - accBoxH / 2, bottom: earsY + accBoxH / 2 },
-            { id: 'nvg', left: bodyCenterX - accBoxW / 2, right: bodyCenterX + accBoxW / 2, top: nvgY - accBoxH / 2, bottom: nvgY + accBoxH / 2 },
             { id: 'rig', left: rigX - rigSlotSize / 2, right: rigX + rigSlotSize / 2, top: rigY - rigSlotSize / 2, bottom: rigY + rigSlotSize / 2 }
-        ];
-        const ARMOR_SLOT_ITEM = { head: 'helmet', body: 'vest', ears: 'headset', rig: 'rig', nvg: 'nvg' };
+        ] : [];
+        const ARMOR_SLOT_ITEM = { head: 'helmet', body: 'vest', ears: 'headset', rig: 'rig' };
         const rigEquipped = stats.armor && stats.armor.rig;
         contentArray.push(this.add.text(rigX, rigY - rigSlotSize / 2 - 6, 'RIG', { fontSize: '8px', fill: '#bbb' }).setOrigin(0.5).setDepth(INV_DEPTH));
         contentArray.push(this.add.rectangle(rigX, rigY, rigSlotSize, rigSlotSize, rigEquipped ? 0x555555 : 0x404040).setStrokeStyle(1, 0x888888).setDepth(INV_DEPTH));
@@ -11981,26 +11655,21 @@ class GameScene extends Phaser.Scene {
             const slotBg = this.add.rectangle(pos.x, pos.y, pos.w, pos.h, 0x404040).setStrokeStyle(1, 0x888888).setDepth(INV_DEPTH);
             const lbl = this.add.text(pos.x, pos.y - pos.h / 2 - 4, weaponSlotLabels[i], { fontSize: '8px', fill: '#bbb' }).setOrigin(0.5).setDepth(INV_DEPTH);
             const isEquipped = weaponSlotCurrent[i];
-            const slotWeaponId = ws[id];
-            const slotCfg = slotWeaponId ? getInventoryItemConfig(slotWeaponId) : null;
-            const shortLabel = (slotCfg && slotCfg.icon) ? slotCfg.icon : weaponSlotDisplay[i];
-            const slotFontSize = (i === 2) ? '8px' : '9px';
-            const itemTxt = this.add.text(pos.x, pos.y, shortLabel + (isEquipped ? ' (EQ)' : ''), { fontSize: slotFontSize, fill: weaponSlotDisplay[i] !== 'EMPTY' ? (isEquipped ? '#00ff00' : '#ddd') : '#999' }).setOrigin(0.5).setDepth(INV_DEPTH);
+            const itemTxt = this.add.text(pos.x, pos.y, weaponSlotDisplay[i] + (isEquipped ? ' (EQ)' : ''), { fontSize: '9px', fill: weaponSlotDisplay[i] !== 'EMPTY' ? (isEquipped ? '#00ff00' : '#ddd') : '#999' }).setOrigin(0.5).setDepth(INV_DEPTH);
             contentArray.push(slotBg, lbl, itemTxt);
-            // Mag round count on weapon slot (lower-right) for primary/secondary only; sidearm shows rounds in attachment box below
-            if (i <= 1 && (slotWeaponId === 'pistol' || slotWeaponId === 'smg' || slotWeaponId === 'rifle')) {
+            // Mag round count on weapon slot (lower-right, larger font) for pistol/smg/rifle
+            const slotWeaponId = ws[id];
+            if (i <= 2 && (slotWeaponId === 'pistol' || slotWeaponId === 'smg' || slotWeaponId === 'rifle')) {
                 const em = getEquippedMag(stats, slotWeaponId);
                 const roundsStr = em ? `${em.rounds ?? 0}/${em.maxRounds ?? getMagazineCapacity(em.itemId)}` : '—';
-                const roundTxt = this.add.text(pos.x + pos.w / 2 - 6, pos.y + pos.h / 2 - 5, roundsStr, { fontSize: '10px', fill: em ? '#8f8' : '#666' }).setOrigin(1, 1).setDepth(INV_DEPTH + 1);
+                const roundTxt = this.add.text(pos.x + pos.w / 2 - 6, pos.y + pos.h / 2 - 5, roundsStr, { fontSize: '11px', fill: em ? '#8f8' : '#666' }).setOrigin(1, 1).setDepth(INV_DEPTH + 1);
                 contentArray.push(roundTxt);
             }
             // Phase 4.2: attachment boxes with hit zones for drag/drop
             if (i <= 2) {
                 const weaponId = ws[id];
                 if (weaponId && CONFIG.WEAPON_SLOTS && CONFIG.WEAPON_SLOTS[weaponId]) {
-                    let slotNames = getWeaponSlotNames(weaponId);
-                    // Sidearm (pistol) only: suppressor, light, magazine — 3 boxes centered under the slot
-                    if (i === 2 && weaponId === 'pistol') slotNames = slotNames.slice(0, 3);
+                    const slotNames = getWeaponSlotNames(weaponId);
                     const modsObj = getModsForWeaponInSlot(stats, id);
                     const totalW = slotNames.length * attachmentBoxSize + (slotNames.length - 1) * attachmentBoxGap;
                     const rowY = pos.y + pos.h / 2 + attachmentRowOffsetY + attachmentBoxSize / 2 + (i <= 1 ? -18 : 0);
@@ -12034,26 +11703,6 @@ class GameScene extends Phaser.Scene {
         // Phase 2: weapon detail view (double-click weapon in bag to focus)
         const focusWeapon = this.invFocusedWeapon;
         if (focusWeapon && CONFIG.WEAPON_SLOTS && CONFIG.WEAPON_SLOTS[focusWeapon]) {
-            // Safety: if source item no longer exists, clear focus to avoid errors
-            let sourceValid = true;
-            if (this.invFocusedWeaponSource && this.invFocusedWeaponSource.type === 'backpack' && backpack && backpack.items) {
-                sourceValid = !!backpack.items.find(p => p.placementId === this.invFocusedWeaponSource.placementId);
-            } else if (this.invFocusedWeaponSource && this.invFocusedWeaponSource.type === 'rig' && rigGrid && rigGrid.items) {
-                sourceValid = !!rigGrid.items.find(p => p.placementId === this.invFocusedWeaponSource.placementId);
-            } else if (this.invFocusedWeaponSource && this.invFocusedWeaponSource.type === 'stash' && this.persistent && this.persistent.stash && this.persistent.stash.items) {
-                sourceValid = !!this.persistent.stash.items.find(p => p.placementId === this.invFocusedWeaponSource.placementId);
-            } else if (this.invFocusedWeaponSource && this.invFocusedWeaponSource.type === 'pocket' && stats.pockets) {
-                const slot = stats.pockets[this.invFocusedWeaponSource.pocketIndex] && stats.pockets[this.invFocusedWeaponSource.pocketIndex][this.invFocusedWeaponSource.slotIndex];
-                sourceValid = !!(slot && slot.itemId === focusWeapon);
-            } else if (this.invFocusedWeaponSource && this.invFocusedWeaponSource.type === 'slot' && stats.weaponSlots) {
-                sourceValid = (stats.weaponSlots[this.invFocusedWeaponSource.slotId] === focusWeapon);
-            }
-            if (!sourceValid) {
-                this.invFocusedWeapon = null;
-                this.invFocusedWeaponSource = null;
-            }
-        }
-        if (focusWeapon && this.invFocusedWeapon === focusWeapon && CONFIG.WEAPON_SLOTS && CONFIG.WEAPON_SLOTS[focusWeapon]) {
             const detailX = 535;
             const detailY = 180;
             const detailW = 220;
@@ -12068,13 +11717,10 @@ class GameScene extends Phaser.Scene {
             } else if (this.invFocusedWeaponSource && this.invFocusedWeaponSource.type === 'rig' && rigGrid && rigGrid.items) {
                 const item = rigGrid.items.find(p => p.placementId === this.invFocusedWeaponSource.placementId);
                 fModsObj = getModsForWeaponItem(item);
-            } else if (this.invFocusedWeaponSource && this.invFocusedWeaponSource.type === 'pocket') {
+            } else             if (this.invFocusedWeaponSource && this.invFocusedWeaponSource.type === 'pocket') {
                 ensurePockets(stats);
                 const slot = stats.pockets[this.invFocusedWeaponSource.pocketIndex] && stats.pockets[this.invFocusedWeaponSource.pocketIndex][this.invFocusedWeaponSource.slotIndex];
                 fModsObj = getModsForWeaponItem(slot);
-            } else if (this.invFocusedWeaponSource && this.invFocusedWeaponSource.type === 'stash' && this.persistent && this.persistent.stash && this.persistent.stash.items) {
-                const item = this.persistent.stash.items.find(p => p.placementId === this.invFocusedWeaponSource.placementId);
-                fModsObj = getModsForWeaponItem(item);
             } else if (this.invFocusedWeaponSource && this.invFocusedWeaponSource.type === 'slot') {
                 fModsObj = getModsForWeaponInSlot(stats, this.invFocusedWeaponSource.slotId);
             } else {
@@ -12114,7 +11760,6 @@ class GameScene extends Phaser.Scene {
             const headSlotZone = armorSlotZones && armorSlotZones.find(z => z.id === 'head');
             const bodySlotZone = armorSlotZones && armorSlotZones.find(z => z.id === 'body');
             const earsSlotZone = armorSlotZones && armorSlotZones.find(z => z.id === 'ears');
-            const nvgSlotZone = armorSlotZones && armorSlotZones.find(z => z.id === 'nvg');
             this._hideoutContainerBounds = {
                 backpack: { left: invGridX, right: invGridX + 6 * step, top: invGridY, bottom: invGridY + 9 * step },
                 rig: rigEquipped ? { left: invGridX, right: invGridX + 4 * rigStepX, top: rigY - rigSlotSize / 2, bottom: rigY - rigSlotSize / 2 + 2 * rigStepY } : null,
@@ -12131,15 +11776,13 @@ class GameScene extends Phaser.Scene {
                 headSlot: headSlotZone ? { left: headSlotZone.left, right: headSlotZone.right, top: headSlotZone.top, bottom: headSlotZone.bottom } : null,
                 bodySlot: bodySlotZone ? { left: bodySlotZone.left, right: bodySlotZone.right, top: bodySlotZone.top, bottom: bodySlotZone.bottom } : null,
                 earsSlot: earsSlotZone ? { left: earsSlotZone.left, right: earsSlotZone.right, top: earsSlotZone.top, bottom: earsSlotZone.bottom } : null,
-                nvgSlot: nvgSlotZone ? { left: nvgSlotZone.left, right: nvgSlotZone.right, top: nvgSlotZone.top, bottom: nvgSlotZone.bottom } : null,
                 secureSlot: secureContainerSlotZone ? { left: secureContainerSlotZone.left, right: secureContainerSlotZone.right, top: secureContainerSlotZone.top, bottom: secureContainerSlotZone.bottom } : null,
                 medBagSlot: medBagSlotZone ? { left: medBagSlotZone.left, right: medBagSlotZone.right, top: medBagSlotZone.top, bottom: medBagSlotZone.bottom } : null,
                 backpackItemZones: (itemZones && itemZones.length) ? itemZones.filter(z => z.itemId === 'backpack_default').map(z => ({ left: z.left, right: z.right, top: z.top, bottom: z.bottom, placementId: z.placementId })) : null,
                 backpackItemZonesAll: (itemZones && itemZones.length) ? itemZones.map(z => ({ left: z.left, right: z.right, top: z.top, bottom: z.bottom, placementId: z.placementId, itemId: z.itemId })) : null,
                 rigItemZones: (rigItemZones && rigItemZones.length) ? rigItemZones.map(z => ({ left: z.left, right: z.right, top: z.top, bottom: z.bottom, placementId: z.placementId, itemId: z.itemId })) : null,
                 weaponSlots: weaponSlotZones && weaponSlotZones.length ? weaponSlotZones.map(z => ({ id: z.id, left: z.left, right: z.right, top: z.top, bottom: z.bottom })) : null,
-                attachmentMagSlotZones: (attachmentBoxZones && attachmentBoxZones.length) ? attachmentBoxZones.filter(z => (z.slotName === 'magazine' || z.slotName === 'magazine_mod') && (z.weaponId === 'pistol' || z.weaponId === 'smg' || z.weaponId === 'rifle')).map(z => ({ left: z.left, right: z.right, top: z.top, bottom: z.bottom, weaponId: z.weaponId })) : null,
-                attachmentModSlotZones: (attachmentBoxZones && attachmentBoxZones.length) ? attachmentBoxZones.filter(z => z.slotName !== 'magazine' && z.slotName !== 'magazine_mod').map(z => ({ left: z.left, right: z.right, top: z.top, bottom: z.bottom, slotId: z.slotId, slotName: z.slotName, weaponId: z.weaponId, type: z.type, source: z.source })) : null
+                attachmentMagSlotZones: (attachmentBoxZones && attachmentBoxZones.length) ? attachmentBoxZones.filter(z => (z.slotName === 'magazine' || z.slotName === 'magazine_mod') && (z.weaponId === 'pistol' || z.weaponId === 'smg' || z.weaponId === 'rifle')).map(z => ({ left: z.left, right: z.right, top: z.top, bottom: z.bottom, weaponId: z.weaponId })) : null
             };
         }
         const getWorld = (ptr) => {
@@ -12237,21 +11880,7 @@ class GameScene extends Phaser.Scene {
             if (this.invGhostRect) { this.invGhostRect.destroy(); this.invGhostRect = null; }
             if (this.invGhostText) { this.invGhostText.destroy(); this.invGhostText = null; }
         };
-        const rerender = () => {
-            if (this._invIsHideout && this.currentTab === 'character' && this._rerenderCharacterTab) {
-                this._rerenderCharacterTab();
-            } else {
-                this.renderInventoryPanel();
-            }
-        };
-        /** Defer full character-tab rerender to next frame to avoid lag when only panel needs refresh (e.g. limb heal). */
-        const rerenderOrDefer = () => {
-            if (this._invIsHideout && this.currentTab === 'character' && this._rerenderCharacterTab) {
-                this.time.delayedCall(0, rerender);
-            } else {
-                rerender();
-            }
-        };
+        const rerender = () => { this.renderInventoryPanel(); };
         let invHoverBg = null, invHoverText = null;
         invHoverBg = this.add.rectangle(0, 0, 200, 26, 0x1a1a1a, 0.96).setStrokeStyle(1, 0x666666).setDepth(INV_DEPTH + 20).setVisible(false);
         invHoverText = this.add.text(0, 0, '', { fontSize: '12px', fill: '#eee' }).setOrigin(0, 0.5).setDepth(INV_DEPTH + 21).setVisible(false);
@@ -12267,71 +11896,6 @@ class GameScene extends Phaser.Scene {
         let pendingBackpackSlotDrag = null;
         let pendingSecureContainerSlotDrag = null;
         let pendingMedBagSlotDrag = null;
-        let pendingWeaponDrag = null;
-        const MAG_MENU_DEPTH = INV_DEPTH + 50;
-        const showMagContextMenu = (cursorX, cursorY, context) => {
-            const menuX = Math.max(100, Math.min(700, cursorX));
-            const menuY0 = Math.max(50, Math.min(550, cursorY));
-            const menuW = 130;
-            const rowH = 22;
-            const showLoad = context.type === 'inventory_mag';
-            const menuH = showLoad ? 2 * rowH : rowH;
-            const overlay = this.add.rectangle(400, 300, 800, 600, 0x000000, 0.01).setInteractive().setDepth(MAG_MENU_DEPTH);
-            const bg = this.add.rectangle(menuX, menuY0 + menuH / 2 - rowH / 2, menuW, menuH, 0x252525, 0.98).setStrokeStyle(2, 0x666666).setDepth(MAG_MENU_DEPTH + 1);
-            contentArray.push(overlay, bg);
-            const doClose = () => { rerender(); };
-            const runUnload = () => {
-                const liveStats = this._invStats != null ? this._invStats : (this.stats || this.playerStats);
-                const magRef = context.type === 'weapon_slot'
-                    ? { fromAttachmentBox: true, weaponId: context.weaponId, itemId: context.itemId }
-                    : context.dragRef;
-                if (unloadMagazineToStack(liveStats, this.persistent, magRef, magRef.fromStash === true)) {
-                    sfx.click();
-                    localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(liveStats));
-                    if (this._invIsHideout && this.persistent) savePersistent(this.persistent);
-                }
-                doClose();
-            };
-            const runLoad = () => {
-                const liveStats = this._invStats != null ? this._invStats : (this.stats || this.playerStats);
-                if (context.type !== 'inventory_mag' || !context.dragRef || !context.weaponId) { doClose(); return; }
-                const dragRef = context.dragRef;
-                let removed;
-                if (dragRef.fromStash && this.persistent && this.persistent.stash) {
-                    removed = removeItem(this.persistent.stash, dragRef.placementId);
-                } else {
-                    removed = removeFromContainerSource(dragRef);
-                }
-                if (!removed || removed.itemId !== dragRef.itemId || getMagazineWeapon(removed.itemId) !== context.weaponId) {
-                    if (removed && !dragRef.fromStash) putBackInContainerSource(dragRef, removed);
-                    else if (removed && dragRef.fromStash && this.persistent && this.persistent.stash) {
-                        ensureGridItems(this.persistent.stash);
-                        this.persistent.stash.items.push(removed);
-                    }
-                    doClose();
-                    return;
-                }
-                const currentMag = getEquippedMag(liveStats, context.weaponId);
-                setEquippedMag(liveStats, context.weaponId, { itemId: removed.itemId, rounds: removed.rounds ?? 0, maxRounds: removed.maxRounds ?? getMagazineCapacity(removed.itemId) });
-                if (currentMag) placeMagInRigPocketBackpackOrGround(this, liveStats, currentMag, this.persistent || undefined);
-                sfx.click();
-                localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(liveStats));
-                if (this._invIsHideout && this.persistent) savePersistent(this.persistent);
-                doClose();
-            };
-            const unloadBtn = this.add.rectangle(menuX, menuY0, menuW - 8, rowH - 4, 0x333333, 0.01).setInteractive({ useHandCursor: true }).setDepth(MAG_MENU_DEPTH + 2);
-            const unloadTxt = this.add.text(menuX, menuY0, 'Unload mag', { fontSize: '12px', fill: '#eee' }).setOrigin(0.5).setDepth(MAG_MENU_DEPTH + 3);
-            unloadBtn.on('pointerdown', runUnload);
-            contentArray.push(unloadBtn, unloadTxt);
-            if (showLoad) {
-                const loadBtn = this.add.rectangle(menuX, menuY0 + rowH, menuW - 8, rowH - 4, 0x333333, 0.01).setInteractive({ useHandCursor: true }).setDepth(MAG_MENU_DEPTH + 2);
-                const loadTxt = this.add.text(menuX, menuY0 + rowH, 'Load mag', { fontSize: '12px', fill: '#eee' }).setOrigin(0.5).setDepth(MAG_MENU_DEPTH + 3);
-                loadBtn.on('pointerdown', runLoad);
-                contentArray.push(loadBtn, loadTxt);
-            }
-            overlay.on('pointerdown', () => { doClose(); });
-        };
-        this._showMagMenu = showMagContextMenu;
         const onPointerMove = (ptr) => {
             const w = getWorld(ptr);
             const px = w.x, py = w.y;
@@ -12419,38 +11983,6 @@ class GameScene extends Phaser.Scene {
                 }
                 return;
             }
-            if (pendingWeaponDrag) {
-                const dx = px - pendingWeaponDrag.startX, dy = py - pendingWeaponDrag.startY;
-                if (dx * dx + dy * dy > 25) {
-                    this.lastInvWeaponClick = null;
-                    sfx.click();
-                    if (pendingWeaponDrag.type === 'backpack') {
-                        this.invDragging = { container: 'backpack', placementId: pendingWeaponDrag.placementId, itemId: pendingWeaponDrag.itemId, count: pendingWeaponDrag.count, sizeW: pendingWeaponDrag.sizeW, sizeH: pendingWeaponDrag.sizeH, rotated: false };
-                        const cfg = getInventoryItemConfig(pendingWeaponDrag.itemId);
-                        const lbl = (cfg && cfg.icon) ? cfg.icon : (pendingWeaponDrag.itemId || '?').slice(0, 2).toUpperCase();
-                        const ghostFill = (cfg && cfg.color) ? cfg.color : '#e8e8e8';
-                        const gw = (pendingWeaponDrag.sizeW || 1) * step - 2, gh = (pendingWeaponDrag.sizeH || 1) * step - 2;
-                        this.invGhostRect = this.add.rectangle(px, py, gw, gh, 0x446644, 0.9).setStrokeStyle(2, 0xccffcc).setDepth(INV_DEPTH + 5);
-                        this.invGhostText = this.add.text(px, py, (pendingWeaponDrag.count > 1 ? lbl + pendingWeaponDrag.count : lbl), { fontSize: '8px', fill: ghostFill }).setOrigin(0.5).setDepth(INV_DEPTH + 6);
-                    } else if (pendingWeaponDrag.type === 'rig') {
-                        this.invDragging = { container: 'rig', fromRig: true, placementId: pendingWeaponDrag.placementId, itemId: pendingWeaponDrag.itemId, count: pendingWeaponDrag.count || 1, sizeW: pendingWeaponDrag.sizeW || 1, sizeH: pendingWeaponDrag.sizeH || 1, rotated: false };
-                        const cfg = getInventoryItemConfig(pendingWeaponDrag.itemId);
-                        const lbl = (cfg && cfg.icon) ? cfg.icon : (pendingWeaponDrag.itemId || '?').slice(0, 2).toUpperCase();
-                        const gw = (pendingWeaponDrag.sizeW || 1) * rigCellSize - 2, gh = (pendingWeaponDrag.sizeH || 1) * rigCellSize - 2;
-                        this.invGhostRect = this.add.rectangle(px, py, gw, gh, 0x446644, 0.9).setStrokeStyle(2, 0xaaffaa).setDepth(INV_DEPTH + 5);
-                        this.invGhostText = this.add.text(px, py, (pendingWeaponDrag.count > 1 ? lbl + pendingWeaponDrag.count : lbl), { fontSize: '7px', fill: '#ccc' }).setOrigin(0.5).setDepth(INV_DEPTH + 6);
-                    } else if (pendingWeaponDrag.type === 'pocket') {
-                        this.invDragging = { fromPocket: true, pocketIndex: pendingWeaponDrag.pocketIndex, slotIndex: pendingWeaponDrag.slotIndex, itemId: pendingWeaponDrag.itemId, count: pendingWeaponDrag.count || 1, durability: pendingWeaponDrag.durability, maxDurability: pendingWeaponDrag.maxDurability, sizeW: pendingWeaponDrag.sizeW || 1, sizeH: pendingWeaponDrag.sizeH || 1 };
-                        const cfg = getInventoryItemConfig(pendingWeaponDrag.itemId);
-                        const lbl = (cfg && cfg.icon) ? cfg.icon : (pendingWeaponDrag.itemId || '?').slice(0, 2).toUpperCase();
-                        const gw = (pendingWeaponDrag.sizeW || 1) * pocketSlotSize - 2, gh = (pendingWeaponDrag.sizeH || 1) * pocketSlotSize - 2;
-                        this.invGhostRect = this.add.rectangle(px, py, gw, gh, 0x446644, 0.9).setStrokeStyle(2, 0xaaffaa).setDepth(INV_DEPTH + 5);
-                        this.invGhostText = this.add.text(px, py, (pendingWeaponDrag.count > 1 ? lbl + pendingWeaponDrag.count : lbl), { fontSize: '8px', fill: '#ccc' }).setOrigin(0.5).setDepth(INV_DEPTH + 6);
-                    }
-                    pendingWeaponDrag = null;
-                }
-                return;
-            }
             if (pendingMedBagSlotDrag) {
                 const dx = px - pendingMedBagSlotDrag.startX, dy = py - pendingMedBagSlotDrag.startY;
                 if (dx * dx + dy * dy > 25) {
@@ -12528,44 +12060,6 @@ class GameScene extends Phaser.Scene {
         const onPointerDown = (ptr) => {
             const w = getWorld(ptr);
             const px = w.x, py = w.y;
-            const isRightClick = ptr.event && ptr.event.button === 2;
-            if (isRightClick) {
-                const overAb = attachmentBoxZones.find(z => inZone(px, py, z));
-                const isMagSlot = overAb && (overAb.slotName === 'magazine' || overAb.slotName === 'magazine_mod') && (overAb.weaponId === 'pistol' || overAb.weaponId === 'smg' || overAb.weaponId === 'rifle');
-                if (isMagSlot && overAb.magId) {
-                    showMagContextMenu(px, py, { type: 'weapon_slot', weaponId: overAb.weaponId, itemId: overAb.magId });
-                    return;
-                }
-                let overMagInInv = null;
-                const overItemMag = itemZones.find(z => inZone(px, py, z));
-                if (overItemMag && isMagazineItem(overItemMag.itemId)) overMagInInv = { container: 'backpack', placementId: overItemMag.placementId, itemId: overItemMag.itemId };
-                if (!overMagInInv && rigEquipped) {
-                    const overRig = rigItemZones.find(z => inZone(px, py, z));
-                    if (overRig && isMagazineItem(overRig.itemId)) overMagInInv = { fromRig: true, container: 'rig', placementId: overRig.placementId, itemId: overRig.itemId };
-                }
-                if (!overMagInInv) {
-                    const overPocket = pocketZones.find(z => inZone(px, py, z));
-                    if (overPocket) {
-                        const pocketsArr = stats.pockets || [];
-                        let slotItem = pocketsArr[overPocket.pocketIndex] && (pocketsArr[overPocket.pocketIndex] || [])[overPocket.slotIndex];
-                        let mainSlotIndex = overPocket.slotIndex;
-                        if (slotItem && slotItem._spansFrom !== undefined) {
-                            mainSlotIndex = slotItem._spansFrom;
-                            slotItem = pocketsArr[overPocket.pocketIndex] && pocketsArr[overPocket.pocketIndex][mainSlotIndex];
-                        }
-                        if (slotItem && slotItem.itemId && isMagazineItem(slotItem.itemId)) overMagInInv = { fromPocket: true, pocketIndex: overPocket.pocketIndex, slotIndex: mainSlotIndex, itemId: slotItem.itemId };
-                    }
-                }
-                if (overMagInInv) {
-                    const weaponId = getMagazineWeapon(overMagInInv.itemId);
-                    if (weaponId) showMagContextMenu(px, py, { type: 'inventory_mag', dragRef: overMagInInv, weaponId });
-                    return;
-                }
-            }
-            if (!isRightClick) {
-                this.invSelectedMag = null;
-                this.stashSelectedMag = null;
-            }
             const overItem = itemZones.find(z => inZone(px, py, z));
             if (overItem) {
                 if (overItem.itemId === 'ammo_box') {
@@ -12611,13 +12105,8 @@ class GameScene extends Phaser.Scene {
                     rerender();
                     return;
                 }
-                if (CONFIG.WEAPON_SLOTS && CONFIG.WEAPON_SLOTS[overItem.itemId]) {
-                    this.lastInvWeaponClick = { type: 'backpack', placementId: overItem.placementId, itemId: overItem.itemId, time: now };
-                    pendingWeaponDrag = { type: 'backpack', placementId: overItem.placementId, itemId: overItem.itemId, count: overItem.count, sizeW: overItem.sizeW, sizeH: overItem.sizeH, startX: px, startY: py };
-                    sfx.click();
-                    return;
-                }
-                this.lastInvWeaponClick = null;
+                if (CONFIG.WEAPON_SLOTS && CONFIG.WEAPON_SLOTS[overItem.itemId]) this.lastInvWeaponClick = { type: 'backpack', placementId: overItem.placementId, itemId: overItem.itemId, time: now };
+                else this.lastInvWeaponClick = null;
                 sfx.click();
                 this.invDragging = { container: 'backpack', placementId: overItem.placementId, itemId: overItem.itemId, count: overItem.count, sizeW: overItem.sizeW, sizeH: overItem.sizeH, rotated: false };
                 const cfg = getInventoryItemConfig(overItem.itemId);
@@ -12674,13 +12163,8 @@ class GameScene extends Phaser.Scene {
                     rerender();
                     return;
                 }
-                if (CONFIG.WEAPON_SLOTS && CONFIG.WEAPON_SLOTS[overRigItem.itemId]) {
-                    this.lastInvWeaponClick = { type: 'rig', placementId: overRigItem.placementId, itemId: overRigItem.itemId, time: nowRig };
-                    pendingWeaponDrag = { type: 'rig', placementId: overRigItem.placementId, itemId: overRigItem.itemId, count: overRigItem.count || 1, sizeW: overRigItem.sizeW || 1, sizeH: overRigItem.sizeH || 1, startX: px, startY: py };
-                    sfx.click();
-                    return;
-                }
-                this.lastInvWeaponClick = null;
+                if (CONFIG.WEAPON_SLOTS && CONFIG.WEAPON_SLOTS[overRigItem.itemId]) this.lastInvWeaponClick = { type: 'rig', placementId: overRigItem.placementId, itemId: overRigItem.itemId, time: nowRig };
+                else this.lastInvWeaponClick = null;
                 sfx.click();
                 this.invDragging = { container: 'rig', fromRig: true, placementId: overRigItem.placementId, itemId: overRigItem.itemId, count: overRigItem.count || 1, sizeW: overRigItem.sizeW || 1, sizeH: overRigItem.sizeH || 1, rotated: false };
                 const cfg = getInventoryItemConfig(overRigItem.itemId);
@@ -12764,7 +12248,7 @@ class GameScene extends Phaser.Scene {
             if (overSlot && stats.armor && stats.armor[overSlot.id]) {
                 lastRigClickChar = null;
                 sfx.click();
-                const itemId = (overSlot.id === 'head' && stats.armor.head && stats.armor.head.itemId) ? stats.armor.head.itemId : (overSlot.id === 'ears' && stats.armor.ears && stats.armor.ears.itemId) ? stats.armor.ears.itemId : (overSlot.id === 'nvg' && stats.armor.nvg) ? 'nvg' : (ARMOR_SLOT_ITEM[overSlot.id] || 'helmet');
+                const itemId = (overSlot.id === 'head' && stats.armor.head && stats.armor.head.itemId) ? stats.armor.head.itemId : (overSlot.id === 'ears' && stats.armor.ears && stats.armor.ears.itemId) ? stats.armor.ears.itemId : (ARMOR_SLOT_ITEM[overSlot.id] || 'helmet');
                 this.invDragging = { fromSlot: overSlot.id, itemId };
                 const cfg = getInventoryItemConfig(itemId);
                 const lbl = (cfg && cfg.icon) ? cfg.icon : (itemId || '?').slice(0, 2).toUpperCase();
@@ -12792,14 +12276,8 @@ class GameScene extends Phaser.Scene {
                         rerender();
                         return;
                     }
-                    if (CONFIG.WEAPON_SLOTS && CONFIG.WEAPON_SLOTS[slotItem.itemId]) {
-                        this.lastInvWeaponClick = { type: 'pocket', pocketIndex: pi, slotIndex: si, itemId: slotItem.itemId, time: nowPock };
-                        const sw = slotItem.sizeW || 1, sh = slotItem.sizeH || 1;
-                        pendingWeaponDrag = { type: 'pocket', pocketIndex: pi, slotIndex: si, itemId: slotItem.itemId, count: slotItem.count || 1, durability: slotItem.durability, maxDurability: slotItem.maxDurability, sizeW: sw, sizeH: sh, startX: px, startY: py };
-                        sfx.click();
-                        return;
-                    }
-                    this.lastInvWeaponClick = null;
+                    if (CONFIG.WEAPON_SLOTS && CONFIG.WEAPON_SLOTS[slotItem.itemId]) this.lastInvWeaponClick = { type: 'pocket', pocketIndex: pi, slotIndex: si, itemId: slotItem.itemId, time: nowPock };
+                    else this.lastInvWeaponClick = null;
                     sfx.click();
                     const sw = slotItem.sizeW || 1, sh = slotItem.sizeH || 1;
                     this.invDragging = {
@@ -12824,12 +12302,7 @@ class GameScene extends Phaser.Scene {
         const longGunIds = ['shotgun', 'smg', 'crossbow', 'rifle'];
         const weaponSlots = stats.weaponSlots || { primary: null, secondary: null, sidearm: 'pistol', melee: null };
         const onPointerUp = (ptr) => {
-            if (ptr.event && ptr.event.button === 2) {
-                this.invSelectedMag = null;
-                this.stashSelectedMag = null;
-                return;
-            }
-            if (pendingRigDrag || pendingAmmoBoxDrag || pendingBackpackDrag || pendingRigSlotDrag || pendingBackpackSlotDrag || pendingSecureContainerSlotDrag || pendingMedBagSlotDrag || pendingWeaponDrag) {
+            if (pendingRigDrag || pendingAmmoBoxDrag || pendingBackpackDrag || pendingRigSlotDrag || pendingBackpackSlotDrag || pendingSecureContainerSlotDrag || pendingMedBagSlotDrag) {
                 pendingRigDrag = null;
                 pendingAmmoBoxDrag = null;
                 pendingBackpackDrag = null;
@@ -12837,14 +12310,12 @@ class GameScene extends Phaser.Scene {
                 pendingBackpackSlotDrag = null;
                 pendingSecureContainerSlotDrag = null;
                 pendingMedBagSlotDrag = null;
-                pendingWeaponDrag = null;
                 return;
             }
             if (!this.invDragging) return;
             const w = getWorld(ptr);
             const px = w.x, py = w.y;
             const drag = this.invDragging;
-            destroyGhost();
             const inStashBounds = this._invIsHideout && this._hideoutStashBounds && px >= this._hideoutStashBounds.left && px <= this._hideoutStashBounds.right && py >= this._hideoutStashBounds.top && py <= this._hideoutStashBounds.bottom;
             if (inStashBounds && (drag.fromSlot === 'rig' && this.addEquippedRigToStash)) {
                 this.addEquippedRigToStash();
@@ -12852,7 +12323,7 @@ class GameScene extends Phaser.Scene {
                 this.invDragging = null;
                 return;
             }
-            if (inStashBounds && (drag.fromSlot === 'head' || drag.fromSlot === 'body' || drag.fromSlot === 'ears' || drag.fromSlot === 'nvg') && this.addEquippedArmorToStash) {
+            if (inStashBounds && (drag.fromSlot === 'head' || drag.fromSlot === 'body' || drag.fromSlot === 'ears') && this.addEquippedArmorToStash) {
                 this.addEquippedArmorToStash(drag.fromSlot);
                 destroyGhost();
                 this.invDragging = null;
@@ -12895,73 +12366,14 @@ class GameScene extends Phaser.Scene {
                     return;
                 }
             }
-            if (inStashBounds && drag.fromAttachmentBox && this.addItemToStash) {
-                if (isMagazineItem(drag.itemId)) {
-                    const magItem = { itemId: drag.itemId, count: 1, rounds: drag.magRounds ?? 0, maxRounds: drag.magMaxRounds ?? getMagazineCapacity(drag.itemId) };
-                    setEquippedMag(stats, drag.weaponId, null);
-                    const added = this.addItemToStash(magItem, { container: 'weaponMag', weaponId: drag.weaponId });
-                    if (added) { sfx.click(); } else { setEquippedMag(stats, drag.weaponId, { itemId: drag.itemId, rounds: magItem.rounds, maxRounds: magItem.maxRounds }); }
-                } else if (isModItem(drag.itemId)) {
-                    const modItem = { itemId: drag.itemId, count: 1 };
-                    let removed = false;
-                    if (drag.type === 'slot' && drag.slotId && drag.slotName) {
-                        ensureWeaponSlotModsShape(stats);
-                        if (stats.weaponSlotMods && stats.weaponSlotMods[drag.slotId] && stats.weaponSlotMods[drag.slotId][drag.slotName]) {
-                            stats.weaponSlotMods[drag.slotId][drag.slotName] = null;
-                            removed = true;
-                        }
-                    } else if (drag.type === 'outfit' && drag.source) {
-                        const src = drag.source;
-                        let weaponItem = null;
-                        if (src.type === 'backpack' && stats.backpack && stats.backpack.items) {
-                            weaponItem = stats.backpack.items.find(p => p.placementId === src.placementId);
-                        } else if (src.type === 'rig' && stats.rigGrid && stats.rigGrid.items) {
-                            weaponItem = stats.rigGrid.items.find(p => p.placementId === src.placementId);
-                        } else if (src.type === 'pocket' && stats.pockets) {
-                            const s = stats.pockets[src.pocketIndex] && stats.pockets[src.pocketIndex][src.slotIndex];
-                            weaponItem = s && s.itemId ? s : null;
-                        } else if (src.type === 'stash' && this.persistent && this.persistent.stash && this.persistent.stash.items) {
-                            weaponItem = this.persistent.stash.items.find(p => p.placementId === src.placementId);
-                        }
-                        if (weaponItem && weaponItem.mods && weaponItem.mods[drag.slotName]) {
-                            weaponItem.mods[drag.slotName] = null;
-                            removed = true;
-                        }
-                    }
-                    if (removed) {
-                        const added = this.addItemToStash(modItem, { container: 'weaponMod', weaponId: drag.weaponId, slotName: drag.slotName });
-                        if (added) sfx.click();
-                        else {
-                            if (drag.type === 'slot' && stats.weaponSlotMods) stats.weaponSlotMods[drag.slotId][drag.slotName] = drag.itemId;
-                            else if (drag.type === 'outfit' && weaponItem && weaponItem.mods) weaponItem.mods[drag.slotName] = drag.itemId;
-                        }
-                    }
-                }
+            if (inStashBounds && drag.fromAttachmentBox && isMagazineItem(drag.itemId) && this.addItemToStash) {
+                const magItem = { itemId: drag.itemId, count: 1, rounds: drag.magRounds ?? 0, maxRounds: drag.magMaxRounds ?? getMagazineCapacity(drag.itemId) };
+                setEquippedMag(stats, drag.weaponId, null);
+                const added = this.addItemToStash(magItem, { container: 'weaponMag', weaponId: drag.weaponId });
+                if (added) { sfx.click(); } else { setEquippedMag(stats, drag.weaponId, { itemId: drag.itemId, rounds: magItem.rounds, maxRounds: magItem.maxRounds }); }
                 destroyGhost();
                 this.invDragging = null;
                 return;
-            }
-            if (this._invIsHideout && this._hideoutContainerBounds && isContainerDrag(drag) && isAmmoItemId(drag.itemId)) {
-                const b = this._hideoutContainerBounds;
-                const overAmmoBox = b.backpackItemZonesAll && b.backpackItemZonesAll.find(z => px >= z.left && px <= z.right && py >= z.top && py <= z.bottom && z.itemId === 'ammo_box' && z.placementId !== drag.placementId);
-                if (overAmmoBox) {
-                    const item = removeFromContainerSource(drag);
-                    if (item) {
-                        const invMap = this.stats.ammoBoxInventories;
-                        if (!invMap) this.stats.ammoBoxInventories = {};
-                        const innerGrid = getOrCreateAmmoBoxInventory(this.stats.ammoBoxInventories, 'backpack_' + overAmmoBox.placementId);
-                        ensureGridItems(innerGrid);
-                        if (tryAddItemAmmoBoxOnly(innerGrid, item.itemId, item.count || 1)) {
-                            sfx.click();
-                            localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(this.stats));
-                            if (this._rerenderCharacterTab) this._rerenderCharacterTab();
-                            destroyGhost();
-                            this.invDragging = null;
-                            return;
-                        }
-                        putBackInContainerSource(drag, item);
-                    }
-                }
             }
             if (this._invIsHideout && this._hideoutStashBounds && this.addItemToStash && isContainerDrag(drag) && inStashBounds) {
                 const item = removeFromContainerSource(drag);
@@ -12972,100 +12384,6 @@ class GameScene extends Phaser.Scene {
                 destroyGhost();
                 this.invDragging = null;
                 return;
-            }
-            // Limb med drop: handle when dragging from backpack/rig/pockets/etc. (so it works in unified body view)
-            if (limbZones.length > 0 && isMedicalItem(drag.itemId) && (isContainerDrag(drag) || drag.placementId)) {
-                const overLimb = limbZones.find(z => inZone(px, py, z));
-                if (overLimb) {
-                    const removed = isContainerDrag(drag) ? removeFromContainerSource(drag) : removeFromDragSource(drag);
-                    const srcGrid = getDragSourceGrid(drag);
-                    const putBack = (item) => { if (isContainerDrag(drag)) putBackInContainerSource(drag, item); else if (srcGrid) tryAddItem(srcGrid, item.itemId, item.count || 1, { durability: item.durability, maxDurability: item.maxDurability }); };
-                    if (removed) {
-                        const limb = stats.limbHp[overLimb.id];
-                        if (limb) {
-                            const isHealItem = removed.itemId === 'medkit';
-                            const hasTrauma = Array.isArray(limb.effects) && limb.effects.includes('trauma');
-                            if (isHealItem && hasTrauma) {
-                                putBack(removed);
-                            } else if (isHealItem) {
-                                const maxH = limb.maxHp || LIMB_MAX_HP[overLimb.id];
-                                const healDefDur = getDefaultDurability(removed.itemId);
-                                let dur = removed.durability != null ? removed.durability : (healDefDur ? healDefDur.durability : 10);
-                                const maxD = removed.maxDurability != null ? removed.maxDurability : (healDefDur ? healDefDur.maxDurability : 10);
-                                // Medkit can remove bleeds: major = 50 usage, minor = 25 usage
-                                if (Array.isArray(limb.effects)) {
-                                    if (limb.effects.includes('major_bleed') && dur >= 50) {
-                                        limb.effects.splice(limb.effects.indexOf('major_bleed'), 1);
-                                        dur -= 50;
-                                    }
-                                    if (limb.effects.includes('minor_bleed') && dur >= 25) {
-                                        limb.effects.splice(limb.effects.indexOf('minor_bleed'), 1);
-                                        dur -= 25;
-                                    }
-                                }
-                                const need = maxH - (limb.hp || 0);
-                                const healAmount = Math.min(need, dur);
-                                limb.hp = (limb.hp || 0) + healAmount;
-                                const newDur = dur - healAmount;
-                                stats.hp = sumLimbHp(stats.limbHp);
-                                stats.maxHp = sumLimbMaxHp(stats.limbHp);
-                                if (newDur > 0) putBack({ ...removed, durability: newDur, maxDurability: maxD });
-                                if (typeof sfx.lootHealth === 'function') sfx.lootHealth(); else if (typeof sfx.heal === 'function') sfx.heal();
-                                if (this.hasBothArmsBlacked()) this.applyBodyPenaltyDamage(); else if (this.hasNoGoodArms()) this.applyBothArmsActionDamage();
-                                rerender();
-                            } else {
-                                const statusRemovalMap = { bandage: 'minor_bleed', hemostat: 'major_bleed', splint: 'break', trauma_kit: 'trauma' };
-                                const effectToRemove = statusRemovalMap[removed.itemId];
-                                if (effectToRemove && Array.isArray(limb.effects) && limb.effects.includes(effectToRemove)) {
-                                    const idx = limb.effects.indexOf(effectToRemove);
-                                    limb.effects.splice(idx, 1);
-                                    if (effectToRemove === 'break' && (overLimb.id === 'leftArm' || overLimb.id === 'rightArm') && this.brokenArmRollCount) this.brokenArmRollCount[overLimb.id] = 0;
-                                    const statusDefDur = getDefaultDurability(removed.itemId);
-                                    const dur = removed.durability != null ? removed.durability : (statusDefDur ? statusDefDur.durability : 2);
-                                    const maxD = removed.maxDurability != null ? removed.maxDurability : (statusDefDur ? statusDefDur.maxDurability : 2);
-                                    const newDur = dur - 1;
-                                    if (newDur > 0) putBack({ ...removed, durability: newDur, maxDurability: maxD });
-                                    if (typeof sfx.lootHealth === 'function') sfx.lootHealth(); else if (typeof sfx.heal === 'function') sfx.heal();
-                                    if (this.hasBothArmsBlacked()) this.applyBodyPenaltyDamage(); else if (this.hasNoGoodArms()) this.applyBothArmsActionDamage();
-                                    rerender();
-                                } else if (removed.itemId === 'limb_breaker') {
-                                    const breakableLimbs = ['leftArm', 'rightArm', 'leftLeg', 'rightLeg'];
-                                    if (breakableLimbs.includes(overLimb.id)) {
-                                        if (!limb.effects.includes('break')) limb.effects.push('break');
-                                        const defDur = getDefaultDurability(removed.itemId);
-                                        const dur = removed.durability != null ? removed.durability : (defDur ? defDur.durability : 5);
-                                        const maxD = removed.maxDurability != null ? removed.maxDurability : (defDur ? defDur.maxDurability : 5);
-                                        const newDur = dur - 1;
-                                        if (newDur > 0) putBack({ ...removed, durability: newDur, maxDurability: maxD });
-                                        if (this.hasBothArmsBlacked()) this.applyBodyPenaltyDamage(); else if (this.hasNoGoodArms()) this.applyBothArmsActionDamage();
-                                        rerender();
-                                    } else {
-                                        putBack(removed);
-                                    }
-                                } else if (removed.itemId === 'trauma_inflict') {
-                                    limb.hp = 0;
-                                    if (!limb.effects.includes('trauma')) limb.effects.push('trauma');
-                                    stats.hp = sumLimbHp(stats.limbHp);
-                                    stats.maxHp = sumLimbMaxHp(stats.limbHp);
-                                    const defDur = getDefaultDurability(removed.itemId);
-                                    const dur = removed.durability != null ? removed.durability : (defDur ? defDur.durability : 5);
-                                    const maxD = removed.maxDurability != null ? removed.maxDurability : (defDur ? defDur.maxDurability : 5);
-                                    const newDur = dur - 1;
-                                    if (newDur > 0) putBack({ ...removed, durability: newDur, maxDurability: maxD });
-                                    if (this.hasBothArmsBlacked()) this.applyBodyPenaltyDamage(); else if (this.hasNoGoodArms()) this.applyBothArmsActionDamage();
-                                    rerender();
-                                } else {
-                                    putBack(removed);
-                                }
-                            }
-                        } else {
-                            putBack(removed);
-                        }
-                    }
-                    destroyGhost();
-                    this.invDragging = null;
-                    return;
-                }
             }
             destroyGhost();
             this.invDragging = null;
@@ -13081,43 +12399,6 @@ class GameScene extends Phaser.Scene {
                 let stripped = false;
                 const liveBackpackPutBack = stats.backpack;
                 const liveRigPutBack = stats.armor && stats.armor.rig && stats.rigGrid;
-                const isDroppingOnContainer = !overAbZone && ((emptyZone && liveBackpackPutBack) || (overRigEmpty && liveRigPutBack) || overPocketZone ||
-                    (liveBackpackPutBack && px >= invGridX && px <= invGridX + 6 * step && py >= invGridY && py <= invGridY + 9 * step) ||
-                    (liveRigPutBack && rigEquipped && px >= invGridX && px <= invGridX + 4 * rigStepX && py >= rigY - rigSlotSize / 2 && py <= rigY - rigSlotSize / 2 + 2 * rigStepY) ||
-                    (pocketZones && pocketZones.length && px >= Math.min(...pocketZones.map(z => z.left)) && px <= Math.max(...pocketZones.map(z => z.right)) && py >= Math.min(...pocketZones.map(z => z.top)) && py <= Math.max(...pocketZones.map(z => z.bottom))));
-                const removeModFromWeapon = () => {
-                    if (isMag) { setEquippedMag(stats, drag.weaponId, null); return true; }
-                    if (drag.type === 'slot' && drag.slotId) {
-                        ensureWeaponSlotModsShape(stats);
-                        if (stats.weaponSlotMods && stats.weaponSlotMods[drag.slotId] && stats.weaponSlotMods[drag.slotId][drag.slotName]) {
-                            stats.weaponSlotMods[drag.slotId][drag.slotName] = null;
-                            return true;
-                        }
-                    } else if (drag.type === 'outfit' && drag.source) {
-                        const src = drag.source;
-                        let weaponItem = null;
-                        if (src.type === 'backpack' && backpack && backpack.items) weaponItem = backpack.items.find(p => p.placementId === src.placementId);
-                        else if (src.type === 'rig' && rigGrid && rigGrid.items) weaponItem = rigGrid.items.find(p => p.placementId === src.placementId);
-                        else if (src.type === 'pocket' && stats.pockets) { const s = stats.pockets[src.pocketIndex] && stats.pockets[src.pocketIndex][src.slotIndex]; weaponItem = s && s.itemId ? s : null; }
-                        else if (src.type === 'stash' && this.persistent && this.persistent.stash && this.persistent.stash.items) weaponItem = this.persistent.stash.items.find(p => p.placementId === src.placementId);
-                        if (weaponItem && weaponItem.mods && weaponItem.mods[drag.slotName]) { weaponItem.mods[drag.slotName] = null; return true; }
-                    }
-                    return false;
-                };
-                const putModBackOnWeapon = () => {
-                    if (isMag) setEquippedMag(stats, drag.weaponId, { itemId: drag.itemId, rounds: magExtra?.rounds ?? 0, maxRounds: magExtra?.maxRounds ?? getMagazineCapacity(drag.itemId) });
-                    else if (drag.type === 'slot' && stats.weaponSlotMods) stats.weaponSlotMods[drag.slotId][drag.slotName] = drag.itemId;
-                    else if (drag.type === 'outfit' && drag.source) {
-                        const src = drag.source;
-                        let weaponItem = null;
-                        if (src.type === 'backpack' && backpack && backpack.items) weaponItem = backpack.items.find(p => p.placementId === src.placementId);
-                        else if (src.type === 'rig' && rigGrid && rigGrid.items) weaponItem = rigGrid.items.find(p => p.placementId === src.placementId);
-                        else if (src.type === 'pocket' && stats.pockets) { const s = stats.pockets[src.pocketIndex] && stats.pockets[src.pocketIndex][src.slotIndex]; weaponItem = s && s.itemId ? s : null; }
-                        else if (src.type === 'stash' && this.persistent && this.persistent.stash && this.persistent.stash.items) weaponItem = this.persistent.stash.items.find(p => p.placementId === src.placementId);
-                        if (weaponItem && weaponItem.mods) weaponItem.mods[drag.slotName] = drag.itemId;
-                    }
-                };
-                const didRemove = isDroppingOnContainer ? removeModFromWeapon() : false;
                 if (emptyZone && liveBackpackPutBack) {
                     if (canPlace(liveBackpackPutBack, emptyZone.row, emptyZone.col, sizeW, sizeH, null) && placeItem(liveBackpackPutBack, drag.itemId, 1, emptyZone.row, emptyZone.col, magExtra, sizeW !== 1 || sizeH !== 1 ? { sizeW, sizeH } : undefined)) stripped = true;
                     if (!stripped && sizeW !== sizeH && canPlace(liveBackpackPutBack, emptyZone.row, emptyZone.col, sizeH, sizeW, null) && placeItem(liveBackpackPutBack, drag.itemId, 1, emptyZone.row, emptyZone.col, magExtra, { sizeW: sizeH, sizeH: sizeW })) stripped = true;
@@ -13211,27 +12492,22 @@ class GameScene extends Phaser.Scene {
                         }
                     }
                 }
-                if (didRemove && !stripped) putModBackOnWeapon();
                 if (stripped) {
-                    if (!didRemove) {
-                        if (isMag && drag.type === 'slot' && drag.slotId && drag.weaponId) setEquippedMag(stats, drag.weaponId, null);
-                        else if (drag.type === 'slot' && drag.slotId) {
-                            ensureWeaponSlotModsShape(stats);
-                            if (stats.weaponSlotMods[drag.slotId]) stats.weaponSlotMods[drag.slotId][drag.slotName] = null;
-                        } else if (drag.type === 'outfit' && drag.source) {
-                            if (drag.source.type === 'backpack' && backpack && backpack.items) {
-                                const item = backpack.items.find(p => p.placementId === drag.source.placementId);
-                                if (item && item.mods) item.mods[drag.slotName] = null;
-                            } else if (drag.source.type === 'rig' && rigGrid && rigGrid.items) {
-                                const item = rigGrid.items.find(p => p.placementId === drag.source.placementId);
-                                if (item && item.mods) item.mods[drag.slotName] = null;
-                            } else if (drag.source.type === 'pocket') {
-                                const slot = stats.pockets[drag.source.pocketIndex] && stats.pockets[drag.source.pocketIndex][drag.source.slotIndex];
-                                if (slot && slot.mods) slot.mods[drag.slotName] = null;
-                            } else if (drag.source.type === 'stash' && this.persistent && this.persistent.stash && this.persistent.stash.items) {
-                                const item = this.persistent.stash.items.find(p => p.placementId === drag.source.placementId);
-                                if (item && item.mods) item.mods[drag.slotName] = null;
-                            }
+                    if (isMag && drag.type === 'slot' && drag.slotId && drag.weaponId) {
+                        setEquippedMag(stats, drag.weaponId, null);
+                    } else if (drag.type === 'slot' && drag.slotId) {
+                        ensureWeaponSlotModsShape(stats);
+                        if (stats.weaponSlotMods[drag.slotId]) stats.weaponSlotMods[drag.slotId][drag.slotName] = null;
+                    } else if (drag.type === 'outfit' && drag.source) {
+                        if (drag.source.type === 'backpack' && backpack && backpack.items) {
+                            const item = backpack.items.find(p => p.placementId === drag.source.placementId);
+                            if (item && item.mods) { item.mods[drag.slotName] = null; }
+                        } else if (drag.source.type === 'rig' && rigGrid && rigGrid.items) {
+                            const item = rigGrid.items.find(p => p.placementId === drag.source.placementId);
+                            if (item && item.mods) { item.mods[drag.slotName] = null; }
+                        } else if (drag.source.type === 'pocket') {
+                            const slot = stats.pockets[drag.source.pocketIndex] && stats.pockets[drag.source.pocketIndex][drag.source.slotIndex];
+                            if (slot && slot.mods) { slot.mods[drag.slotName] = null; }
                         }
                     }
                     sfx.click();
@@ -13422,8 +12698,11 @@ class GameScene extends Phaser.Scene {
                         if (currentMag) {
                             const curMagCfg = getInventoryItemConfig(currentMag.itemId);
                             const curSizeW = curMagCfg ? (curMagCfg.sizeW || 1) : 1, curSizeH = curMagCfg ? (curMagCfg.sizeH || 1) : 1;
-                            // Source slot is vacated after removeFromContainerSource — no exclude needed
-                            const dest = findFirstEmptySlotForMag(stats, curSizeW, curSizeH, null);
+                            const excludeSlot = drag.fromPocket ? { container: 'pocket', pocketIndex: drag.pocketIndex, slotIndex: drag.slotIndex }
+                                : (drag.fromRig || drag.container === 'rig') && removed.row != null ? { container: 'rig', row: removed.row, col: removed.col, sizeW: removed.sizeW || 1, sizeH: removed.sizeH || 1 }
+                                : (drag.container === 'backpack' && removed.row != null) ? { container: 'backpack', row: removed.row, col: removed.col, sizeW: removed.sizeW || 1, sizeH: removed.sizeH || 1 } : null;
+                            let dest = findFirstEmptySlotForMag(stats, curSizeW, curSizeH, excludeSlot);
+                            if (!dest && excludeSlot) dest = findFirstEmptySlotForMag(stats, curSizeW, curSizeH, null);
                             const magExtra = { rounds: currentMag.rounds ?? 0, maxRounds: currentMag.maxRounds ?? getMagazineCapacity(currentMag.itemId) };
                             if (dest) {
                                 const placeW = dest.rotated ? curSizeH : curSizeW, placeH = dest.rotated ? curSizeW : curSizeH;
@@ -13480,7 +12759,11 @@ class GameScene extends Phaser.Scene {
                             if (oldMagOnWeapon) {
                                 const curMagCfg = getInventoryItemConfig(oldMagOnWeapon.itemId);
                                 const curSizeW = curMagCfg ? (curMagCfg.sizeW || 1) : 1, curSizeH = curMagCfg ? (curMagCfg.sizeH || 1) : 1;
-                                const dest = findFirstEmptySlotForMag(stats, curSizeW, curSizeH, null);
+                                const excludeSlot = drag.fromPocket ? { container: 'pocket', pocketIndex: drag.pocketIndex, slotIndex: drag.slotIndex }
+                                    : (drag.fromRig || drag.container === 'rig') && removed.row != null ? { container: 'rig', row: removed.row, col: removed.col, sizeW: removed.sizeW || 1, sizeH: removed.sizeH || 1 }
+                                    : (drag.container === 'backpack' && removed.row != null) ? { container: 'backpack', row: removed.row, col: removed.col, sizeW: removed.sizeW || 1, sizeH: removed.sizeH || 1 } : null;
+                                let dest = findFirstEmptySlotForMag(stats, curSizeW, curSizeH, excludeSlot);
+                                if (!dest && excludeSlot) dest = findFirstEmptySlotForMag(stats, curSizeW, curSizeH, null);
                                 const magExtra = { rounds: oldMagOnWeapon.rounds ?? 0, maxRounds: oldMagOnWeapon.maxRounds ?? getMagazineCapacity(oldMagOnWeapon.itemId) };
                                 if (dest) {
                                     const placeW = dest.rotated ? curSizeH : curSizeW, placeH = dest.rotated ? curSizeW : curSizeH;
@@ -13571,7 +12854,11 @@ class GameScene extends Phaser.Scene {
                     if (currentMag) {
                         const curMagCfg = getInventoryItemConfig(currentMag.itemId);
                         const curSizeW = curMagCfg ? (curMagCfg.sizeW || 1) : 1, curSizeH = curMagCfg ? (curMagCfg.sizeH || 1) : 1;
-                        const dest = findFirstEmptySlotForMag(stats, curSizeW, curSizeH, null);
+                        const excludeSlot = drag.fromPocket ? { container: 'pocket', pocketIndex: drag.pocketIndex, slotIndex: drag.slotIndex }
+                            : (drag.fromRig || drag.container === 'rig') && removed.row != null ? { container: 'rig', row: removed.row, col: removed.col, sizeW: removed.sizeW || 1, sizeH: removed.sizeH || 1 }
+                            : (drag.container === 'backpack' && removed.row != null) ? { container: 'backpack', row: removed.row, col: removed.col, sizeW: removed.sizeW || 1, sizeH: removed.sizeH || 1 } : null;
+                        let dest = findFirstEmptySlotForMag(stats, curSizeW, curSizeH, excludeSlot);
+                        if (!dest && excludeSlot) dest = findFirstEmptySlotForMag(stats, curSizeW, curSizeH, null);
                         const magExtra = { rounds: currentMag.rounds ?? 0, maxRounds: currentMag.maxRounds ?? getMagazineCapacity(currentMag.itemId) };
                         if (dest) {
                             const placeW = dest.rotated ? curSizeH : curSizeW, placeH = dest.rotated ? curSizeW : curSizeH;
@@ -14123,22 +13410,17 @@ class GameScene extends Phaser.Scene {
                         putBackInContainerSource(drag, removed);
                     }
                 }
-                if (overSlot && overSlot.id !== 'rig' && ((drag.itemId === 'helmet' || drag.itemId === 'headset') && overSlot.id === 'head' || drag.itemId === 'vest' && overSlot.id === 'body' || drag.itemId === 'headset' && overSlot.id === 'ears' || drag.itemId === 'nvg' && overSlot.id === 'nvg')) {
+                if (overSlot && overSlot.id !== 'rig' && ((drag.itemId === 'helmet' || drag.itemId === 'headset') && overSlot.id === 'head' || drag.itemId === 'vest' && overSlot.id === 'body' || drag.itemId === 'headset' && overSlot.id === 'ears')) {
                     const removed = removeFromContainerSource(drag);
                     if (removed) {
                         const oldArmor = stats.armor[overSlot.id];
-                        if (overSlot.id === 'nvg') {
-                            stats.armor.nvg = { itemId: 'nvg', name: 'NVG' };
-                            if (oldArmor) tryAddItem(backpack, 'nvg', 1);
-                        } else {
-                            const armorDefDur = getDefaultDurability(removed.itemId);
-                            const d = removed.durability != null ? removed.durability : (armorDefDur ? armorDefDur.durability : 3);
-                            const m = removed.maxDurability != null ? removed.maxDurability : (armorDefDur ? armorDefDur.maxDurability : 3);
-                            if (overSlot.id === 'head') stats.armor.head = { name: removed.itemId === 'headset' ? 'HEADSET' : 'HELMET', durability: d, maxDurability: m, itemId: removed.itemId };
-                            else if (overSlot.id === 'body') stats.armor.body = { name: 'VEST', durability: d, maxDurability: m };
-                            else if (overSlot.id === 'ears') stats.armor.ears = { name: 'HEADSET', durability: d, maxDurability: m, itemId: 'headset' };
-                            if (oldArmor) tryAddItem(backpack, oldArmor.itemId || ARMOR_SLOT_ITEM[overSlot.id], 1, { durability: oldArmor.durability, maxDurability: oldArmor.maxDurability });
-                        }
+                        const armorDefDur = getDefaultDurability(removed.itemId);
+                        const d = removed.durability != null ? removed.durability : (armorDefDur ? armorDefDur.durability : 3);
+                        const m = removed.maxDurability != null ? removed.maxDurability : (armorDefDur ? armorDefDur.maxDurability : 3);
+                        if (overSlot.id === 'head') stats.armor.head = { name: removed.itemId === 'headset' ? 'HEADSET' : 'HELMET', durability: d, maxDurability: m, itemId: removed.itemId };
+                        else if (overSlot.id === 'body') stats.armor.body = { name: 'VEST', durability: d, maxDurability: m };
+                        else if (overSlot.id === 'ears') stats.armor.ears = { name: 'HEADSET', durability: d, maxDurability: m, itemId: 'headset' };
+                        if (oldArmor) tryAddItem(backpack, oldArmor.itemId || ARMOR_SLOT_ITEM[overSlot.id], 1, { durability: oldArmor.durability, maxDurability: oldArmor.maxDurability });
                         sfx.click();
                         rerender();
                         return;
@@ -14259,7 +13541,8 @@ const pos = findSpace(backpack, 3, 2);
                 }
                 return;
             }
-            if (limbZones.length > 0 && isMedicalItem(drag.itemId) && (isContainerDrag(drag) || drag.placementId)) {
+            const invBodyViewNow = this.invBodyView || 'gear';
+            if (invBodyViewNow === 'health' && limbZones.length > 0 && isMedicalItem(drag.itemId) && (isContainerDrag(drag) || drag.placementId)) {
                 const overLimb = limbZones.find(z => inZone(px, py, z));
                 if (overLimb) {
                     const removed = isContainerDrag(drag) ? removeFromContainerSource(drag) : removeFromDragSource(drag);
@@ -14276,21 +13559,10 @@ const pos = findSpace(backpack, 3, 2);
                             }
                             if (isHealItem) {
                                 const maxH = limb.maxHp || LIMB_MAX_HP[overLimb.id];
-                                const healDefDur = getDefaultDurability(removed.itemId);
-                                let dur = removed.durability != null ? removed.durability : (healDefDur ? healDefDur.durability : 10);
-                                const maxD = removed.maxDurability != null ? removed.maxDurability : (healDefDur ? healDefDur.maxDurability : 10);
-                                // Medkit can remove bleeds: major = 50 usage, minor = 25 usage
-                                if (Array.isArray(limb.effects)) {
-                                    if (limb.effects.includes('major_bleed') && dur >= 50) {
-                                        limb.effects.splice(limb.effects.indexOf('major_bleed'), 1);
-                                        dur -= 50;
-                                    }
-                                    if (limb.effects.includes('minor_bleed') && dur >= 25) {
-                                        limb.effects.splice(limb.effects.indexOf('minor_bleed'), 1);
-                                        dur -= 25;
-                                    }
-                                }
                                 const need = maxH - (limb.hp || 0);
+                                const healDefDur = getDefaultDurability(removed.itemId);
+                                const dur = removed.durability != null ? removed.durability : (healDefDur ? healDefDur.durability : 10);
+                                const maxD = removed.maxDurability != null ? removed.maxDurability : (healDefDur ? healDefDur.maxDurability : 10);
                                 const healAmount = Math.min(need, dur);
                                 limb.hp = (limb.hp || 0) + healAmount;
                                 const newDur = dur - healAmount;
@@ -14409,22 +13681,17 @@ const pos = findSpace(backpack, 3, 2);
                 }
                 return;
             }
-            if (overSlot && ((drag.itemId === 'helmet' || drag.itemId === 'headset') && overSlot.id === 'head' || drag.itemId === 'vest' && overSlot.id === 'body' || drag.itemId === 'headset' && overSlot.id === 'ears' || drag.itemId === 'nvg' && overSlot.id === 'nvg')) {
+            if (overSlot && ((drag.itemId === 'helmet' || drag.itemId === 'headset') && overSlot.id === 'head' || drag.itemId === 'vest' && overSlot.id === 'body' || drag.itemId === 'headset' && overSlot.id === 'ears')) {
                 const removed = removeFromDragSource(drag);
                 if (removed) {
                     const oldArmor = stats.armor[overSlot.id];
-                    if (overSlot.id === 'nvg') {
-                        stats.armor.nvg = { itemId: 'nvg', name: 'NVG' };
-                        if (oldArmor) tryAddItem(backpack, 'nvg', 1);
-                    } else {
-                        const armorDefDur = getDefaultDurability(removed.itemId);
-                        const d = removed.durability != null ? removed.durability : (armorDefDur ? armorDefDur.durability : 3);
-                        const m = removed.maxDurability != null ? removed.maxDurability : (armorDefDur ? armorDefDur.maxDurability : 3);
-                        if (overSlot.id === 'head') stats.armor.head = { name: removed.itemId === 'headset' ? 'HEADSET' : 'HELMET', durability: d, maxDurability: m, itemId: removed.itemId };
-                        else if (overSlot.id === 'body') stats.armor.body = { name: 'VEST', durability: d, maxDurability: m };
-                        else if (overSlot.id === 'ears') stats.armor.ears = { name: 'HEADSET', durability: d, maxDurability: m, itemId: 'headset' };
-                        if (oldArmor) tryAddItem(backpack, oldArmor.itemId || ARMOR_SLOT_ITEM[overSlot.id], 1, { durability: oldArmor.durability, maxDurability: oldArmor.maxDurability });
-                    }
+                    const armorDefDur = getDefaultDurability(removed.itemId);
+                    const d = removed.durability != null ? removed.durability : (armorDefDur ? armorDefDur.durability : 3);
+                    const m = removed.maxDurability != null ? removed.maxDurability : (armorDefDur ? armorDefDur.maxDurability : 3);
+                    if (overSlot.id === 'head') stats.armor.head = { name: removed.itemId === 'headset' ? 'HEADSET' : 'HELMET', durability: d, maxDurability: m, itemId: removed.itemId };
+                    else if (overSlot.id === 'body') stats.armor.body = { name: 'VEST', durability: d, maxDurability: m };
+                    else if (overSlot.id === 'ears') stats.armor.ears = { name: 'HEADSET', durability: d, maxDurability: m, itemId: 'headset' };
+                    if (oldArmor) tryAddItem(backpack, oldArmor.itemId || ARMOR_SLOT_ITEM[overSlot.id], 1, { durability: oldArmor.durability, maxDurability: oldArmor.maxDurability });
                     sfx.click();
                     rerender();
                 }
@@ -14454,19 +13721,9 @@ const pos = findSpace(backpack, 3, 2);
             }
             if (drag.fromAttachmentBox) {
                 if (isMagazineItem(drag.itemId)) setEquippedMag(stats, drag.weaponId, null);
-                else if (isModItem(drag.itemId)) {
-                    if (drag.type === 'slot' && drag.slotId) {
-                        ensureWeaponSlotModsShape(stats);
-                        if (stats.weaponSlotMods[drag.slotId]) stats.weaponSlotMods[drag.slotId][drag.slotName] = null;
-                    } else if (drag.type === 'outfit' && drag.source) {
-                        const src = drag.source;
-                        let weaponItem = null;
-                        if (src.type === 'backpack' && stats.backpack && stats.backpack.items) weaponItem = stats.backpack.items.find(p => p.placementId === src.placementId);
-                        else if (src.type === 'rig' && stats.rigGrid && stats.rigGrid.items) weaponItem = stats.rigGrid.items.find(p => p.placementId === src.placementId);
-                        else if (src.type === 'pocket' && stats.pockets) { const s = stats.pockets[src.pocketIndex] && stats.pockets[src.pocketIndex][src.slotIndex]; weaponItem = s && s.itemId ? s : null; }
-                        else if (src.type === 'stash' && this.persistent && this.persistent.stash && this.persistent.stash.items) weaponItem = this.persistent.stash.items.find(p => p.placementId === src.placementId);
-                        if (weaponItem && weaponItem.mods) weaponItem.mods[drag.slotName] = null;
-                    }
+                else {
+                    ensureWeaponSlotModsShape(stats);
+                    if (stats.weaponSlotMods[drag.slotId]) stats.weaponSlotMods[drag.slotId][drag.slotName] = null;
                 }
                 if (this._invIsHideout) { localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(this.stats)); }
                 return;
@@ -14696,68 +13953,7 @@ const pos = findSpace(backpack, 3, 2);
         };
         const rKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.R);
         rKey.on('down', rotateDrag);
-        const onUKey = () => {
-            const st = this._invStats != null ? this._invStats : this.stats;
-            const persistent = this.persistent;
-            const isStashContext = !!this._invIsHideout;
-            if (this.stashDragging && isMagazineItem(this.stashDragging.itemId)) {
-                const magRef = { fromStash: true, placementId: this.stashDragging.placementId, itemId: this.stashDragging.itemId };
-                if (unloadMagazineToStack(st, persistent, magRef, true)) {
-                    sfx.click();
-                    if (this._clearStashDrag) this._clearStashDrag();
-                    this.stashDragging = null;
-                    savePersistent(this.persistent);
-                    rerender();
-                }
-                return;
-            }
-            if (this.invDragging && isMagazineItem(this.invDragging.itemId)) {
-                const d = this.invDragging;
-                const magRef = { itemId: d.itemId };
-                if (d.fromAttachmentBox && d.weaponId) {
-                    magRef.fromAttachmentBox = true;
-                    magRef.weaponId = d.weaponId;
-                } else if (d.fromPocket) {
-                    magRef.fromPocket = true;
-                    magRef.pocketIndex = d.pocketIndex;
-                    magRef.slotIndex = d.slotIndex;
-                } else if (d.fromRig && d.placementId) {
-                    magRef.fromRig = true;
-                    magRef.placementId = d.placementId;
-                } else if (d.container === 'backpack' && d.placementId) {
-                    magRef.container = 'backpack';
-                    magRef.placementId = d.placementId;
-                }
-                if (unloadMagazineToStack(st, persistent, magRef, isStashContext)) {
-                    sfx.click();
-                    localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(st));
-                    if (isStashContext && persistent) savePersistent(persistent);
-                    rerender();
-                }
-                return;
-            }
-            if (this.invSelectedMag) {
-                if (unloadMagazineToStack(st, persistent, this.invSelectedMag, isStashContext)) {
-                    sfx.click();
-                    this.invSelectedMag = null;
-                    localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(st));
-                    if (isStashContext && persistent) savePersistent(persistent);
-                    rerender();
-                }
-                return;
-            }
-            if (this.stashSelectedMag) {
-                if (unloadMagazineToStack(st, persistent, this.stashSelectedMag, true)) {
-                    sfx.click();
-                    this.stashSelectedMag = null;
-                    savePersistent(this.persistent);
-                    rerender();
-                }
-            }
-        };
-        const uKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.U);
-        uKey.on('down', onUKey);
-        this.invListeners = { move: onPointerMove, down: onPointerDown, up: onPointerUp, delKey, delKeyCallback: onDeleteKey, rKey, rKeyCallback: rotateDrag, uKey, uKeyCallback: onUKey };
+        this.invListeners = { move: onPointerMove, down: onPointerDown, up: onPointerUp, delKey, delKeyCallback: onDeleteKey, rKey, rKeyCallback: rotateDrag };
     }
 
     /** Show "Are you sure?" dialog for deleting a dragged item. onConfirm: () => void to perform delete; rerender: () => void after close. */
@@ -16399,14 +15595,6 @@ const pos = findSpace(backpack, 3, 2);
             this.time.delayedCall(500, () => sfx.necroSummon());
         }
         Phaser.Utils.Array.Shuffle(loot);
-        const levelsNeedingKey = CONFIG.LOOT.LEVELS_NEEDING_KEY || [1, 3, 4, 6];
-        if (levelsNeedingKey.includes(level) && loot.includes('key') && cratePos.length > 0) {
-            const keyIdx = loot.indexOf('key');
-            if (keyIdx >= cratePos.length) {
-                const swapIdx = Phaser.Math.Between(0, cratePos.length - 1);
-                [loot[swapIdx], loot[keyIdx]] = [loot[keyIdx], loot[swapIdx]];
-            }
-        }
         cratePos.forEach((p, i) => {
             if (i < loot.length) this.createCrateAt(p.x, p.y, loot[i]);
         });
@@ -16810,7 +15998,7 @@ const pos = findSpace(backpack, 3, 2);
         }
 
         if (Phaser.Input.Keyboard.JustDown(this.keys.nvg)) {
-            if (hasEquippedNvg(this.playerStats)) {
+            if (this.playerStats.hideout.armory.hasNVG) {
                 sfx.toggleNVG();
                 this.nvgOn = !this.nvgOn;
                 if (this.nvgOn) {
@@ -18524,13 +17712,6 @@ const pos = findSpace(backpack, 3, 2);
             this.playerStats[weaponAction.flag] = true;
             txt = weaponAction.txt;
             col = weaponAction.col;
-            const magWeapons = { smg: 'mag_smg', rifle: 'mag_rifle', pistol: 'mag_pistol' };
-            const magItemId = magWeapons[id];
-            if (magItemId) {
-                const capacity = getMagazineCapacity(magItemId);
-                const rounds = getRandomMagRoundsForLootedWeapon(capacity);
-                setEquippedMag(this.playerStats, id, { itemId: magItemId, rounds, maxRounds: capacity });
-            }
         } else {
             // Data-driven: medical/grid items (sfx + "LABEL (dur/max)" + color)
             const medicalDisplay = CONFIG.LOOT.LOOT_MEDICAL_DISPLAY && CONFIG.LOOT.LOOT_MEDICAL_DISPLAY[id];
@@ -18740,7 +17921,7 @@ const pos = findSpace(backpack, 3, 2);
             this.uiGraphics.fillCircle(iconX, 22, ui.ICON_RADIUS);
             iconX += ui.ICON_SPACING;
         }
-        if (hasEquippedNvg(this.playerStats)) {
+        if (this.playerStats.hideout.armory.hasNVG) {
             this.uiGraphics.fillStyle(0x00ff00, 1);
             this.uiGraphics.fillCircle(iconX, 22, ui.ICON_RADIUS);
             iconX += ui.ICON_SPACING;
@@ -18896,5 +18077,3 @@ const config = {
 };
 
 const game = new Phaser.Game(config);
-// Block browser right-click on the entire document (menus + in-game) so right-click can be used for game actions
-document.addEventListener('contextmenu', function (e) { e.preventDefault(); }, true);
