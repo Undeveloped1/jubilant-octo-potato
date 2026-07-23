@@ -21,7 +21,7 @@ Context: built Jan–Feb 2026 as a first-ever coding project. Tooling and AI ass
 
 **Step 1: pick ONE art direction.** Current state mixes big AI-rendered sprites with procedural rectangles. Options, in rough order of recommendation:
 
-1. **Curated free asset pack** (fastest to cohesive): Kenney (kenney.nl, CC0) or itch.io top-down shooter packs cover player/zombies/tiles/props/UI in one consistent style. Zero art skill needed, legally clean, looks "finished" immediately.
+1. **Curated free asset pack** (fastest to cohesive): Kenney (kenney.nl, CC0) or itch.io top-down shooter packs cover player/zombies/tiles/props/UI in one consistent style. Zero art skill needed, legally clean, looks "finished" immediately. ✅ **Chosen Jul 23, 2026** — Kenney Top-down Shooter wired in; see `ART_GUIDE.md`
 2. **AI-generated pixel art, done right** (most custom): 2026 generators output transparent-background spritesheets with walk/attack frames at proper sizes (64–128px). Generate everything in one style prompt for consistency. Clean up in Aseprite (~$20) or LibreSprite (free).
 3. **Hybrid**: asset pack for tiles/environment, AI-generate only hero characters and bosses in a matching palette.
 
@@ -29,11 +29,11 @@ Context: built Jan–Feb 2026 as a first-ever coding project. Tooling and AI ass
 - [x] Downscale all sprites to display size (≤256px)
 - [x] Re-export with alpha (or key + re-export)
 - [x] Pack into a spritesheet + JSON atlas (Phaser loads atlases natively) → `assets/sprites/sprites.png` + `sprites.json` (~345KB); crunch script at `tools/crunch_sprites.py`
-- [x] Target: **all game assets under 1MB total** (runtime atlas ~345KB; root giants removed — game still uses procedural textures until Step 1 art direction is picked and atlas is wired)
+- [x] Target: **all game assets under 1MB total** (Kenney install ~37KB under `assets/`; wired into `GameScene.preload`)
 
 **Step 3: asset pipeline for the future.**
 - [x] `assets/` folder structure (sprites, audio, tiles, ui)
-- [ ] Document the style recipe (palette, resolution, generator prompt if AI) in `ART_GUIDE.md` so every future asset matches *(blocked on Step 1 art direction)*
+- [x] Document the style recipe (palette, resolution, generator prompt if AI) in `ART_GUIDE.md` so every future asset matches
 
 ## Phase 2 — Ship a playable link *(~1 hour, agent)*
 

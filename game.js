@@ -200,9 +200,9 @@ const CONFIG = {
             HP: 5,
             SPEED: 85,
             DAMAGE: 10,
-            SCALE: 3,
+            SCALE: 2,
             INVULN_TIME: 500,
-            TEXTURE: 'zombie'
+            TEXTURE: 'boss'
         },
         SPITTER: {
             HP: 2,
@@ -231,7 +231,7 @@ const CONFIG = {
             PROJECTILE_SPEED: 150,
             PROJECTILE_DAMAGE: 2,
             TELEPORT_COOLDOWN: 5000,
-            TEXTURE: 'zombie'     // Will use custom tint
+            TEXTURE: 'necromancer'
         },
         KNOCKBACK_SPEED: 100
     },
@@ -3841,10 +3841,10 @@ class Bullet extends Phaser.Physics.Arcade.Sprite {
 const ENEMY_INIT = {
     spitter(enemy, cfg) {
         enemy.lastSpit = 0;
-        enemy.setTint(0x00ff00);
+        enemy.setTint(0xb8ffb8); // soft green — keep Kenney art readable
     },
     exploder(enemy, cfg) {
-        enemy.setTint(0xff6600);
+        enemy.setTint(0xffaa66);
         enemy.setScale(1.2);
         enemy.scene.tweens.add({
             targets: enemy,
@@ -3869,7 +3869,7 @@ const ENEMY_UPDATE = {
                 enemy.lastSpit = time;
                 sfx.spit();
                 enemy.setTint(0xffff00);
-                enemy.scene.time.delayedCall(100, () => { if (enemy.active) enemy.setTint(0x00ff00); });
+                enemy.scene.time.delayedCall(100, () => { if (enemy.active) enemy.setTint(0xb8ffb8); });
             }
         } else {
             enemy.scene.physics.moveToObject(enemy, enemy.target, enemy.speed);
@@ -3894,6 +3894,8 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
         
         scene.add.existing(this);
         scene.physics.add.existing(this);
+        // Kenney top-down frames are ~33–52×43; keep a compact hitbox
+        this.setSize(26, 26).setOffset(Math.max(0, (this.width - 26) / 2), Math.max(0, (this.height - 26) / 2));
         
         this.target = target;
         this.enemyType = type;
@@ -3912,7 +3914,7 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
             ENEMY_INIT[type](this, cfg);
         } else if (type === 'boss') {
             this.setScale(cfg.SCALE);
-            this.setTint(0xff0000);
+            this.setTint(0xff8888);
         } else if (type === 'leaper') {
             this.state = 'IDLE';
             this.leaperFacingAngle = Math.random() * Math.PI * 2;
@@ -3928,7 +3930,7 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
             this.alertExclamation = null;
             this.footstepAlertCount = 0;
             this.setTexture('leaper_idle_0'); // Use individual frame texture
-            this.setScale(0.5); // Scale down to fit game
+            this.setScale(1);
             this.play('leaper_idle'); // Idle until they hear a sound
         } else if (type === 'bandit') {
             this.ammo = cfg.AMMO;
@@ -3957,8 +3959,8 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
             this.banditFacingAngle = this.patrolDirection;
             this.lastMeleeHitTime = 0;
         } else if (type === 'necromancer') {
-            this.setTint(0x8800ff); // Purple tint
-            this.setScale(1.5);
+            this.setTint(0xcc88ff); // Soft purple — keep Kenney art readable
+            this.setScale(1.35);
             this.phase = 'SUMMON'; // SUMMON, VULNERABLE, ATTACK
             this.phaseTimer = 0;
             this.lastTeleport = 0;
@@ -4730,7 +4732,7 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
                     }
                     sfx.necroSummon();
                     this.isInvulnerable = true;
-                    this.setTint(0x8800ff);
+                    this.setTint(0xcc88ff);
                 }
                 // Check if all minions are dead
                 this.summonedMinions = this.summonedMinions.filter(m => m.active);
@@ -4760,7 +4762,7 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
                     this.phase = 'SUMMON';
                     this.hasSummoned = false;
                     this.isInvulnerable = true;
-                    this.setTint(0x8800ff);
+                    this.setTint(0xcc88ff);
                 }
                 break;
         }
@@ -9556,44 +9558,36 @@ class GameScene extends Phaser.Scene {
     constructor() { super('GameScene'); }
     
     preload() {
-        // Leaper and crate textures: generate in code so game works without external PNGs (avoids 404 and Phaser null texture .cut errors)
+        // Kenney Top-down Shooter (CC0) — characters, floors, wall, crate
+        this.load.image('player', 'assets/sprites/player.png');
+        this.load.image('zombie', 'assets/sprites/zombie.png');
+        this.load.image('bandit', 'assets/sprites/bandit.png');
+        this.load.image('spitter', 'assets/sprites/spitter.png');
+        this.load.image('boss', 'assets/sprites/boss.png');
+        this.load.image('necromancer', 'assets/sprites/necromancer.png');
+        this.load.image('leaper_idle_0', 'assets/sprites/leaper_idle_0.png');
+        this.load.image('leaper_idle_1', 'assets/sprites/leaper_idle_1.png');
+        this.load.image('crate', 'assets/sprites/crate.png');
+        this.load.image('wall', 'assets/tiles/wall.png');
+        this.load.image('floor_grass', 'assets/tiles/floor_grass.png');
+        this.load.image('floor_apt', 'assets/tiles/floor_apt.png');
+        this.load.image('floor_roof', 'assets/tiles/floor_roof.png');
+        this.load.image('floor_sewer', 'assets/tiles/floor_sewer.png');
+        this.load.image('floor_hospital', 'assets/tiles/floor_hospital.png');
+
+        // Small VFX / UI textures still generated (no Kenney equivalents needed)
         const graphics = this.make.graphics({ x: 0, y: 0, add: false });
-        graphics.fillStyle(0x0000FF, 1);
-        graphics.fillRect(0, 0, 32, 32);
-        graphics.generateTexture('leaper_idle_0', 32, 32);
-        graphics.clear();
-        graphics.fillStyle(0x2222AA, 1);
-        graphics.fillRect(0, 0, 32, 32);
-        graphics.generateTexture('leaper_idle_1', 32, 32);
-        graphics.clear();
-        graphics.fillStyle(0x8B4513, 1);
-        graphics.fillRect(0, 0, 32, 32);
-        graphics.generateTexture('crate', 32, 32);
-        graphics.clear();
-        
-        graphics.fillStyle(0x00ff00, 1); graphics.fillRect(0,0,32,32); graphics.generateTexture('player', 32,32);
-        // crate texture loaded from sprite above
-        graphics.fillStyle(0x663399, 1); graphics.fillRect(0,0,32,32); graphics.generateTexture('zombie', 32,32);
-        // leaper texture loaded from spritesheet above
-        graphics.fillStyle(0x0000FF, 1); graphics.fillRect(0,0,32,32); graphics.generateTexture('bandit', 32,32);
-        graphics.fillStyle(0x00AA00, 1); graphics.fillRect(0,0,32,32); graphics.generateTexture('spitter', 32,32);
         graphics.fillStyle(0xffff00, 1); graphics.fillRect(0,0,8,8); graphics.generateTexture('bullet', 8,8);
         graphics.fillStyle(0x00ff00, 1); graphics.fillCircle(6,6,6); graphics.generateTexture('acid', 12,12);
         graphics.fillStyle(0x556B2F, 1); graphics.fillCircle(8,8,8); graphics.generateTexture('grenade', 16,16);
         graphics.fillStyle(0xFFD700, 1); graphics.fillRect(0,0,40,60); graphics.generateTexture('door', 40,60);
-        graphics.fillStyle(0x555555, 1); graphics.fillRect(0,0,32,32); graphics.generateTexture('wall', 32,32);
         graphics.fillStyle(0xffffff, 1); graphics.fillRect(0,0,40,40); graphics.generateTexture('slash', 40,40);
-        graphics.fillStyle(0x2d5a27, 1); graphics.fillRect(0,0,32,32); graphics.generateTexture('floor_grass', 32,32);
-        graphics.clear(); graphics.fillStyle(0x444444, 1); graphics.fillRect(0,0,32,32); graphics.generateTexture('floor_apt', 32,32);
-        graphics.clear(); graphics.fillStyle(0x1a1a2e, 1); graphics.fillRect(0,0,32,32); graphics.generateTexture('floor_roof', 32,32);
-        graphics.clear(); graphics.fillStyle(0x2a3a2a, 1); graphics.fillRect(0,0,32,32); graphics.generateTexture('floor_sewer', 32,32);
-        graphics.clear(); graphics.fillStyle(0xddeedd, 1); graphics.fillRect(0,0,32,32); graphics.generateTexture('floor_hospital', 32,32);
         graphics.clear(); graphics.fillStyle(0xff0000, 1); graphics.fillRect(0,0,20,20); graphics.generateTexture('pickup_hp', 20,20);
         graphics.clear(); graphics.fillStyle(0x0088ff, 1); graphics.fillRect(0,0,20,20); graphics.generateTexture('pickup_stamina', 20,20);
         graphics.clear(); graphics.fillStyle(0x333333, 1); graphics.fillRect(0,0,60,60); graphics.generateTexture('debris', 60,60);
         graphics.clear(); graphics.fillStyle(0x00ff00, 1); graphics.fillRect(0,0,30,30); graphics.generateTexture('switch', 30,30);
-        
-        // Skull art
+
+        // Skull art (loot marker)
         graphics.clear();
         graphics.lineStyle(2, 0x000000, 1);
         graphics.fillStyle(0xEAEAEA, 1);
@@ -9605,6 +9599,7 @@ class GameScene extends Phaser.Scene {
         graphics.lineStyle(1, 0x000000);
         graphics.beginPath(); graphics.moveTo(13, 20); graphics.lineTo(13, 28); graphics.moveTo(16, 20); graphics.lineTo(16, 28); graphics.moveTo(19, 20); graphics.lineTo(19, 28); graphics.strokePath();
         graphics.generateTexture('skull', 32, 32);
+        graphics.destroy();
     }
     
     create(data = {}) {
@@ -10129,6 +10124,8 @@ class GameScene extends Phaser.Scene {
         }
         
         this.player = this.physics.add.sprite(400, 550, 'player').setCollideWorldBounds(true).setDepth(10);
+        // Kenney characters face +X; tighten body vs tall backpack art
+        this.player.setSize(28, 28).setOffset(12, 8);
         // Apply equipped skin tint
         if (this.equippedSkinTint) {
             this.player.setTint(this.equippedSkinTint);
@@ -15404,7 +15401,7 @@ const pos = findSpace(backpack, 3, 2);
 
     /** Create a crate with consistent depth/visibility so it always renders above floor. */
     createCrateAt(x, y, lootID) {
-        const crate = this.crates.create(x, y, 'crate').setScale(0.5).refreshBody().setData('lootID', lootID);
+        const crate = this.crates.create(x, y, 'crate').setScale(1).refreshBody().setData('lootID', lootID);
         crate.setDepth(10).setVisible(true);
         return crate;
     }
@@ -16849,6 +16846,12 @@ const pos = findSpace(backpack, 3, 2);
         }
 
         if (this.isPaused) return;
+
+        // Face aim direction (Kenney sprites face +X / right)
+        if (this.player && this.player.active && !this.isInventoryOpen) {
+            const aim = this.input.activePointer;
+            this.player.setRotation(Phaser.Math.Angle.Between(this.player.x, this.player.y, aim.worldX, aim.worldY));
+        }
 
         // Full auto: while holding fire with SMG/rifle, keep firing at rate of fire
         if (this.holdingFire && (this.playerStats.currentWeapon === 'smg' || this.playerStats.currentWeapon === 'rifle')) {

@@ -1,195 +1,216 @@
 {
   "frames": {
-    "zombie": {
+    "player": {
       "frame": {
         "x": 2,
         "y": 2,
-        "w": 207,
-        "h": 256
+        "w": 52,
+        "h": 43
       },
       "rotated": false,
       "trimmed": false,
       "spriteSourceSize": {
         "x": 0,
         "y": 0,
-        "w": 207,
-        "h": 256
+        "w": 52,
+        "h": 43
       },
       "sourceSize": {
-        "w": 207,
-        "h": 256
+        "w": 52,
+        "h": 43
       }
     },
     "bandit": {
       "frame": {
-        "x": 211,
+        "x": 56,
         "y": 2,
-        "w": 202,
-        "h": 256
+        "w": 49,
+        "h": 43
       },
       "rotated": false,
       "trimmed": false,
       "spriteSourceSize": {
         "x": 0,
         "y": 0,
-        "w": 202,
-        "h": 256
+        "w": 49,
+        "h": 43
       },
       "sourceSize": {
-        "w": 202,
-        "h": 256
+        "w": 49,
+        "h": 43
       }
     },
     "spitter": {
       "frame": {
-        "x": 415,
+        "x": 107,
         "y": 2,
-        "w": 252,
-        "h": 256
+        "w": 49,
+        "h": 43
       },
       "rotated": false,
       "trimmed": false,
       "spriteSourceSize": {
         "x": 0,
         "y": 0,
-        "w": 252,
-        "h": 256
+        "w": 49,
+        "h": 43
       },
       "sourceSize": {
-        "w": 252,
-        "h": 256
-      }
-    },
-    "skull": {
-      "frame": {
-        "x": 669,
-        "y": 2,
-        "w": 255,
-        "h": 244
-      },
-      "rotated": false,
-      "trimmed": false,
-      "spriteSourceSize": {
-        "x": 0,
-        "y": 0,
-        "w": 255,
-        "h": 244
-      },
-      "sourceSize": {
-        "w": 255,
-        "h": 244
-      }
-    },
-    "boss": {
-      "frame": {
-        "x": 2,
-        "y": 260,
-        "w": 256,
-        "h": 224
-      },
-      "rotated": false,
-      "trimmed": false,
-      "spriteSourceSize": {
-        "x": 0,
-        "y": 0,
-        "w": 256,
-        "h": 224
-      },
-      "sourceSize": {
-        "w": 256,
-        "h": 224
-      }
-    },
-    "player": {
-      "frame": {
-        "x": 260,
-        "y": 260,
-        "w": 256,
-        "h": 96
-      },
-      "rotated": false,
-      "trimmed": false,
-      "spriteSourceSize": {
-        "x": 0,
-        "y": 0,
-        "w": 256,
-        "h": 96
-      },
-      "sourceSize": {
-        "w": 256,
-        "h": 96
+        "w": 49,
+        "h": 43
       }
     },
     "leaper_idle_1": {
       "frame": {
-        "x": 518,
-        "y": 260,
-        "w": 55,
-        "h": 60
+        "x": 158,
+        "y": 2,
+        "w": 39,
+        "h": 43
       },
       "rotated": false,
       "trimmed": false,
       "spriteSourceSize": {
         "x": 0,
         "y": 0,
-        "w": 55,
-        "h": 60
+        "w": 39,
+        "h": 43
       },
       "sourceSize": {
-        "w": 55,
-        "h": 60
+        "w": 39,
+        "h": 43
       }
     },
     "leaper_idle_0": {
       "frame": {
-        "x": 575,
-        "y": 260,
-        "w": 53,
-        "h": 59
+        "x": 199,
+        "y": 2,
+        "w": 35,
+        "h": 43
       },
       "rotated": false,
       "trimmed": false,
       "spriteSourceSize": {
         "x": 0,
         "y": 0,
-        "w": 53,
-        "h": 59
+        "w": 35,
+        "h": 43
       },
       "sourceSize": {
-        "w": 53,
-        "h": 59
+        "w": 35,
+        "h": 43
+      }
+    },
+    "zombie": {
+      "frame": {
+        "x": 2,
+        "y": 47,
+        "w": 33,
+        "h": 43
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 33,
+        "h": 43
+      },
+      "sourceSize": {
+        "w": 33,
+        "h": 43
+      }
+    },
+    "boss": {
+      "frame": {
+        "x": 37,
+        "y": 47,
+        "w": 33,
+        "h": 43
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 33,
+        "h": 43
+      },
+      "sourceSize": {
+        "w": 33,
+        "h": 43
+      }
+    },
+    "necromancer": {
+      "frame": {
+        "x": 72,
+        "y": 47,
+        "w": 33,
+        "h": 43
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 33,
+        "h": 43
+      },
+      "sourceSize": {
+        "w": 33,
+        "h": 43
+      }
+    },
+    "wall": {
+      "frame": {
+        "x": 107,
+        "y": 47,
+        "w": 32,
+        "h": 32
+      },
+      "rotated": false,
+      "trimmed": false,
+      "spriteSourceSize": {
+        "x": 0,
+        "y": 0,
+        "w": 32,
+        "h": 32
+      },
+      "sourceSize": {
+        "w": 32,
+        "h": 32
       }
     },
     "crate": {
       "frame": {
-        "x": 630,
-        "y": 260,
-        "w": 64,
-        "h": 57
+        "x": 141,
+        "y": 47,
+        "w": 32,
+        "h": 31
       },
       "rotated": false,
       "trimmed": false,
       "spriteSourceSize": {
         "x": 0,
         "y": 0,
-        "w": 64,
-        "h": 57
+        "w": 32,
+        "h": 31
       },
       "sourceSize": {
-        "w": 64,
-        "h": 57
+        "w": 32,
+        "h": 31
       }
     }
   },
   "meta": {
-    "app": "LovelyLadyLumps tools/crunch_sprites.py",
+    "app": "tools/install_kenney.py",
     "version": "1.0",
     "image": "sprites.png",
     "format": "RGBA8888",
     "size": {
-      "w": 1024,
-      "h": 512
+      "w": 256,
+      "h": 128
     },
-    "scale": "1"
+    "scale": "1",
+    "credit": "Kenney.nl Top-down Shooter (CC0)"
   }
 }
