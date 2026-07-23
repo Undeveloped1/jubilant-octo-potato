@@ -10,12 +10,12 @@ Context: built Jan–Feb 2026 as a first-ever coding project. Tooling and AI ass
 
 ## Phase 0 — Repo hygiene *(~1 hour, agent)*
 
-- [ ] Delete manual backup files: `game_backup_20250218.js`, `game_backup_pre_enemy_init.js`, `game_backup_pre_rerender_refactor_20260222.js`, `old-backup.js` (git history is the backup now — remote is wired to GitHub as of Jul 23, 2026, old main archived at `archive/pre-2026-02-24-main`)
-- [ ] Remove non-game files: `joe_system_prompt.txt`, `joe_system_prompt2.txt` (move to a `notes/` folder if worth keeping)
-- [ ] Rename `game..html` → `index.html` (fixes typo; enables GitHub Pages auto-serve)
-- [ ] Add `.gitignore` (OS junk, editor scratch, future `node_modules/`, `dist/`)
-- [ ] Move scratch PNGs (`room_template_800x600_perimeter.png`, `sample_room_800x600.png`) out of repo root into `reference/` or delete
-- [ ] Commit + push
+- [x] Delete manual backup files: `game_backup_20250218.js`, `game_backup_pre_enemy_init.js`, `game_backup_pre_rerender_refactor_20250222.js`, `old-backup.js` (git history is the backup now — remote is wired to GitHub as of Jul 23, 2026, old main archived at `archive/pre-2026-02-24-main`)
+- [x] Remove non-game files: `joe_system_prompt.txt`, `joe_system_prompt2.txt` (deleted — belonged to other projects)
+- [x] Rename `game..html` → `index.html` (fixes typo; enables GitHub Pages auto-serve)
+- [x] Add `.gitignore` (OS junk, editor scratch, future `node_modules/`, `dist/`)
+- [x] Move scratch PNGs (`room_template_800x600_perimeter.png`, `sample_room_800x600.png`) out of repo root into `reference/` or delete
+- [x] Commit + push
 
 ## Phase 1 — Art & asset pipeline *(the "world changed" phase; 1–2 sessions, Paul decides direction, agent implements)*
 

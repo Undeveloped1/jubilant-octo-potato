@@ -2,7 +2,7 @@
 
 ## Template image
 
-- **`room_template_800x600_perimeter.png`** — 800×600 landscape. Blank floor with **perimeter walls only** (32px thick). Gaps in the perimeter mark the four **door positions** (where the game places room doors). Use this as a background when drawing your own layout or building collision in an editor.
+- **`reference/room_template_800x600_perimeter.png`** — 800×600 landscape. Blank floor with **perimeter walls only** (32px thick). Gaps in the perimeter mark the four **door positions** (where the game places room doors). Use this as a background when drawing your own layout or building collision in an editor.
 
 ---
 
@@ -45,7 +45,7 @@ When you draw collision or art, keep these four openings clear so doors and room
 
 ## Using the template
 
-1. Open **`room_template_800x600_perimeter.png`** in your image editor (or level editor).
+1. Open **`reference/room_template_800x600_perimeter.png`** in your image editor (or level editor).
 2. Draw your custom floor/background on the gray area; avoid drawing over the door gaps if you want doors to stay visible.
 3. Add interior walls as rectangles; in game terms each rectangle is a wall with size in multiples of 32 (e.g. 32×96 → `scaleX: 1, scaleY: 3`), with (x, y) = center of the rectangle.
 4. Export collision/decoration as your editor allows, or match the chunk format in `CONFIG.ROOM_CHUNKS` (e.g. `walls: [{ x, y, scaleX, scaleY }]`).
