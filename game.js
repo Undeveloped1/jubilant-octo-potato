@@ -424,7 +424,10 @@ const CONFIG = {
         GUN_BENCH_LEVEL2_COST: 20,
         GUN_BENCH_CRAFT_9MM:  { scrap: 1, itemId: 'ammo_9mm', count: 4, timeMs: 90000 },
         GUN_BENCH_CRAFT_SHELLS: { scrap: 1, itemId: 'ammo_shells', count: 3, timeMs: 90000 },
-        MED_BAY_COST: 8 // scrap: clear infection + full blood refill
+        MED_BAY_COST: 8, // scrap: clear infection + full blood refill
+        INSURANCE_COST: 12, // scrap: insure mid-raid loot for one death
+        INSURANCE_RETURN_MS: 180000, // 3 min real-time until claimable
+        INSURANCE_RETURN_CHANCE: 0.7 // chance each lost item isn't "scavenged"
     },
     
     // Currency system
@@ -1306,20 +1309,24 @@ function cureInfectionOnStats(stats) {
     return true;
 }
 
-/** Count item labels in grids/pockets/consumables for death-recap diffs. */
-function countCarriedItemLabels(stats) {
-    const counts = Object.create(null);
-    const bump = (label, n) => {
-        if (!label) return;
-        counts[label] = (counts[label] || 0) + (n || 1);
-    };
-    const addGrid = (grid) => {
-        (grid && grid.items ? grid.items : []).forEach(p => {
-            const cfg = getInventoryItemConfig(p.itemId);
-            bump((cfg && cfg.label) ? cfg.label : p.itemId, p.count || 1);
+/** Flatten carried grid/pocket/consumable items into snapshot rows for diffs. */
+function collectCarriedItemSnapshots(stats) {
+    const rows = [];
+    if (!stats) return rows;
+    const pushPlacement = (p) => {
+        if (!p || !p.itemId) return;
+        rows.push({
+            itemId: p.itemId,
+            count: p.count || 1,
+            durability: p.durability,
+            maxDurability: p.maxDurability,
+            rounds: p.rounds,
+            maxRounds: p.maxRounds
         });
     };
-    if (!stats) return counts;
+    const addGrid = (grid) => {
+        (grid && grid.items ? grid.items : []).forEach(pushPlacement);
+    };
     addGrid(stats.backpack);
     addGrid(stats.rigGrid);
     addGrid(stats.medBagGrid);
@@ -1327,31 +1334,69 @@ function countCarriedItemLabels(stats) {
     if (Array.isArray(stats.pockets)) {
         stats.pockets.forEach(pocket => {
             (pocket || []).forEach(cell => {
-                if (!cell || !cell.itemId) return;
-                if (cell._spansFrom) return;
-                const cfg = getInventoryItemConfig(cell.itemId);
-                bump((cfg && cfg.label) ? cfg.label : cell.itemId, cell.count || 1);
+                if (!cell || !cell.itemId || cell._spansFrom) return;
+                pushPlacement(cell);
             });
         });
     }
     (stats.consumables || []).forEach(id => {
-        if (!id) return;
-        const c = CONFIG.CONSUMABLES && CONFIG.CONSUMABLES[id];
-        bump(c ? c.name : id, 1);
+        if (id) rows.push({ itemId: id, count: 1, fromConsumable: true });
     });
-    return counts;
+    return rows;
 }
 
-/** Labels for items present in `current` but not in `baseline` (mid-raid loot lost on death). */
-function diffLostItemLabels(currentStats, baselineStats) {
-    const cur = countCarriedItemLabels(currentStats);
-    const base = countCarriedItemLabels(baselineStats);
+function itemSnapshotKey(row) {
+    if (!row) return '';
+    return [
+        row.itemId,
+        row.durability != null ? row.durability : '',
+        row.maxDurability != null ? row.maxDurability : '',
+        row.rounds != null ? row.rounds : '',
+        row.maxRounds != null ? row.maxRounds : '',
+        row.fromConsumable ? 'c' : 'g'
+    ].join('|');
+}
+
+/** Mid-raid loot lost on death (present in current, not in checkpoint baseline). */
+function diffLostItemSnapshots(currentStats, baselineStats) {
+    const baseCounts = Object.create(null);
+    collectCarriedItemSnapshots(baselineStats).forEach(row => {
+        const k = itemSnapshotKey(row);
+        baseCounts[k] = (baseCounts[k] || 0) + (row.count || 1);
+    });
     const lost = [];
-    Object.keys(cur).forEach(label => {
-        const n = cur[label] - (base[label] || 0);
-        if (n > 0) lost.push(n > 1 ? `${label} x${n}` : label);
+    collectCarriedItemSnapshots(currentStats).forEach(row => {
+        const k = itemSnapshotKey(row);
+        let n = row.count || 1;
+        const covered = baseCounts[k] || 0;
+        if (covered >= n) {
+            baseCounts[k] = covered - n;
+            return;
+        }
+        if (covered > 0) {
+            n -= covered;
+            baseCounts[k] = 0;
+        }
+        if (n > 0) lost.push({ ...row, count: n });
     });
     return lost;
+}
+
+/** Labels for death-recap UI. */
+function diffLostItemLabels(currentStats, baselineStats) {
+    return diffLostItemSnapshots(currentStats, baselineStats).map(row => {
+        const cfg = getInventoryItemConfig(row.itemId);
+        const cons = CONFIG.CONSUMABLES && CONFIG.CONSUMABLES[row.itemId];
+        const label = (cfg && cfg.label) || (cons && cons.name) || row.itemId;
+        return (row.count || 1) > 1 ? `${label} x${row.count}` : label;
+    });
+}
+
+function ensureInsuranceFields(persistent) {
+    if (!persistent) return persistent;
+    if (persistent.insuranceActive == null) persistent.insuranceActive = false;
+    if (!Array.isArray(persistent.insuranceReturns)) persistent.insuranceReturns = [];
+    return persistent;
 }
 
 const DEFAULT_STATS = { 
@@ -1486,7 +1531,10 @@ const DEFAULT_PERSISTENT = {
     materials: 0,
     // Quests: accepted (active) and completed
     activeQuests: [],
-    completedQuests: []
+    completedQuests: [],
+    // Insurance: mid-raid loot may return to stash after death (Phase 7)
+    insuranceActive: false,
+    insuranceReturns: [] // [{ itemId, count, ..., readyAt }]
 };
 
 const PERSISTENT_KEY = 'zombie_persistent_v17';
@@ -5519,9 +5567,10 @@ class HideoutScene extends Phaser.Scene {
         this.createRepairFacilityCard(startX + cardWidth + cardSpacing, row2Y, cardWidth, cardHeight);
         this.createTinkerBenchFacilityCard(startX + (cardWidth + cardSpacing) * 2, row2Y, cardWidth, cardHeight);
 
-        // Row 3: MED BAY (infection cure + blood refill)
+        // Row 3: MED BAY + INSURANCE
         const row3Y = row2Y + cardHeight + cardSpacing;
         this.createMedBayFacilityCard(startX, row3Y, cardWidth, cardHeight);
+        this.createInsuranceFacilityCard(startX + cardWidth + cardSpacing, row3Y, cardWidth, cardHeight);
     }
 
     createMedBayFacilityCard(x, y, w, h) {
@@ -5579,6 +5628,112 @@ class HideoutScene extends Phaser.Scene {
             localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(this.stats));
             sfx.success();
             this.cameras.main.flash(100, 100, 255, 140);
+            const next = getDescAndBtn();
+            descText.setText(next.desc);
+            btnText.setText(next.btn);
+        });
+        btn.on('pointerover', () => btn.setFillStyle(0x555555));
+        btn.on('pointerout', () => btn.setFillStyle(0x444444));
+    }
+
+    createInsuranceFacilityCard(x, y, w, h) {
+        const card = this.add.rectangle(x + w / 2, y + h / 2, w, h, 0x2a2a2a).setStrokeStyle(2, 0x444444);
+        this.tabContent.push(card);
+        const titleText = this.add.text(x + 10, y + 10, "INSURANCE", { fontSize: '16px', fill: '#ffd700', fontStyle: 'bold' });
+        this.tabContent.push(titleText);
+
+        ensureInsuranceFields(this.persistent);
+        const cost = (CONFIG.HIDEOUT && CONFIG.HIDEOUT.INSURANCE_COST) || 12;
+
+        const getDescAndBtn = () => {
+            ensureInsuranceFields(this.persistent);
+            const now = Date.now();
+            const pending = this.persistent.insuranceReturns || [];
+            const ready = pending.filter(r => (r.readyAt || 0) <= now);
+            const waiting = pending.filter(r => (r.readyAt || 0) > now);
+            if (ready.length > 0) {
+                return { desc: `${ready.length} package(s) ready\nClaim to stash`, btn: `CLAIM (${ready.length})` };
+            }
+            if (waiting.length > 0) {
+                const soonest = waiting.reduce((a, b) => ((a.readyAt || 0) < (b.readyAt || 0) ? a : b));
+                const mins = Math.max(1, Math.ceil(((soonest.readyAt || now) - now) / 60000));
+                return { desc: `${waiting.length} in transit\n~${mins}m remaining`, btn: "WAITING..." };
+            }
+            if (this.persistent.insuranceActive) {
+                return { desc: "ACTIVE this run\nLoot may return on death", btn: "INSURED" };
+            }
+            return { desc: "Cover mid-raid loot\nReturns after death (risky)", btn: `BUY (${cost} SCRAP)` };
+        };
+
+        const { desc, btn: btnStr } = getDescAndBtn();
+        const descText = this.add.text(x + 10, y + 35, desc, { fontSize: '13px', fill: '#aaa', lineSpacing: 4 });
+        this.tabContent.push(descText);
+        const btn = this.add.rectangle(x + w / 2, y + h - 25, w - 20, 30, 0x444444).setInteractive();
+        this.tabContent.push(btn);
+        const btnText = this.add.text(x + w / 2, y + h - 25, btnStr, { fontSize: '12px', fill: '#fff' }).setOrigin(0.5);
+        this.tabContent.push(btnText);
+
+        btn.on('pointerdown', () => {
+            ensureInsuranceFields(this.persistent);
+            const now = Date.now();
+            const pending = this.persistent.insuranceReturns || [];
+            const ready = pending.filter(r => (r.readyAt || 0) <= now);
+
+            if (ready.length > 0) {
+                if (!this.persistent.stash) this.persistent.stash = getDefaultBackpack();
+                ensureGridItems(this.persistent.stash);
+                let claimed = 0;
+                const stillWaiting = pending.filter(r => (r.readyAt || 0) > now);
+                ready.forEach(row => {
+                    const extra = {};
+                    if (row.durability != null) extra.durability = row.durability;
+                    if (row.maxDurability != null) extra.maxDurability = row.maxDurability;
+                    if (row.rounds != null) extra.rounds = row.rounds;
+                    if (row.maxRounds != null) extra.maxRounds = row.maxRounds;
+                    const extraArg = Object.keys(extra).length ? extra : undefined;
+                    if (row.fromConsumable) {
+                        // Consumables return as stash grid items when possible
+                        if (tryAddItem(this.persistent.stash, row.itemId, row.count || 1, extraArg)) claimed++;
+                        else stillWaiting.push(row);
+                    } else if (tryAddItem(this.persistent.stash, row.itemId, row.count || 1, extraArg)) {
+                        claimed++;
+                    } else {
+                        stillWaiting.push(row);
+                    }
+                });
+                this.persistent.insuranceReturns = stillWaiting;
+                savePersistent(this.persistent);
+                if (claimed > 0) {
+                    sfx.success();
+                    this.cameras.main.flash(100, 255, 215, 0);
+                } else {
+                    sfx.error();
+                }
+                const next = getDescAndBtn();
+                descText.setText(next.desc);
+                btnText.setText(next.btn);
+                return;
+            }
+
+            if (pending.some(r => (r.readyAt || 0) > now)) {
+                sfx.error();
+                return;
+            }
+            if (this.persistent.insuranceActive) {
+                sfx.error();
+                return;
+            }
+            if ((this.persistent.scrap || 0) < cost) {
+                sfx.error();
+                this.cameras.main.shake(100, 0.005);
+                return;
+            }
+            this.persistent.scrap = (this.persistent.scrap || 0) - cost;
+            this.persistent.insuranceActive = true;
+            this.updateResourceText();
+            savePersistent(this.persistent);
+            sfx.success();
+            this.cameras.main.flash(100, 255, 215, 0);
             const next = getDescAndBtn();
             descText.setText(next.desc);
             btnText.setText(next.btn);
@@ -10422,6 +10577,10 @@ class GameScene extends Phaser.Scene {
         // UI elements needed by spawnLevelEntities (must be created before)
         this.uiGraphics = this.add.graphics().setDepth(100);
         this.uiText = this.add.text(10, 65, '', { font: '16px Arial', fill: '#fff' }).setDepth(100);
+        // Phase 7 — run timer + extraction pressure (top center)
+        this.extractHudText = this.add.text(400, 6, '', {
+            font: '15px Arial', fill: '#cccccc', fontStyle: 'bold'
+        }).setOrigin(0.5, 0).setDepth(100).setScrollFactor(0);
         this.bossBar = this.add.graphics().setDepth(150).setVisible(false);
         
         // Laser sight graphics (for weapon mod)
@@ -10805,8 +10964,57 @@ class GameScene extends Phaser.Scene {
             this.uiGraphics.destroy();
             this.uiGraphics = null;
         }
+        if (this.extractHudText) {
+            this.extractHudText.destroy();
+            this.extractHudText = null;
+        }
         if (this.edgeSpawnTimer) { this.edgeSpawnTimer.destroy(); this.edgeSpawnTimer = null; }
         this.events.off('shutdown', this.shutdown, this);
+    }
+
+    formatRunClock(ms) {
+        const totalSec = Math.max(0, Math.floor((ms || 0) / 1000));
+        const m = Math.floor(totalSec / 60);
+        const s = totalSec % 60;
+        return `${m}:${String(s).padStart(2, '0')}`;
+    }
+
+    /** HUD status for extract pressure: beacon / key / exit / switch / final. */
+    getExtractPressureStatus() {
+        if (this.extractionActive) {
+            const maxSec = Math.max(1, Math.round((CONFIG.TIMINGS.EXTRACTION || 15000) / 1000));
+            const t = Math.max(0, this.extractionTimer || 0);
+            return {
+                kind: 'beacon',
+                label: `BEACON ${t}s`,
+                color: '#ff4444',
+                progress: t / maxSec
+            };
+        }
+        if (this.currentLevel === 7) {
+            return { kind: 'final', label: 'FINAL — ACTIVATE EXTRACT', color: '#ffaa44', progress: null };
+        }
+        if (this.currentLevel === 5 && this.switchDropped) {
+            return { kind: 'switch', label: 'HIT THE SWITCH', color: '#66ff88', progress: null };
+        }
+        const needsKey = this.currentLevel === 5
+            || ((CONFIG.LOOT.LEVELS_NEEDING_KEY || []).includes(this.currentLevel));
+        if (needsKey && !hasDoorKey(this.playerStats)) {
+            return { kind: 'key', label: 'FIND KEY', color: '#ffcc44', progress: null };
+        }
+        let distLabel = '';
+        if (this.door && this.door.active && this.player) {
+            let showDist = true;
+            if (this.roomGrid && this.roomGrid.rooms) {
+                const currentRoom = this.roomGrid.rooms[this.roomGrid.currentRoom];
+                showDist = !!(currentRoom && currentRoom.isExit);
+            }
+            if (showDist) {
+                const d = Math.round(Phaser.Math.Distance.Between(this.player.x, this.player.y, this.door.x, this.door.y));
+                distLabel = ` ${d}m`;
+            }
+        }
+        return { kind: 'ready', label: `EXIT OPEN${distLabel}`, color: '#66ff88', progress: null };
     }
 
     // ==================== SKILL HELPER ====================
@@ -18228,31 +18436,61 @@ const pos = findSpace(backpack, 3, 2);
             killer: last.enemyType ? String(last.enemyType).toUpperCase() : (last.damageSource ? String(last.damageSource).toUpperCase() : '—'),
             lost: lost.slice(0, 8),
             lostMore: Math.max(0, lost.length - 8),
-            level: this.currentLevel
+            level: this.currentLevel,
+            insuranceNote: options.insuranceNote || null
         };
     }
 
     showDeathRecap(recap) {
         const depth = 2000;
         const overlay = this.add.rectangle(400, 300, 800, 600, 0x000000, 0.72).setScrollFactor(0).setDepth(depth);
-        const panel = this.add.rectangle(400, 300, 420, 320, 0x1a1a1a, 0.95).setStrokeStyle(2, 0xaa2222).setScrollFactor(0).setDepth(depth + 1);
-        const title = this.add.text(400, 180, 'YOU DIED', {
+        const panel = this.add.rectangle(400, 300, 420, 340, 0x1a1a1a, 0.95).setStrokeStyle(2, 0xaa2222).setScrollFactor(0).setDepth(depth + 1);
+        const title = this.add.text(400, 170, 'YOU DIED', {
             fontSize: '36px', fill: '#ff3333', fontStyle: 'bold'
         }).setOrigin(0.5).setScrollFactor(0).setDepth(depth + 2);
 
         const lostLines = (recap.lost && recap.lost.length)
             ? recap.lost.join('\n') + (recap.lostMore ? `\n+${recap.lostMore} more` : '')
             : 'Nothing new since checkpoint';
-        const body = this.add.text(400, 310,
-            `Cause: ${recap.cause}\nLimb: ${recap.limbLabel}\nSource: ${recap.killer}\nLevel: ${recap.level}\n\nLeft in the field:\n${lostLines}`,
-            { fontSize: '16px', fill: '#dddddd', align: 'center', lineSpacing: 6 }
+        const insuranceLine = recap.insuranceNote ? `\n\n${recap.insuranceNote}` : '';
+        const body = this.add.text(400, 305,
+            `Cause: ${recap.cause}\nLimb: ${recap.limbLabel}\nSource: ${recap.killer}\nLevel: ${recap.level}\n\nLeft in the field:\n${lostLines}${insuranceLine}`,
+            { fontSize: '15px', fill: '#dddddd', align: 'center', lineSpacing: 5 }
         ).setOrigin(0.5).setScrollFactor(0).setDepth(depth + 2);
 
-        const hint = this.add.text(400, 440, 'Restarting…', {
+        const hint = this.add.text(400, 450, 'Restarting…', {
             fontSize: '14px', fill: '#888888'
         }).setOrigin(0.5).setScrollFactor(0).setDepth(depth + 2);
 
         this._deathRecapNodes = [overlay, panel, title, body, hint];
+    }
+
+    /** Queue insured mid-raid loot for hideout claim. Returns note for death recap. */
+    processInsuranceOnDeath() {
+        ensureInsuranceFields(this.persistent);
+        if (!this.persistent.insuranceActive) return null;
+        this.persistent.insuranceActive = false;
+        const lost = diffLostItemSnapshots(this.playerStats, this.checkpointStats);
+        if (!lost.length) return 'Insurance: nothing to return';
+        const chance = (CONFIG.HIDEOUT && CONFIG.HIDEOUT.INSURANCE_RETURN_CHANCE != null)
+            ? CONFIG.HIDEOUT.INSURANCE_RETURN_CHANCE : 0.7;
+        const delay = (CONFIG.HIDEOUT && CONFIG.HIDEOUT.INSURANCE_RETURN_MS) || 180000;
+        const readyAt = Date.now() + delay;
+        let returned = 0;
+        let scavenged = 0;
+        lost.forEach(row => {
+            if (Math.random() < chance) {
+                this.persistent.insuranceReturns.push({ ...row, readyAt });
+                returned++;
+            } else {
+                scavenged++;
+            }
+        });
+        if (returned <= 0) return 'Insurance: scavs took everything';
+        const mins = Math.max(1, Math.round(delay / 60000));
+        return scavenged > 0
+            ? `Insurance: ${returned} returning (~${mins}m), ${scavenged} scavenged`
+            : `Insurance: ${returned} returning to stash (~${mins}m)`;
     }
 
     handlePlayerDeath(options = {}) {
@@ -18282,11 +18520,12 @@ const pos = findSpace(backpack, 3, 2);
         
         // Track death
         this.persistent.totalDeaths++;
+        const insuranceNote = this.processInsuranceOnDeath();
         savePersistent(this.persistent);
         
         sfx.playerDeath();
         this.physics.pause();
-        const recap = this.buildDeathRecap(options);
+        const recap = this.buildDeathRecap({ ...options, insuranceNote });
         this.showDeathRecap(recap);
         
         this.time.delayedCall(CONFIG.TIMINGS.DEATH_RESTART, () => {
@@ -19416,9 +19655,30 @@ const pos = findSpace(backpack, 3, 2);
             ammoStr = `${mag}/${maxMag} (${reserveCount})`;
         }
         let reloadText = this.isReloading ? " [RELOADING]" : "";
-        let timerText = this.extractionActive ? ` | BEACON: ${this.extractionTimer}s` : "";
-        if (this.extractionActive) this.levelText.setText(this.extractionTimer).setAlpha(1).setTint(0xff0000);
-        this.uiText.setText(`${weapon.toUpperCase()}: ${ammoStr}${reloadText} | GREN: ${getUsableGrenadeCount(this.playerStats)} | 🔧${this.playerStats.scrap} 💰${this.playerStats.credits} ⚙️${this.playerStats.materials}${timerText}`);
+        this.uiText.setText(`${weapon.toUpperCase()}: ${ammoStr}${reloadText} | GREN: ${getUsableGrenadeCount(this.playerStats)} | 🔧${this.playerStats.scrap} 💰${this.playerStats.credits} ⚙️${this.playerStats.materials}`);
+
+        // Run clock + extraction pressure (top center)
+        const extractStatus = this.getExtractPressureStatus();
+        const runClock = this.formatRunClock(Date.now() - (this.levelStartTime || Date.now()));
+        if (this.extractHudText) {
+            this.extractHudText.setText(`LV${this.currentLevel}  ${runClock}  |  ${extractStatus.label}`);
+            this.extractHudText.setColor(extractStatus.color || '#cccccc');
+            if (extractStatus.kind === 'beacon') {
+                const pulse = 0.7 + Math.sin(this.time.now / 120) * 0.3;
+                this.extractHudText.setAlpha(pulse);
+            } else {
+                this.extractHudText.setAlpha(1);
+            }
+        }
+        if (extractStatus.kind === 'beacon' && extractStatus.progress != null) {
+            const barW = 160, barH = 6, barX = 400 - barW / 2, barY = 26;
+            this.uiGraphics.fillStyle(0x000000, 0.55);
+            this.uiGraphics.fillRect(barX - 1, barY - 1, barW + 2, barH + 2);
+            this.uiGraphics.fillStyle(0x442222, 1);
+            this.uiGraphics.fillRect(barX, barY, barW, barH);
+            this.uiGraphics.fillStyle(0xff3333, 1);
+            this.uiGraphics.fillRect(barX, barY, barW * Math.max(0, Math.min(1, extractStatus.progress)), barH);
+        }
 
         // Icons
         let iconX = 300;

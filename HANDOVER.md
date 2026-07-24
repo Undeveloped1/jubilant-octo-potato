@@ -18,6 +18,10 @@
 **Death recap**
 - `handlePlayerDeath` shows cause / limb / source / mid-raid loot lost vs checkpoint (`diffLostItemLabels`). `DEATH_RESTART` = 5s.
 
+**Extract pressure HUD + insurance (same sprint)**
+- Top-center HUD: `LV#  m:ss  |  FIND KEY / EXIT OPEN / BEACON` via `extractHudText` + `getExtractPressureStatus`.
+- Facilities **INSURANCE**: buy with scrap (`CONFIG.HIDEOUT.INSURANCE_*`); on death, mid-raid loot rolls return→`persistent.insuranceReturns` (claim after timer).
+
 ---
 
 ## Session work (Feb 24, 2025)

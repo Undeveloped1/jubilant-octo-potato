@@ -85,9 +85,9 @@ The depth exists but is invisible outside the combat log. Make it felt:
 
 ## Phase 7 — Retention loop polish *(after playtest feedback)*
 
-- [ ] Insurance mechanic (pay scrap; gear lost on death returns after N minutes if "not scavenged") — cheap to build, creates push-your-luck
+- [x] Insurance mechanic (pay scrap; mid-raid loot returns after ~3m if not scavenged) — Facilities INSURANCE card (Jul 2026)
 - [x] Death recap screen: cause, limb, source, mid-raid loot left behind (Jul 2026) — click-to-skip still open
-- [ ] Run timer + extraction pressure surfaced in HUD
+- [x] Run timer + extraction pressure surfaced in HUD (Jul 2026) — LV / clock / FIND KEY|EXIT|BEACON
 
 ### Infection treatment (DESIGN.md — shipped Jul 2026, not a numbered phase)
 
