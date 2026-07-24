@@ -290,7 +290,7 @@ const CONFIG = {
         BODY_SEARCH: 500,
         DEBRIS_BURN: 5000,
         EXTRACTION: 15000,
-        DEATH_RESTART: 2000,
+        DEATH_RESTART: 5000,
         LEVEL_TRANSITION: 1000,
         NVG_CRAFT: 90000
     },
@@ -316,11 +316,11 @@ const CONFIG = {
         LEVEL_POOLS: {
             1: ['map', 'key', 'flashlight', 'shotgun', 'ammo_shells', 'ammo_shells', 'ammo_9mm', 'helmet', 'vest', 'scrap', 'cigarettes', 'mag_pistol'],
             2: ['map', 'molotov', 'shotgun', 'ammo_shells', 'ammo_9mm', 'ammo_9mm', 'scrap', 'helmet', 'headset', 'vest', 'medkit', 'bandage', 'plug', 'cigarettes', 'mag_pistol', 'mag_smg'],
-            3: ['map', 'key', 'ammo_9mm', 'ammo_9mm', 'meds', 'meds', 'scrap', 'grenade', 'bandage', 'splint', 'plug', 'cigarettes', 'mag_pistol', 'mag_smg'],
-            4: ['map', 'key', 'smg', 'ammo_45', 'ammo_45', 'ammo_45', 'grenade', 'grenade', 'meds', 'scrap', 'hemostat', 'plug', 'mag_pistol', 'mag_smg'],
-            5: ['map', 'ammo_9mm', 'ammo_45', 'ammo_556', 'meds', 'meds', 'grenade', 'scrap', 'bandage', 'splint', 'plug', 'extended_mag', 'mag_pistol', 'mag_smg', 'mag_rifle'],
-            6: ['map', 'key', 'rifle', 'ammo_556', 'ammo_556', 'ammo_556', 'meds', 'grenade', 'grenade', 'suppressor', 'rapid_fire', 'plug', 'trauma_kit', 'mag_rifle', 'mag_smg'],
-            7: ['map', 'key', 'crossbow', 'ammo_bolts', 'ammo_bolts', 'meds', 'meds', 'laser_sight', 'damage_barrel', 'materials', 'trauma_kit']
+            3: ['map', 'key', 'ammo_9mm', 'ammo_9mm', 'meds', 'meds', 'scrap', 'grenade', 'bandage', 'splint', 'plug', 'cigarettes', 'mag_pistol', 'mag_smg', 'antidote'],
+            4: ['map', 'key', 'smg', 'ammo_45', 'ammo_45', 'ammo_45', 'grenade', 'grenade', 'meds', 'scrap', 'hemostat', 'plug', 'mag_pistol', 'mag_smg', 'antidote'],
+            5: ['map', 'ammo_9mm', 'ammo_45', 'ammo_556', 'meds', 'meds', 'grenade', 'scrap', 'bandage', 'splint', 'plug', 'extended_mag', 'mag_pistol', 'mag_smg', 'mag_rifle', 'antidote'],
+            6: ['map', 'key', 'rifle', 'ammo_556', 'ammo_556', 'ammo_556', 'meds', 'grenade', 'grenade', 'suppressor', 'rapid_fire', 'plug', 'trauma_kit', 'mag_rifle', 'mag_smg', 'antidote'],
+            7: ['map', 'key', 'crossbow', 'ammo_bolts', 'ammo_bolts', 'meds', 'meds', 'laser_sight', 'damage_barrel', 'materials', 'trauma_kit', 'antidote']
         },
         LEVELS_NEEDING_KEY: [1, 3, 4, 6],
         MOD_RARITY_WEIGHTS: { common: 60, uncommon: 30, rare: 10 },
@@ -335,10 +335,11 @@ const CONFIG = {
         // Medical/grid items that only need sfx + "LABEL (dur/max)" + color (txt built from INVENTORY_ITEMS + getDefaultDurability)
         LOOT_MEDICAL_DISPLAY: {
             medkit: { col: 0x00ff00 }, bandage: { col: 0xcc2222 }, hemostat: { col: 0xcc2222 }, splint: { col: 0xcc2222 },
-            trauma_kit: { col: 0xff8800 }, limb_breaker: { col: 0x1a1a1a }, trauma_inflict: { col: 0x1a1a1a }
+            trauma_kit: { col: 0xff8800 }, limb_breaker: { col: 0x1a1a1a }, trauma_inflict: { col: 0x1a1a1a },
+            antidote: { col: 0x66ff88 }
         },
         // Canonical list of all loot IDs handled by applyLoot(); add new types here and in applyLoot switch
-        VALID_IDS: ['meds', 'ammo', 'key', 'map', 'flashlight', 'molotov', 'pistol', 'shotgun', 'smg', 'crossbow', 'rifle', 'scrap', 'plug', 'helmet', 'headset', 'vest', 'medkit', 'bandage', 'hemostat', 'splint', 'trauma_kit', 'limb_breaker', 'trauma_inflict', 'grenade', 'materials', 'cigarettes', 'extended_mag', 'suppressor', 'laser_sight', 'damage_barrel', 'rapid_fire', 'ammo_box', 'rig', 'backpack_default', 'secure_container_default', 'med_bag_default', 'nvg', 'ammo_bolts', 'ammo_shells', 'ammo_9mm', 'ammo_45', 'ammo_556', 'mag_pistol', 'mag_smg', 'mag_rifle'],
+        VALID_IDS: ['meds', 'ammo', 'key', 'map', 'flashlight', 'molotov', 'pistol', 'shotgun', 'smg', 'crossbow', 'rifle', 'scrap', 'plug', 'helmet', 'headset', 'vest', 'medkit', 'bandage', 'hemostat', 'splint', 'trauma_kit', 'limb_breaker', 'trauma_inflict', 'antidote', 'grenade', 'materials', 'cigarettes', 'extended_mag', 'suppressor', 'laser_sight', 'damage_barrel', 'rapid_fire', 'ammo_box', 'rig', 'backpack_default', 'secure_container_default', 'med_bag_default', 'nvg', 'ammo_bolts', 'ammo_shells', 'ammo_9mm', 'ammo_45', 'ammo_556', 'mag_pistol', 'mag_smg', 'mag_rifle'],
         // Items that are not stored in backpack/stash: pickup only triggers instant effect (e.g. scrap = currency, meds = heal, molotov = key item). Flashlight is now a grid attachment.
         NON_GRID_ITEM_IDS: ['scrap', 'meds', 'molotov'],
         // Grid inventory: key, plug, flashlight (attachment) are grid items; map/scrap/meds/molotov stay instant
@@ -373,6 +374,7 @@ const CONFIG = {
             trauma_kit:    { id: 'trauma_kit', sizeW: 2, sizeH: 2, stackMax: 1, category: 'medical', label: 'Trauma Kit', icon: 'TK', color: '#ff8800' },
             limb_breaker:  { id: 'limb_breaker', sizeW: 1, sizeH: 1, stackMax: 1, category: 'medical', label: 'Limb Breaker', icon: 'LB', color: '#1a1a1a' },
             trauma_inflict: { id: 'trauma_inflict', sizeW: 1, sizeH: 1, stackMax: 1, category: 'medical', label: 'Trauma Inflict', icon: 'TI', color: '#1a1a1a' },
+            antidote:      { id: 'antidote', sizeW: 1, sizeH: 1, stackMax: 1, category: 'medical', label: 'Antidote', icon: 'Ad', color: '#66ff88' },
             extended_mag:  { id: 'extended_mag', sizeW: 1, sizeH: 1, stackMax: 5, category: 'stackable', label: 'Ext Mag', icon: 'M' },
             suppressor:    { id: 'suppressor', sizeW: 1, sizeH: 1, stackMax: 5, category: 'stackable', label: 'Suppressor', icon: 'S' },
             laser_sight:   { id: 'laser_sight', sizeW: 1, sizeH: 1, stackMax: 5, category: 'stackable', label: 'Flashlight/Laser', icon: 'L' },
@@ -421,7 +423,8 @@ const CONFIG = {
         REPAIR_COST_PER_POINT: 1, // 1 scrap per durability point
         GUN_BENCH_LEVEL2_COST: 20,
         GUN_BENCH_CRAFT_9MM:  { scrap: 1, itemId: 'ammo_9mm', count: 4, timeMs: 90000 },
-        GUN_BENCH_CRAFT_SHELLS: { scrap: 1, itemId: 'ammo_shells', count: 3, timeMs: 90000 }
+        GUN_BENCH_CRAFT_SHELLS: { scrap: 1, itemId: 'ammo_shells', count: 3, timeMs: 90000 },
+        MED_BAY_COST: 8 // scrap: clear infection + full blood refill
     },
     
     // Currency system
@@ -443,6 +446,7 @@ const CONFIG = {
             { id: 'grenade', name: 'Grenade', type: 'grenade', amount: 1, cost: 25, currency: 'credits' },
             { id: 'adrenaline', name: 'Adrenaline Shot', type: 'consumable', effect: 'speed', cost: 30, currency: 'credits' },
             { id: 'armor_patch', name: 'Armor Patch', type: 'consumable', effect: 'repair', cost: 25, currency: 'credits' },
+            { id: 'antidote', name: 'Antidote', type: 'consumable', effect: 'cure_infection', cost: 35, currency: 'credits' },
             // Weapon Mods - purchased with materials
             { id: 'extended_mag', name: 'Extended Mag', type: 'mod', cost: 15, currency: 'materials' },
             { id: 'suppressor', name: 'Suppressor', type: 'mod', cost: 20, currency: 'materials' },
@@ -461,6 +465,7 @@ const CONFIG = {
             ammo: { credits: 1 }, grenade: { credits: 12 }, materials: { materials: 5 }, cigarettes: { credits: 2 },
             medkit: { credits: 15 }, bandage: { credits: 5 }, hemostat: { credits: 5 }, splint: { credits: 5 },
             trauma_kit: { credits: 25 }, limb_breaker: { credits: 10 }, trauma_inflict: { credits: 10 },
+            antidote: { credits: 18 },
             adrenaline: { credits: 15 }, armor_patch: { credits: 12 }, ammo_box: { credits: 20 }, rig: { credits: 25 },
             extended_mag: { materials: 7 }, suppressor: { materials: 10 }, laser_sight: { materials: 12 }, damage_barrel: { materials: 15 }, rapid_fire: { materials: 12 },
             mag_pistol: { credits: 4 }, mag_smg: { credits: 6 }, mag_rifle: { credits: 7 }
@@ -470,13 +475,14 @@ const CONFIG = {
     // Consumables configuration
     CONSUMABLES: {
         adrenaline: { name: 'Adrenaline', effect: 'speed', multiplier: 1.5, duration: 10000, icon: '💉' },
-        armor_patch: { name: 'Armor Patch', effect: 'repair', amount: 20, duration: 0, icon: '🩹' }
+        armor_patch: { name: 'Armor Patch', effect: 'repair', amount: 20, duration: 0, icon: '🩹' },
+        antidote: { name: 'Antidote', effect: 'cure_infection', duration: 0, icon: '🧪' }
     },
     
     // Enemy drop configuration (currency auto-collects, items go to skull)
     ENEMY_DROPS: {
         WALKER: { currency: 'scrap', min: 1, max: 3, items: ['ammo_9mm', 'ammo_9mm', 'ammo_shells', 'meds', 'scrap', 'cigarettes'] },
-        SPITTER: { currency: 'scrap', min: 2, max: 4, items: ['ammo_9mm', 'ammo_45', 'meds', 'grenade', 'scrap', 'cigarettes'] },
+        SPITTER: { currency: 'scrap', min: 2, max: 4, items: ['ammo_9mm', 'ammo_45', 'meds', 'grenade', 'scrap', 'cigarettes', 'antidote'] },
         BANDIT: { currency: 'credits', min: 5, max: 15, items: ['ammo_9mm', 'ammo_45', 'ammo_556', 'helmet', 'vest', 'grenade', 'meds', 'extended_mag', 'mag_pistol', 'mag_smg', 'mag_rifle', 'cigarettes'] },
         BOSS: { currency: 'materials', min: 8, max: 18, items: ['grenade', 'meds', 'ammo_556', 'ammo_45', 'extended_mag', 'suppressor', 'laser_sight', 'rapid_fire'] },
         LEAPER: { currency: 'scrap', min: 1, max: 2, items: ['ammo_9mm', 'ammo_shells', 'meds', 'cigarettes'] },
@@ -1290,6 +1296,62 @@ function ensureLimbVisStats(stats) {
     if (stats.infection == null || stats.infection < 0) stats.infection = 0;
     if (stats.infection > 100) stats.infection = 100;
     return stats;
+}
+
+/** Clear infection on stats. Returns true if there was infection to clear. */
+function cureInfectionOnStats(stats) {
+    ensureLimbVisStats(stats);
+    if ((stats.infection || 0) <= 0) return false;
+    stats.infection = 0;
+    return true;
+}
+
+/** Count item labels in grids/pockets/consumables for death-recap diffs. */
+function countCarriedItemLabels(stats) {
+    const counts = Object.create(null);
+    const bump = (label, n) => {
+        if (!label) return;
+        counts[label] = (counts[label] || 0) + (n || 1);
+    };
+    const addGrid = (grid) => {
+        (grid && grid.items ? grid.items : []).forEach(p => {
+            const cfg = getInventoryItemConfig(p.itemId);
+            bump((cfg && cfg.label) ? cfg.label : p.itemId, p.count || 1);
+        });
+    };
+    if (!stats) return counts;
+    addGrid(stats.backpack);
+    addGrid(stats.rigGrid);
+    addGrid(stats.medBagGrid);
+    addGrid(stats.secureContainerGrid);
+    if (Array.isArray(stats.pockets)) {
+        stats.pockets.forEach(pocket => {
+            (pocket || []).forEach(cell => {
+                if (!cell || !cell.itemId) return;
+                if (cell._spansFrom) return;
+                const cfg = getInventoryItemConfig(cell.itemId);
+                bump((cfg && cfg.label) ? cfg.label : cell.itemId, cell.count || 1);
+            });
+        });
+    }
+    (stats.consumables || []).forEach(id => {
+        if (!id) return;
+        const c = CONFIG.CONSUMABLES && CONFIG.CONSUMABLES[id];
+        bump(c ? c.name : id, 1);
+    });
+    return counts;
+}
+
+/** Labels for items present in `current` but not in `baseline` (mid-raid loot lost on death). */
+function diffLostItemLabels(currentStats, baselineStats) {
+    const cur = countCarriedItemLabels(currentStats);
+    const base = countCarriedItemLabels(baselineStats);
+    const lost = [];
+    Object.keys(cur).forEach(label => {
+        const n = cur[label] - (base[label] || 0);
+        if (n > 0) lost.push(n > 1 ? `${label} x${n}` : label);
+    });
+    return lost;
 }
 
 const DEFAULT_STATS = { 
@@ -5456,6 +5518,73 @@ class HideoutScene extends Phaser.Scene {
         this.createWorkbenchFacilityCard(startX, row2Y, cardWidth, cardHeight);
         this.createRepairFacilityCard(startX + cardWidth + cardSpacing, row2Y, cardWidth, cardHeight);
         this.createTinkerBenchFacilityCard(startX + (cardWidth + cardSpacing) * 2, row2Y, cardWidth, cardHeight);
+
+        // Row 3: MED BAY (infection cure + blood refill)
+        const row3Y = row2Y + cardHeight + cardSpacing;
+        this.createMedBayFacilityCard(startX, row3Y, cardWidth, cardHeight);
+    }
+
+    createMedBayFacilityCard(x, y, w, h) {
+        const card = this.add.rectangle(x + w / 2, y + h / 2, w, h, 0x2a2a2a).setStrokeStyle(2, 0x444444);
+        this.tabContent.push(card);
+
+        const titleText = this.add.text(x + 10, y + 10, "MED BAY", { fontSize: '16px', fill: '#66ff88', fontStyle: 'bold' });
+        this.tabContent.push(titleText);
+
+        const cost = (CONFIG.HIDEOUT && CONFIG.HIDEOUT.MED_BAY_COST) || 8;
+        const getDescAndBtn = () => {
+            ensureLimbVisStats(this.stats);
+            const inf = this.stats.infection || 0;
+            const blood = Math.floor(this.stats.blood || 0);
+            const maxB = this.stats.maxBlood || 100;
+            const needsCure = inf > 0;
+            const needsBlood = blood < maxB;
+            if (!needsCure && !needsBlood) {
+                return { desc: "Healthy\nBlood full", btn: "NO TREATMENT NEEDED" };
+            }
+            const lines = [];
+            if (needsCure) lines.push(`Infected ${Math.floor(inf)}%`);
+            if (needsBlood) lines.push(`Blood ${blood}/${maxB}`);
+            lines.push("Cure + full transfusion");
+            return { desc: lines.join('\n'), btn: `TREAT (${cost} SCRAP)` };
+        };
+
+        const { desc, btn: btnStr } = getDescAndBtn();
+        const descText = this.add.text(x + 10, y + 35, desc, { fontSize: '13px', fill: '#aaa', lineSpacing: 4 });
+        this.tabContent.push(descText);
+
+        const btn = this.add.rectangle(x + w / 2, y + h - 25, w - 20, 30, 0x444444).setInteractive();
+        this.tabContent.push(btn);
+        const btnText = this.add.text(x + w / 2, y + h - 25, btnStr, { fontSize: '12px', fill: '#fff' }).setOrigin(0.5);
+        this.tabContent.push(btnText);
+
+        btn.on('pointerdown', () => {
+            ensureLimbVisStats(this.stats);
+            const needsCure = (this.stats.infection || 0) > 0;
+            const needsBlood = (this.stats.blood || 0) < (this.stats.maxBlood || 100);
+            if (!needsCure && !needsBlood) {
+                sfx.error();
+                return;
+            }
+            if ((this.persistent.scrap || 0) < cost) {
+                sfx.error();
+                this.cameras.main.shake(100, 0.005);
+                return;
+            }
+            this.persistent.scrap = (this.persistent.scrap || 0) - cost;
+            cureInfectionOnStats(this.stats);
+            this.stats.blood = this.stats.maxBlood;
+            this.updateResourceText();
+            savePersistent(this.persistent);
+            localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(this.stats));
+            sfx.success();
+            this.cameras.main.flash(100, 100, 255, 140);
+            const next = getDescAndBtn();
+            descText.setText(next.desc);
+            btnText.setText(next.btn);
+        });
+        btn.on('pointerover', () => btn.setFillStyle(0x555555));
+        btn.on('pointerout', () => btn.setFillStyle(0x444444));
     }
     
     createFacilityCard(x, y, w, h, title, titleColor, descFn, actionFn, costFn) {
@@ -11272,6 +11401,15 @@ class GameScene extends Phaser.Scene {
                 this.showFloatingText(this.player.x, this.player.y - 40, "No armor to repair!", 0xff0000);
                 return; // Don't consume if nothing to repair
             }
+        } else if (config.effect === 'cure_infection') {
+            ensureLimbVisStats(this.playerStats);
+            if ((this.playerStats.infection || 0) <= 0) {
+                this.showFloatingText(this.player.x, this.player.y - 40, "NOT INFECTED", 0xffaa00);
+                return;
+            }
+            this.clearInfection(true);
+            sfx.useConsumable();
+            this.showFloatingText(this.player.x, this.player.y - 40, "ANTIDOTE!", 0x66ff88);
         }
         
         // Remove consumable from slot
@@ -13272,6 +13410,17 @@ class GameScene extends Phaser.Scene {
                                 if (typeof sfx.lootHealth === 'function') sfx.lootHealth(); else if (typeof sfx.heal === 'function') sfx.heal();
                                 if (this.hasBothArmsBlacked()) this.applyBodyPenaltyDamage(); else if (this.hasNoGoodArms()) this.applyBothArmsActionDamage();
                                 rerender();
+                            } else if (removed.itemId === 'antidote') {
+                                if (!cureInfectionOnStats(stats)) {
+                                    putBack(removed);
+                                } else {
+                                    this._infectionWarned = false;
+                                    if (typeof this.showFloatingText === 'function') {
+                                        this.showFloatingText(400, 260, "INFECTION CLEARED", 0x88ff88);
+                                    }
+                                    if (typeof sfx.lootHealth === 'function') sfx.lootHealth(); else if (typeof sfx.heal === 'function') sfx.heal();
+                                    rerender();
+                                }
                             } else {
                                 const statusRemovalMap = { bandage: 'minor_bleed', hemostat: 'major_bleed', splint: 'break', trauma_kit: 'trauma' };
                                 const effectToRemove = statusRemovalMap[removed.itemId];
@@ -14561,6 +14710,13 @@ const pos = findSpace(backpack, 3, 2);
                                 if (typeof sfx.lootHealth === 'function') sfx.lootHealth(); else if (typeof sfx.heal === 'function') sfx.heal();
                                 if (this.hasBothArmsBlacked()) this.applyBodyPenaltyDamage(); else if (this.hasNoGoodArms()) this.applyBothArmsActionDamage();
                                 rerender();
+                            } else if (removed.itemId === 'antidote') {
+                                if (!cureInfectionOnStats(stats)) {
+                                    putBack(removed);
+                                } else {
+                                    if (typeof sfx.lootHealth === 'function') sfx.lootHealth(); else if (typeof sfx.heal === 'function') sfx.heal();
+                                    rerender();
+                                }
                             } else {
                                 const statusRemovalMap = { bandage: 'minor_bleed', hemostat: 'major_bleed', splint: 'break', trauma_kit: 'trauma' };
                                 const effectToRemove = statusRemovalMap[removed.itemId];
@@ -17964,7 +18120,16 @@ const pos = findSpace(backpack, 3, 2);
                         }
                     }
                     this.playerStats.hp = sumLimbHp(this.playerStats.limbHp);
-                    if ((targetLimbId === 'chest' || targetLimbId === 'head') && limb.hp === 0) this.handlePlayerDeath();
+                    this.recordHitRecap({
+                        limbId: targetLimbId,
+                        enemyType: outcomeSourceType,
+                        damageSource,
+                        fromBleed: false,
+                        outcome
+                    });
+                    if ((targetLimbId === 'chest' || targetLimbId === 'head') && limb.hp === 0) {
+                        this.handlePlayerDeath({ cause: targetLimbId === 'head' ? 'HEAD DESTROYED' : 'CHEST DESTROYED', limbId: targetLimbId });
+                    }
                     this.logDamageEntry({ damage: take, limbId: targetLimbId, outcome, mitigated: false });
                     if (escalationSource && escalationSource.active && this.limbEffectHitCount) {
                         const now = this.time.now;
@@ -17976,7 +18141,15 @@ const pos = findSpace(backpack, 3, 2);
                     limb.hp = Math.max(0, (limb.hp || 0) - take);
                     if (limb.hp === 0 && Array.isArray(limb.effects) && !limb.effects.includes('trauma')) limb.effects.push('trauma');
                     this.playerStats.hp = sumLimbHp(this.playerStats.limbHp);
-                    if ((targetLimbId === 'chest' || targetLimbId === 'head') && limb.hp === 0 && !fromBleed) this.handlePlayerDeath();
+                    this.recordHitRecap({
+                        limbId: targetLimbId,
+                        enemyType: options.enemyType || (options.meleeAttacker && options.meleeAttacker.enemyType) || null,
+                        damageSource: fromBleed ? 'bleed' : damageSource,
+                        fromBleed
+                    });
+                    if ((targetLimbId === 'chest' || targetLimbId === 'head') && limb.hp === 0 && !fromBleed) {
+                        this.handlePlayerDeath({ cause: targetLimbId === 'head' ? 'HEAD DESTROYED' : 'CHEST DESTROYED', limbId: targetLimbId });
+                    }
                     this.logDamageEntry({ damage: take, limbId: targetLimbId, mitigated: false });
                 } else {
                     let remaining = damage;
@@ -18025,7 +18198,64 @@ const pos = findSpace(backpack, 3, 2);
         this.checkDeathConditions();
     }
 
-    handlePlayerDeath() {
+    recordHitRecap(info) {
+        if (!info) return;
+        this._lastHitRecap = {
+            limbId: info.limbId || null,
+            enemyType: info.enemyType || null,
+            damageSource: info.damageSource || null,
+            fromBleed: !!info.fromBleed,
+            outcome: info.outcome || null
+        };
+    }
+
+    buildDeathRecap(options = {}) {
+        const last = this._lastHitRecap || {};
+        const limbId = options.limbId || last.limbId || null;
+        let cause = options.cause || null;
+        if (!cause) {
+            if ((this.playerStats.infection || 0) >= 100) cause = 'INFECTION';
+            else if ((this.playerStats.blood || 0) <= 0) cause = 'BLED OUT';
+            else if (last.enemyType) cause = String(last.enemyType).toUpperCase();
+            else if (last.fromBleed || last.damageSource === 'bleed') cause = 'BLEED';
+            else if (last.damageSource) cause = String(last.damageSource).toUpperCase();
+            else cause = 'UNKNOWN';
+        }
+        const lost = diffLostItemLabels(this.playerStats, this.checkpointStats);
+        return {
+            cause,
+            limbLabel: limbId ? (LIMB_DISPLAY_NAMES[limbId] || limbId) : '—',
+            killer: last.enemyType ? String(last.enemyType).toUpperCase() : (last.damageSource ? String(last.damageSource).toUpperCase() : '—'),
+            lost: lost.slice(0, 8),
+            lostMore: Math.max(0, lost.length - 8),
+            level: this.currentLevel
+        };
+    }
+
+    showDeathRecap(recap) {
+        const depth = 2000;
+        const overlay = this.add.rectangle(400, 300, 800, 600, 0x000000, 0.72).setScrollFactor(0).setDepth(depth);
+        const panel = this.add.rectangle(400, 300, 420, 320, 0x1a1a1a, 0.95).setStrokeStyle(2, 0xaa2222).setScrollFactor(0).setDepth(depth + 1);
+        const title = this.add.text(400, 180, 'YOU DIED', {
+            fontSize: '36px', fill: '#ff3333', fontStyle: 'bold'
+        }).setOrigin(0.5).setScrollFactor(0).setDepth(depth + 2);
+
+        const lostLines = (recap.lost && recap.lost.length)
+            ? recap.lost.join('\n') + (recap.lostMore ? `\n+${recap.lostMore} more` : '')
+            : 'Nothing new since checkpoint';
+        const body = this.add.text(400, 310,
+            `Cause: ${recap.cause}\nLimb: ${recap.limbLabel}\nSource: ${recap.killer}\nLevel: ${recap.level}\n\nLeft in the field:\n${lostLines}`,
+            { fontSize: '16px', fill: '#dddddd', align: 'center', lineSpacing: 6 }
+        ).setOrigin(0.5).setScrollFactor(0).setDepth(depth + 2);
+
+        const hint = this.add.text(400, 440, 'Restarting…', {
+            fontSize: '14px', fill: '#888888'
+        }).setOrigin(0.5).setScrollFactor(0).setDepth(depth + 2);
+
+        this._deathRecapNodes = [overlay, panel, title, body, hint];
+    }
+
+    handlePlayerDeath(options = {}) {
         if (this.isTransitioning) return;
         
         // Second Wind skill: Survive one lethal hit per run
@@ -18055,8 +18285,9 @@ const pos = findSpace(backpack, 3, 2);
         savePersistent(this.persistent);
         
         sfx.playerDeath();
-        this.showFloatingText(400, 300, "YOU DIED", 0xff0000);
         this.physics.pause();
+        const recap = this.buildDeathRecap(options);
+        this.showDeathRecap(recap);
         
         this.time.delayedCall(CONFIG.TIMINGS.DEATH_RESTART, () => {
             this.scene.restart({ level: this.currentLevel, stats: this.checkpointStats });
@@ -18171,7 +18402,7 @@ const pos = findSpace(backpack, 3, 2);
 
         if ((this.playerStats.blood || 0) <= 0) {
             this.showFloatingText(this.player.x, this.player.y - 50, "BLED OUT!", 0xaa0000);
-            this.handlePlayerDeath();
+            this.handlePlayerDeath({ cause: 'BLED OUT', limbId: (this._lastHitRecap && this._lastHitRecap.limbId) || null });
         }
     }
 
@@ -18196,7 +18427,7 @@ const pos = findSpace(backpack, 3, 2);
             this.playerStats.infection = infection;
             if (infection >= 100) {
                 this.showFloatingText(this.player.x, this.player.y - 50, "INFECTION TOOK HOLD!", 0x66ff44);
-                this.handlePlayerDeath();
+                this.handlePlayerDeath({ cause: 'INFECTION' });
             }
         }
     }

@@ -86,8 +86,14 @@ The depth exists but is invisible outside the combat log. Make it felt:
 ## Phase 7 — Retention loop polish *(after playtest feedback)*
 
 - [ ] Insurance mechanic (pay scrap; gear lost on death returns after N minutes if "not scavenged") — cheap to build, creates push-your-luck
-- [ ] Death recap screen: what killed you, which limb, what you lost (Tarkov's post-raid screen is a retention feature)
+- [x] Death recap screen: cause, limb, source, mid-raid loot left behind (Jul 2026) — click-to-skip still open
 - [ ] Run timer + extraction pressure surfaced in HUD
+
+### Infection treatment (DESIGN.md — shipped Jul 2026, not a numbered phase)
+
+- [x] Antidote item (loot / trader consumable / limb-drop medical)
+- [x] Hideout Med Bay (cure + blood refill for scrap)
+- [ ] Super-infection / hero station (still deferred)
 
 ---
 

@@ -10,13 +10,16 @@ Design and lore ideas captured for future implementation. **No implementation im
 
 - **Single global blood bar** that empties when minor/major bleeds tick (in addition to per-limb HP).
 - Regen while no bleeds are active; blood = 0 → bleed-out death.
-- Open questions remaining: rare blood items, hideout-only full refill.
+- **Hideout Med Bay** (Jul 2026): pay scrap → full blood refill (+ infection clear if present). Rare blood items still open.
 
-### Infection from bites *(MVP in game — Jul 2026 Phase 6)*
+### Infection from bites *(MVP in game — Jul 2026 Phase 6; treatment loop Jul 2026)*
 
 - **Bite** (zombie/leaper/spitter/etc. melee or pin; not bandit bullets) starts **infection**.
 - **One infection bar** (0–100%): fills over ~90s after being bitten.
-- **Treatment (MVP):** reach extraction / clear level door → infection cleared. Antidote item / hideout facility still TODO.
+- **Treatment:**
+  - Extraction / clear level door → infection cleared (MVP).
+  - **Antidote** — consumable hotkey (1/2/3) or medical item dropped on any limb; also trader + crate/spitter loot.
+  - **Hideout Med Bay** — Facilities tab; scrap cost clears infection + refills blood.
 - If bar hits 100% before treatment → death (“INFECTION TOOK HOLD!”).
 
 ### Lore: virus has weakened

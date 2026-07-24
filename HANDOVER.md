@@ -2,7 +2,21 @@
 
 **For agents:** If a task requires a lot of thinking (multi-step design, edge cases, or non-trivial logic), **switch to planning** first—e.g. create or use a plan in `.cursor/plans/` and get alignment before making large code changes.
 
-**Last updated:** Feb 24, 2025. **Magazines & inventory:** ~99% complete; right-click mag menu and stash ammo→mag reload fixed Feb 24 — **tested and working.** **Flashlight:** Will be a tutorial option (body light or permanent upgrade); deferred until tutorial work. **Session work (Feb 2025):** Mag placement priority fix (rig→pockets→backpack→ground), level 1 key guaranteed, guns spawn with loaded mags. **Completed:** Limb/damage system, both-arms-broken, med system, rig/armor UX. **Feb 22 session:** Health merged into gear (single body view), med drop from containers onto limbs fixed, ghost/stuck-drag fix, body layout tweaks — see **"Session work (Feb 22, 2025)"** below. **Feb 24 session:** Right-click mag menu (Unload/Load mag) and unload destination + stash ammo→mag — see **"Session work (Feb 24, 2025)"** below.
+**Last updated:** Jul 23, 2026. **Revival sprint:** Phases 0–2/5–6 done; infection treatment + death recap shipped (see below). **Magazines & inventory:** ~99% complete (Feb 24). **Flashlight:** deferred until tutorial work.
+
+---
+
+## Session work (Jul 23, 2026) — infection loop + death recap
+
+**Antidote**
+- Item `antidote`: medical (backpack/med bag; drop on any limb while infected) + consumable hotkey (`CONFIG.CONSUMABLES.antidote`, effect `cure_infection`).
+- Trader stock, sell grid, level pools 3–7, spitter drops. Clears infection; no-op if not infected (item not consumed).
+
+**Hideout Med Bay**
+- Facilities tab row 3: `createMedBayFacilityCard` — scrap cost (`CONFIG.HIDEOUT.MED_BAY_COST`) clears infection + full blood refill.
+
+**Death recap**
+- `handlePlayerDeath` shows cause / limb / source / mid-raid loot lost vs checkpoint (`diffLostItemLabels`). `DEATH_RESTART` = 5s.
 
 ---
 
