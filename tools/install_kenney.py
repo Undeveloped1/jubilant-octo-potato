@@ -1,5 +1,5 @@
 """
-Install curated Kenney Top-down Shooter (CC0) assets into assets/.
+Install curated Kenney Top-down Shooter (CC0) assets into public/assets/.
 Expects extracted pack at tools/tmp/kenney/ (from OpenGameArt topdown-shooter.zip).
 """
 from __future__ import annotations
@@ -13,9 +13,9 @@ from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "tools" / "tmp" / "kenney" / "PNG"
-OUT_SPRITES = ROOT / "assets" / "sprites"
-OUT_TILES = ROOT / "assets" / "tiles"
-OUT_UI = ROOT / "assets" / "ui"
+OUT_SPRITES = ROOT / "public" / "assets" / "sprites"
+OUT_TILES = ROOT / "public" / "assets" / "tiles"
+OUT_UI = ROOT / "public" / "assets" / "ui"
 
 CHAR_MAP = {
     "player": SRC / "Soldier 1" / "soldier1_gun.png",

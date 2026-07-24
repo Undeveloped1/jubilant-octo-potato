@@ -48,15 +48,15 @@ Context: built Jan–Feb 2026 as a first-ever coding project. Tooling and AI ass
 
 Current: single 18,900-line `game.js` (GameScene ~7,200 lines, HideoutScene ~4,700, 95 global helper functions). It works; it's just at its ceiling.
 
-- [ ] Add Vite (dev server + build; also fixes CDN dependency by bundling Phaser via npm)
-- [ ] Peel off modules in risk order — **data first, scenes last**:
+- [x] Add Vite (dev server + build; Phaser via npm) — `npm run dev` / `npm run build`; Pages Action `.github/workflows/pages.yml` (set Pages source to GitHub Actions)
+- [x] Peel off modules in risk order — **data first, scenes last**:
   1. `src/config.js` — CONFIG + all tables (limb weights, outcome tables, loot pools, magazines, trader grids)
   2. `src/inventory.js` — the pure helper functions (mag/grid/pocket/stash logic). They're already well-factored; they just live in the wrong file
   3. `src/persistence.js` — save/load/settings
   4. `src/audio.js` — SoundManager
   5. Scenes one at a time, only when touching them anyway
-- [ ] Add Vitest; write tests for `inventory.js` as it's extracted. Bug history is dominated by inventory edge cases (mag placement priority, pocket `_spansFrom`, stash drops) — exactly what unit tests prevent recurring
-- [ ] Each extraction is one commit; game must boot after every commit
+- [x] Add Vitest; write tests for `inventory.js` as it's extracted. Bug history is dominated by inventory edge cases (mag placement priority, pocket `_spansFrom`, stash drops) — exactly what unit tests prevent recurring
+- [x] Each extraction is one commit; game must boot after every commit
 
 ## Phase 4 — Save durability *(one evening, agent)*
 
@@ -99,9 +99,9 @@ The depth exists but is invisible outside the combat log. Make it felt:
 
 ## Sprint status — Jul 23, 2026 (end of day)
 
-**Shipped this revival sprint:** Phases 0–2 (tech), 5–6, 7, infection treatment loop.  
+**Shipped this revival sprint:** Phases 0–2 (tech), 3 (module peels + Vitest), 5–6, 7, infection treatment loop.  
 **Your only open item tonight:** send `PLAYTEST.md` link to friends.  
-**Parked (not tonight):** Phase 3 Vite/peel, Phase 4 save migrations, super-infection.
+**Parked (not tonight):** Phase 4 save migrations, super-infection.
 
 ---
 

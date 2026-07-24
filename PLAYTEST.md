@@ -2,7 +2,11 @@
 
 **Link:** https://undeveloped1.github.io/jubilant-octo-potato/
 
+**Local:** `npm install` then `npm run dev` → http://localhost:5173/
+
 Send to 3+ people. Watch at least one play **without coaching**.
+
+**Pages note (after Phase 3):** Repo Settings → Pages → Source must be **GitHub Actions** (workflow `.github/workflows/pages.yml`), not “Deploy from branch”.
 
 ## What to ask (or watch for)
 

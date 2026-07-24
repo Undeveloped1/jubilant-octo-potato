@@ -25,8 +25,8 @@
 4. **Alpha** — true RGBA, no checkerboard baked into RGB.
 5. **Palette** — match Kenney flat fills (green grass `#27AE60`-ish, wood `#BB8044`, charcoal floors `#4A4A4A`, wall accent `#D87F4A`).
 6. **Tints** — multiply lightly (`0xb8ffb8`, `0xffaa66`, `0xcc88ff`). Never full `0x00ff00` / `0xff0000` on characters.
-7. **Install path** — drop source under `tools/tmp/kenney/`, run `python tools/install_kenney.py`, commit `assets/`.
+7. **Install path** — drop source under `tools/tmp/kenney/`, run `python tools/install_kenney.py`, commit `public/assets/`.
 
 ## Credit
 
-Kenney.nl Top-down Shooter (CC0). Attribution appreciated, not required. License copy: `assets/sprites/KENNEY_LICENSE.txt`.
+Kenney.nl Top-down Shooter (CC0). Attribution appreciated, not required. License copy: `public/assets/sprites/KENNEY_LICENSE.txt`.
