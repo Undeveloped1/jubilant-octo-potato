@@ -1,4 +1,4 @@
-import { CONFIG, getDefaultLimbHp } from './config.js';
+import { CONFIG, getDefaultLimbHp, LIMB_MAX_HP } from './config.js';
 import {
   isModItem,
   modFitsSlot,
@@ -37,6 +37,8 @@ import {
   tryAddItem,
   isPocketSlotEmpty,
   ensureEquippedModsShape,
+  POCKET_LAYOUT,
+  POCKET_SLOT_INDEX_TO_POCKET,
 } from './inventory.js';
 import {
   savePersistent,
