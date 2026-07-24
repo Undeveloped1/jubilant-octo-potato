@@ -292,7 +292,10 @@ const CONFIG = {
         EXTRACTION: 15000,
         DEATH_RESTART: 5000,
         LEVEL_TRANSITION: 1000,
-        NVG_CRAFT: 90000
+        NVG_CRAFT: 90000,
+        /** Raid countdown shown as big HUD clock (ms). Turns red at ≤ RAID_TIMER_WARN_MS. */
+        RAID_LIMIT_MS: 8 * 60 * 1000,
+        RAID_TIMER_WARN_MS: 60 * 1000
     },
     
     // UI settings

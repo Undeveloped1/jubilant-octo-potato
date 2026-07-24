@@ -506,11 +506,12 @@ function ensureRigStats(stats) {
     if (!stats.armor || typeof stats.armor !== 'object') stats.armor = Object.assign({}, DEFAULT_ARMOR);
     if (!stats.rigInventories || typeof stats.rigInventories !== 'object') stats.rigInventories = {};
     if (stats.armor && stats.armor.rig) {
+        // Canonical layout: 4 columns × 2 rows = four vertical 1×2 sections (shotgun 2×1 spans two columns)
         if (!stats.rigGrid || typeof stats.rigGrid !== 'object') {
             stats.rigGrid = { gridW: 4, gridH: 2, items: [], _nextId: 1 };
         }
-        if (stats.rigGrid.gridW === undefined) stats.rigGrid.gridW = 4;
-        if (stats.rigGrid.gridH === undefined) stats.rigGrid.gridH = 2;
+        stats.rigGrid.gridW = 4;
+        stats.rigGrid.gridH = 2;
         ensureGridItems(stats.rigGrid);
     }
 }

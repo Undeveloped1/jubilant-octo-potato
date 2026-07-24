@@ -7798,9 +7798,12 @@ class GameScene extends Phaser.Scene {
         // UI elements needed by spawnLevelEntities (must be created before)
         this.uiGraphics = this.add.graphics().setDepth(100);
         this.uiText = this.add.text(10, 65, '', { font: '16px Arial', fill: '#fff' }).setDepth(100);
-        // Phase 7 — run timer + extraction pressure (top center)
+        // Phase 7 — extraction pressure (top center); big raid countdown below it
         this.extractHudText = this.add.text(400, 6, '', {
             font: '15px Arial', fill: '#cccccc', fontStyle: 'bold'
+        }).setOrigin(0.5, 0).setDepth(100).setScrollFactor(0);
+        this.raidTimerText = this.add.text(400, 28, '8:00', {
+            font: '36px Arial', fill: '#00ff00', fontStyle: 'bold'
         }).setOrigin(0.5, 0).setDepth(100).setScrollFactor(0);
         this.bossBar = this.add.graphics().setDepth(150).setVisible(false);
         
@@ -8198,7 +8201,8 @@ class GameScene extends Phaser.Scene {
         if (!stats.weaponSlots) stats.weaponSlots = { primary: null, secondary: null, sidearm: 'pistol', melee: null };
         stats.weaponSlots.sidearm = 'pistol';
         const cap = getMagazineCapacity('mag_pistol');
-        setEquippedMag(stats, 'pistol', { itemId: 'mag_pistol', rounds: Math.min(10, cap), maxRounds: cap });
+        // Nearly empty mag in gun so R reload is meaningful after F pickup → pocket
+        setEquippedMag(stats, 'pistol', { itemId: 'mag_pistol', rounds: 1, maxRounds: cap });
 
         if (!this.textures.exists('pickup_dropped')) {
             const g = this.make.graphics({ x: 0, y: 0, add: false });
@@ -8208,10 +8212,10 @@ class GameScene extends Phaser.Scene {
         }
         const spr = this.add.image(this.player.x + 48, this.player.y, 'pickup_dropped').setDepth(5);
         this.droppedInventoryItems.add(spr);
-        spr.setData('type', { itemId: 'mag_pistol', count: 1, rounds: 5, maxRounds: cap });
+        spr.setData('type', { itemId: 'mag_pistol', count: 1, rounds: cap, maxRounds: cap });
 
-        this.showFloatingText(this.player.x, this.player.y - 40, 'MAG TEST: F to pick up', 0x00ff00);
-        console.log('setupMagPickupTest: room cleared, pistol loaded, spare mag on floor — press F to pick up');
+        this.showFloatingText(this.player.x, this.player.y - 40, 'MAG TEST: F pick up, then R reload', 0x00ff00);
+        console.log('setupMagPickupTest: F = stow spare mag to pocket; R = reload from pocket (rig/pockets only)');
         return 'ok';
     }
     
@@ -8249,6 +8253,10 @@ class GameScene extends Phaser.Scene {
         if (this.extractHudText) {
             this.extractHudText.destroy();
             this.extractHudText = null;
+        }
+        if (this.raidTimerText) {
+            this.raidTimerText.destroy();
+            this.raidTimerText = null;
         }
         if (this._deathRecapKeyHandler && this.input && this.input.keyboard) {
             this.input.keyboard.off('keydown', this._deathRecapKeyHandler);
@@ -13369,11 +13377,10 @@ class GameScene extends Phaser.Scene {
         let reloadText = this.isReloading ? " [RELOADING]" : "";
         this.uiText.setText(`${weapon.toUpperCase()}: ${ammoStr}${reloadText} | GREN: ${getUsableGrenadeCount(this.playerStats)} | 🔧${this.playerStats.scrap} 💰${this.playerStats.credits} ⚙️${this.playerStats.materials}`);
 
-        // Run clock + extraction pressure (top center)
+        // Extraction pressure (top) + big 8:00 raid countdown (green → red at ≤1:00)
         const extractStatus = this.getExtractPressureStatus();
-        const runClock = this.formatRunClock(Date.now() - (this.levelStartTime || Date.now()));
         if (this.extractHudText) {
-            this.extractHudText.setText(`LV${this.currentLevel}  ${runClock}  |  ${extractStatus.label}`);
+            this.extractHudText.setText(`LV${this.currentLevel}  |  ${extractStatus.label}`);
             this.extractHudText.setColor(extractStatus.color || '#cccccc');
             if (extractStatus.kind === 'beacon') {
                 const pulse = 0.7 + Math.sin(this.time.now / 120) * 0.3;
@@ -13382,8 +13389,16 @@ class GameScene extends Phaser.Scene {
                 this.extractHudText.setAlpha(1);
             }
         }
+        if (this.raidTimerText) {
+            const limitMs = (CONFIG.TIMINGS && CONFIG.TIMINGS.RAID_LIMIT_MS) || (8 * 60 * 1000);
+            const warnMs = (CONFIG.TIMINGS && CONFIG.TIMINGS.RAID_TIMER_WARN_MS) || (60 * 1000);
+            const elapsed = Date.now() - (this.levelStartTime || Date.now());
+            const remainingMs = Math.max(0, limitMs - elapsed);
+            this.raidTimerText.setText(this.formatRunClock(remainingMs));
+            this.raidTimerText.setColor(remainingMs <= warnMs ? '#ff2222' : '#00ff00');
+        }
         if (extractStatus.kind === 'beacon' && extractStatus.progress != null) {
-            const barW = 160, barH = 6, barX = 400 - barW / 2, barY = 26;
+            const barW = 160, barH = 6, barX = 400 - barW / 2, barY = 68;
             this.uiGraphics.fillStyle(0x000000, 0.55);
             this.uiGraphics.fillRect(barX - 1, barY - 1, barW + 2, barH + 2);
             this.uiGraphics.fillStyle(0x442222, 1);

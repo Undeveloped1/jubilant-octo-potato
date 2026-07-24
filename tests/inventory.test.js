@@ -11,6 +11,7 @@ import {
   getDefaultBackpack,
   placeMagInRigPocketBackpackOrGround,
   findFirstEmptySlotForMag,
+  findFirstMagInRigOrPockets,
 } from '../src/inventory.js';
 
 describe('isPocketSlotEmpty', () => {
@@ -89,5 +90,19 @@ describe('placeMagInRigPocketBackpackOrGround', () => {
 
     expect(dropped).toHaveLength(0);
     expect(stats.pockets[0][0]).toMatchObject({ itemId: 'mag_pistol', rounds: 7 });
+    // Reload path only looks at rig/pockets — pocket mag must be findable
+    const found = findFirstMagInRigOrPockets(stats, 'pistol');
+    expect(found).toMatchObject({ container: 'pocket', itemId: 'mag_pistol', rounds: 7 });
+  });
+
+  it('findFirstEmptySlotForMag prefers rig 4×2 when rig equipped (shotgun 2×1 fits)', () => {
+    const stats = {
+      armor: { rig: { itemId: 'rig' } },
+      rigGrid: { gridW: 4, gridH: 2, items: [], _nextId: 1 },
+      pockets: getDefaultPockets(),
+      backpack: getDefaultBackpack(),
+    };
+    const dest = findFirstEmptySlotForMag(stats, 2, 1);
+    expect(dest).toMatchObject({ container: 'rig', row: 0, col: 0 });
   });
 });

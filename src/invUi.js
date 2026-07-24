@@ -564,7 +564,9 @@ export function renderInventoryPanel(scene, ctx) {
             const cfg = getInventoryItemConfig(p.itemId);
             const lbl = (cfg && cfg.icon) ? cfg.icon : (p.itemId || '?').slice(0, 2).toUpperCase();
             const sw = p.sizeW || 1, sh = p.sizeH || 1;
-            const hw = sw * rigCellSize, hh = sh * rigCellSize;
+            // Span columns with gaps so 2×1 (shotgun) covers two 1×2 sections horizontally
+            const hw = sw * rigStepX - (sw > 1 ? rigColGap : 0);
+            const hh = sh * rigStepY - (sh > 1 ? 1 : 0);
             const tx = rigGridX + p.col * rigStepX + hw / 2;
             const ty = rigGridY + p.row * rigStepY + hh / 2;
             if (cfg && cfg.color) {
