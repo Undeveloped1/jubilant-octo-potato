@@ -117,6 +117,15 @@ import {
   ensureInvCtx,
 } from './invUiContext.js';
 
+/** URL smoke tests: ?smoke=magPickup boots straight into a raid ready to validate mag stow. */
+function getSmokeTestFromUrl() {
+    try {
+        return new URLSearchParams(window.location.search).get('smoke');
+    } catch (e) {
+        return null;
+    }
+}
+
 /** Apply per-enemy modifiers to outcome table. mods = { breakBonus, blackBonus, minorBleedBonus, majorBleedBonus }. */
 function outcomeTableWithEnemyModifiers(table, enemyType) {
     const mods = enemyType && ENEMY_OUTCOME_MODIFIERS[enemyType];
@@ -890,6 +899,15 @@ class MainMenuScene extends Phaser.Scene {
     constructor() { super('MainMenuScene'); }
     
     create() {
+        // One-click smoke: /?smoke=magPickup → empty room, pistol loaded, spare mag on floor
+        if (getSmokeTestFromUrl() === 'magPickup') {
+            const persistent = loadPersistent();
+            const stats = getStartingStats(persistent);
+            ensureEquippedMagazines(stats);
+            this.scene.start('GameScene', { level: 1, stats, smoke: 'magPickup' });
+            return;
+        }
+
         this.input.on('pointerdown', () => sfx.resume());
 
         // Clean dark background
@@ -8135,9 +8153,70 @@ class GameScene extends Phaser.Scene {
         
         // Scene shutdown cleanup
         this.events.on('shutdown', this.shutdown, this);
+
+        // Dev: recreate mag-pickup test (empty room, mag on floor, pistol already loaded)
+        window.setupMagPickupTest = () => this.setupMagPickupTest();
+        if (data.smoke === 'magPickup') {
+            this.time.delayedCall(50, () => this.setupMagPickupTest());
+        }
+    }
+
+    /**
+     * Mag-pickup smoke setup — also auto-run via /?smoke=magPickup
+     * Clears the current room, ensures pistol has a mag equipped, drops a spare mag nearby.
+     */
+    setupMagPickupTest() {
+        if (!this.player || !this.playerStats) {
+            console.warn('setupMagPickupTest: start a raid first');
+            return 'not in raid';
+        }
+        if (this.enemies) this.enemies.clear(true, true);
+        if (this.crates) this.crates.clear(true, true);
+        if (this.skulls) this.skulls.clear(true, true);
+        if (this.pickups) this.pickups.clear(true, true);
+        if (this.droppedInventoryItems) this.droppedInventoryItems.clear(true, true);
+        if (this.edgeSpawnTimer) this.edgeSpawnTimer.paused = true;
+
+        const stats = this.playerStats;
+        ensurePockets(stats);
+        ensureBackpackStats(stats);
+        ensureRigStats(stats);
+        // Remove spare pistol mags so the floor pickup is the only stow candidate
+        (stats.pockets || []).forEach((row, pi) => {
+            (row || []).forEach((slot, si) => {
+                if (slot && slot.itemId === 'mag_pistol') stats.pockets[pi][si] = null;
+            });
+        });
+        if (stats.backpack && Array.isArray(stats.backpack.items)) {
+            stats.backpack.items = stats.backpack.items.filter(p => p.itemId !== 'mag_pistol');
+        }
+        if (stats.rigGrid && Array.isArray(stats.rigGrid.items)) {
+            stats.rigGrid.items = stats.rigGrid.items.filter(p => p.itemId !== 'mag_pistol');
+        }
+
+        stats.currentWeapon = 'pistol';
+        if (!stats.weaponSlots) stats.weaponSlots = { primary: null, secondary: null, sidearm: 'pistol', melee: null };
+        stats.weaponSlots.sidearm = 'pistol';
+        const cap = getMagazineCapacity('mag_pistol');
+        setEquippedMag(stats, 'pistol', { itemId: 'mag_pistol', rounds: Math.min(10, cap), maxRounds: cap });
+
+        if (!this.textures.exists('pickup_dropped')) {
+            const g = this.make.graphics({ x: 0, y: 0, add: false });
+            g.fillStyle(0x8B4513, 1);
+            g.fillCircle(8, 8, 8);
+            g.generateTexture('pickup_dropped', 16, 16);
+        }
+        const spr = this.add.image(this.player.x + 48, this.player.y, 'pickup_dropped').setDepth(5);
+        this.droppedInventoryItems.add(spr);
+        spr.setData('type', { itemId: 'mag_pistol', count: 1, rounds: 5, maxRounds: cap });
+
+        this.showFloatingText(this.player.x, this.player.y - 40, 'MAG TEST: F to pick up', 0x00ff00);
+        console.log('setupMagPickupTest: room cleared, pistol loaded, spare mag on floor — press F to pick up');
+        return 'ok';
     }
     
     shutdown() {
+        if (window.setupMagPickupTest) delete window.setupMagPickupTest;
         // Clean up graphics objects to prevent errors during transition
         if (this.lightShape) {
             this.lightShape.destroy();
