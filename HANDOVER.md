@@ -22,6 +22,10 @@
 - Top-center HUD: `LV#  m:ss  |  FIND KEY / EXIT OPEN / BEACON` via `extractHudText` + `getExtractPressureStatus`.
 - Facilities **INSURANCE**: buy with scrap (`CONFIG.HIDEOUT.INSURANCE_*`); on death, mid-raid loot rolls return→`persistent.insuranceReturns` (claim after timer).
 
+**Death recap skip + playtest sheet**
+- Click / Space / Enter → `continueAfterDeathRecap()` (also auto after `DEATH_RESTART`).
+- `PLAYTEST.md` — link + questions for friends. Super-infection parked.
+
 ---
 
 ## Session work (Feb 24, 2025)

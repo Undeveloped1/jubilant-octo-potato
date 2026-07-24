@@ -10968,6 +10968,10 @@ class GameScene extends Phaser.Scene {
             this.extractHudText.destroy();
             this.extractHudText = null;
         }
+        if (this._deathRecapKeyHandler && this.input && this.input.keyboard) {
+            this.input.keyboard.off('keydown', this._deathRecapKeyHandler);
+            this._deathRecapKeyHandler = null;
+        }
         if (this.edgeSpawnTimer) { this.edgeSpawnTimer.destroy(); this.edgeSpawnTimer = null; }
         this.events.off('shutdown', this.shutdown, this);
     }
@@ -18458,11 +18462,39 @@ const pos = findSpace(backpack, 3, 2);
             { fontSize: '15px', fill: '#dddddd', align: 'center', lineSpacing: 5 }
         ).setOrigin(0.5).setScrollFactor(0).setDepth(depth + 2);
 
-        const hint = this.add.text(400, 450, 'Restarting…', {
+        const hint = this.add.text(400, 450, 'Click or Space to continue', {
             fontSize: '14px', fill: '#888888'
         }).setOrigin(0.5).setScrollFactor(0).setDepth(depth + 2);
 
         this._deathRecapNodes = [overlay, panel, title, body, hint];
+
+        // Click / Space / Enter skips the auto-restart wait
+        const skip = () => this.continueAfterDeathRecap();
+        overlay.setInteractive({ useHandCursor: true });
+        overlay.on('pointerdown', skip);
+        panel.setInteractive({ useHandCursor: true });
+        panel.on('pointerdown', skip);
+        this._deathRecapKeyHandler = (event) => {
+            if (event.code === 'Space' || event.code === 'Enter' || event.code === 'NumpadEnter') {
+                event.preventDefault();
+                skip();
+            }
+        };
+        this.input.keyboard.on('keydown', this._deathRecapKeyHandler);
+    }
+
+    continueAfterDeathRecap() {
+        if (this._deathRecapFinished) return;
+        this._deathRecapFinished = true;
+        if (this._deathRecapTimer) {
+            this._deathRecapTimer.remove(false);
+            this._deathRecapTimer = null;
+        }
+        if (this._deathRecapKeyHandler && this.input && this.input.keyboard) {
+            this.input.keyboard.off('keydown', this._deathRecapKeyHandler);
+            this._deathRecapKeyHandler = null;
+        }
+        this.scene.restart({ level: this.currentLevel, stats: this.checkpointStats });
     }
 
     /** Queue insured mid-raid loot for hideout claim. Returns note for death recap. */
@@ -18525,11 +18557,12 @@ const pos = findSpace(backpack, 3, 2);
         
         sfx.playerDeath();
         this.physics.pause();
+        this._deathRecapFinished = false;
         const recap = this.buildDeathRecap({ ...options, insuranceNote });
         this.showDeathRecap(recap);
-        
-        this.time.delayedCall(CONFIG.TIMINGS.DEATH_RESTART, () => {
-            this.scene.restart({ level: this.currentLevel, stats: this.checkpointStats });
+
+        this._deathRecapTimer = this.time.delayedCall(CONFIG.TIMINGS.DEATH_RESTART, () => {
+            this.continueAfterDeathRecap();
         });
     }
 

@@ -39,7 +39,7 @@ Context: built Jan–Feb 2026 as a first-ever coding project. Tooling and AI ass
 
 - [x] Enable GitHub Pages on `Undeveloped1/jubilant-octo-potato` (serve from `main`) — already on; `index.html` landed on `main` Jul 23, 2026
 - [x] Verify the game runs from the Pages URL (CDN Phaser + relative paths) — https://undeveloped1.github.io/jubilant-octo-potato/ boots to main menu
-- [ ] Hand the link to 3+ friends; watch at least one play without coaching
+- [ ] Hand the link to 3+ friends; watch at least one play without coaching — **Paul action**; sheet ready in `PLAYTEST.md`
 - Playtest questions: Do they understand extraction? Do they find the inventory? Does the limb system register at all?
 
 **This is the highest-information item in the whole plan.** Everything after it should be re-prioritized based on what playtesters actually stumble on.
@@ -86,14 +86,22 @@ The depth exists but is invisible outside the combat log. Make it felt:
 ## Phase 7 — Retention loop polish *(after playtest feedback)*
 
 - [x] Insurance mechanic (pay scrap; mid-raid loot returns after ~3m if not scavenged) — Facilities INSURANCE card (Jul 2026)
-- [x] Death recap screen: cause, limb, source, mid-raid loot left behind (Jul 2026) — click-to-skip still open
+- [x] Death recap screen: cause, limb, source, mid-raid loot (+ click/Space skip) (Jul 2026)
 - [x] Run timer + extraction pressure surfaced in HUD (Jul 2026) — LV / clock / FIND KEY|EXIT|BEACON
 
 ### Infection treatment (DESIGN.md — shipped Jul 2026, not a numbered phase)
 
 - [x] Antidote item (loot / trader consumable / limb-drop medical)
 - [x] Hideout Med Bay (cure + blood refill for scrap)
-- [ ] Super-infection / hero station (still deferred)
+- [ ] Super-infection / hero station (deferred to a later sprint)
+
+---
+
+## Sprint status — Jul 23, 2026 (end of day)
+
+**Shipped this revival sprint:** Phases 0–2 (tech), 5–6, 7, infection treatment loop.  
+**Your only open item tonight:** send `PLAYTEST.md` link to friends.  
+**Parked (not tonight):** Phase 3 Vite/peel, Phase 4 save migrations, super-infection.
 
 ---
 
