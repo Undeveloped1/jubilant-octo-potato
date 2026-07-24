@@ -114,7 +114,7 @@ Goal: make the *software* better, not just prettier. Review the codebase at four
 
 The inventory system is not “one module used two places.” Hideout piggybacks on raid UI via `GameScene.prototype.renderInventoryPanel.call(this)` + `_invIsHideout`, then adds a second ~1.3k-line stash layer. Persistence is half-extracted (`persistence.js` exists but run saves still hit `localStorage` directly ~80+ times in `game.js`).
 
-- [ ] Extract **shared inventory UI + medical apply** used by both GameScene and HideoutScene — kill `_invIsHideout` / prototype piggyback
+- [x] Extract **shared inventory UI + medical apply** used by both GameScene and HideoutScene — kill `_invIsHideout` / prototype piggyback (`src/invUi.js`, `src/invUiContext.js`, `src/medical.js`; Jul 24 2026)
 - [ ] Route **all** save I/O through `persistence.js` (no raw `localStorage.setItem(CONFIG.SAVE_KEY, …)` in scenes)
 - [ ] Split HideoutScene / GameScene into feature-sized modules only *after* the two items above (otherwise you just move the god object)
 
@@ -132,12 +132,12 @@ Better shape:  Raid / Hub scenes → shared InvUI → inventory domain (already 
 ### Function
 
 - [ ] Collapse `renderInventoryPanel` mega-closure into named handlers (after shared InvUI extract)
-- [ ] Reduce `_invIsHideout` / drag-source branching; one code path per action
+- [x] Reduce `_invIsHideout` / drag-source branching; one code path per action (`invUiContext` mode + callbacks; Jul 24 2026)
 - [ ] Deduplicate settings / export / god-mode between MainMenuScene and HideoutScene
 
 ### Line
 
-- [ ] Merge duplicate limb med-drop blocks (~10809 vs ~12106 in `game.js`) into one helper
+- [x] Merge duplicate limb med-drop blocks into one helper (`src/medical.js` `applyMedicalItemToLimb`; Jul 24 2026)
 - [ ] Remove duplicated save-field migration patches (Hideout create / GameScene create / `persistence.loadPersistent`)
 - [ ] Delete obvious dead code when found during the above — no drive-by rewrites
 
@@ -149,7 +149,7 @@ Better shape:  Raid / Hub scenes → shared InvUI → inventory domain (already 
 
 **Shipped:** Phases 0–3 (tech + Vite peels), 5–7, infection treatment.  
 **Open (Paul):** playtest handoff (`PLAYTEST.md`); set Pages source to **GitHub Actions**.  
-**Next agent work (pick):** Phase 4 (save versioning) and/or Phase 8 architecture (shared inventory UI + persistence authority).  
+**Next agent work (pick):** Phase 8 architecture #2 (all save I/O through `persistence.js`) and/or Phase 4 (save versioning — pairs with #2).  
 **Parked:** super-infection / hero station.
 
 ---

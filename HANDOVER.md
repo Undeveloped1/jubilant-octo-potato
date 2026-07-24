@@ -2,19 +2,22 @@
 
 **For agents:** If a task requires a lot of thinking (multi-step design, edge cases, or non-trivial logic), **switch to planning** first—e.g. create or use a plan in `.cursor/plans/` and get alignment before making large code changes.
 
-**Last updated:** Jul 24, 2026. **Phase 3 peels done:** `src/config.js`, `src/inventory.js`, `src/persistence.js`, `src/audio.js`; Vitest in `tests/inventory.test.js`. **Dev:** `npm run dev` (Vite, port 5173). **Revival sprint:** Phases 0–2/5–6 done; infection treatment + death recap shipped (see below). **Magazines & inventory:** ~99% complete (Feb 24). **Flashlight:** deferred until tutorial work.
+**Last updated:** Jul 24, 2026. **Phase 3 peels done** + **Phase 8 architecture #1 (shared InvUI + medical apply).** **Dev:** `npm run dev` (Vite, port 5173). **Revival sprint:** Phases 0–2/5–7 done; infection treatment + death recap shipped. **Next maintainability:** Phase 8 #2 persistence authority, then Phase 4 save ladder. **Flashlight:** deferred until tutorial work.
 
 ---
 
 ## Dev & module layout (Jul 24, 2026)
 
 - **`npm run dev`** — Vite dev server; entry `src/main.js` sets `window.Phaser` then dynamic-imports `src/game.js`.
-- **`npm run build`** / **`npm test`** — production bundle and Vitest (inventory unit tests).
+- **`npm run build`** / **`npm test`** — production bundle and Vitest (`tests/inventory.test.js`, `tests/medical.test.js`).
 - **`src/config.js`** — `CONFIG`, limb/damage tables.
 - **`src/inventory.js`** — pure mag/grid/pocket/stash helpers.
 - **`src/persistence.js`** — save/load/settings, `DEFAULT_STATS`, migrations (`migrateToPhysicalMagazines`, etc.).
 - **`src/audio.js`** — `SoundManager`, exported `sfx` singleton.
-- **`src/game.js`** — scenes + gameplay (still monolithic; scenes peel later).
+- **`src/medical.js`** — `applyMedicalItemToLimb`, `cureInfectionOnStats`, limb HP helpers (shared by InvUI + combat).
+- **`src/invUiContext.js`** — `createRaidInvCtx` / `createHideoutInvCtx` (replaces `_invIsHideout`).
+- **`src/invUi.js`** — shared `renderInventoryPanel(scene, ctx)` used by raid + Hideout CHARACTER (no `GameScene.prototype` piggyback).
+- **`src/game.js`** — scenes + gameplay (still large; stash UI remains on HideoutScene).
 
 ---
 
