@@ -7,6 +7,10 @@ import {
   canPlace,
   tryAddItem,
   ensureGridItems,
+  getDefaultPockets,
+  getDefaultBackpack,
+  placeMagInRigPocketBackpackOrGround,
+  findFirstEmptySlotForMag,
 } from '../src/inventory.js';
 
 describe('isPocketSlotEmpty', () => {
@@ -57,5 +61,33 @@ describe('canPlace / tryAddItem', () => {
     expect(grid.items[0].itemId).toBe('bandage');
     expect(grid.items[0].sizeW).toBe(1);
     expect(grid.items[0].sizeH).toBe(1);
+  });
+});
+
+describe('placeMagInRigPocketBackpackOrGround', () => {
+  it('stows pistol mag into empty null pocket slots (no ground drop)', () => {
+    const stats = {
+      armor: { rig: null },
+      pockets: getDefaultPockets(),
+      backpack: getDefaultBackpack(),
+    };
+    const dropped = [];
+    const scene = {
+      droppedInventoryItems: { add: (spr) => dropped.push(spr) },
+      textures: { exists: () => true },
+      add: { image: () => ({ setDepth() { return this; }, setData() { return this; } }) },
+      player: { x: 0, y: 0 },
+    };
+    const dest = findFirstEmptySlotForMag(stats, 1, 1);
+    expect(dest).toEqual({ container: 'pocket', pocketIndex: 0, slotIndex: 0 });
+
+    placeMagInRigPocketBackpackOrGround(scene, stats, {
+      itemId: 'mag_pistol',
+      rounds: 7,
+      maxRounds: CONFIG.MAGAZINES.mag_pistol.capacity,
+    });
+
+    expect(dropped).toHaveLength(0);
+    expect(stats.pockets[0][0]).toMatchObject({ itemId: 'mag_pistol', rounds: 7 });
   });
 });

@@ -178,7 +178,7 @@ function findFirstEmptySlotForMag(stats, sizeW, sizeH, excludeSlot) {
     if ((sizeW === 2 && sizeH === 1) || (sizeW === 1 && sizeH === 2)) {
         for (let pi = 0; pi <= 1; pi++) {
             if (exclude && exclude.container === 'pocket' && exclude.pocketIndex === pi) continue;
-            if (pockets[pi] && pockets[pi].length >= 2 && isPocketSlotEmpty(pi, 0) && isPocketSlotEmpty(pi, 1))
+            if (pockets[pi] && pockets[pi].length >= 2 && isPocketSlotEmpty(pockets, pi, 0) && isPocketSlotEmpty(pockets, pi, 1))
                 return { container: 'pocket', pocketIndex: pi, slotIndex: 0, rotated: sizeW === 1 && sizeH === 2 };
         }
     }
@@ -249,15 +249,17 @@ function placeMagInRigPocketBackpackOrGround(scene, stats, magState, persistentS
         else if (dest.container === 'pocket') {
             ensurePockets(stats);
             if (placeW === 1 && placeH === 1) {
-                const slot = stats.pockets[dest.pocketIndex] && stats.pockets[dest.pocketIndex][dest.slotIndex];
-                if (slot && !slot.itemId) {
+                // Empty slots are null — must accept null, not only `{ itemId: undefined }` objects
+                if (isPocketSlotEmpty(stats.pockets, dest.pocketIndex, dest.slotIndex)) {
                     stats.pockets[dest.pocketIndex][dest.slotIndex] = { itemId: magState.itemId, count: 1, rounds: magExtra.rounds, maxRounds: magExtra.maxRounds };
                     placed = true;
                 }
             } else if (placeW === 2 && placeH === 1 && dest.slotIndex === 0) {
-                stats.pockets[dest.pocketIndex][0] = { itemId: magState.itemId, count: 1, rounds: magExtra.rounds, maxRounds: magExtra.maxRounds, sizeW: 2, sizeH: 1 };
-                stats.pockets[dest.pocketIndex][1] = { _spansFrom: 0 };
-                placed = true;
+                if (isPocketSlotEmpty(stats.pockets, dest.pocketIndex, 0) && isPocketSlotEmpty(stats.pockets, dest.pocketIndex, 1)) {
+                    stats.pockets[dest.pocketIndex][0] = { itemId: magState.itemId, count: 1, rounds: magExtra.rounds, maxRounds: magExtra.maxRounds, sizeW: 2, sizeH: 1 };
+                    stats.pockets[dest.pocketIndex][1] = { _spansFrom: 0 };
+                    placed = true;
+                }
             }
         }
     }
