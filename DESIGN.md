@@ -6,19 +6,18 @@ Design and lore ideas captured for future implementation. **No implementation im
 
 ## Blood & infection (brainstorm)
 
-### Blood bar (not yet implemented)
+### Blood bar *(MVP in game — Jul 2026 Phase 6)*
 
-- **Single global blood bar** that empties when minor/major bleeds tick.
-- Bleeds drain from this **total** pool instead of (or in addition to?) per-limb HP — still under design.
-- One number, one UI bar: “I’m losing blood; I need to stop the bleeds.”
-- Open questions: refill (only when bleeds stopped? rare item? only at hideout?), and how blood = 0 interacts with death (instant death vs critical state vs other).
+- **Single global blood bar** that empties when minor/major bleeds tick (in addition to per-limb HP).
+- Regen while no bleeds are active; blood = 0 → bleed-out death.
+- Open questions remaining: rare blood items, hideout-only full refill.
 
-### Infection from bites (not yet implemented)
+### Infection from bites *(MVP in game — Jul 2026 Phase 6)*
 
-- **Bite** (e.g. zombie/leaper melee or dedicated bite attack) starts **infection**.
-- **One infection bar** (e.g. 0–100%): fills over time after being bitten.
-- **Treatment:** reach extraction, use antidote, or use hideout facility. If bar hits 100% before treatment → game over (turn / die).
-- Can be flavoured as “infection taking over your blood” with a single meter (e.g. clean blood vs infection, or one bar that fills).
+- **Bite** (zombie/leaper/spitter/etc. melee or pin; not bandit bullets) starts **infection**.
+- **One infection bar** (0–100%): fills over ~90s after being bitten.
+- **Treatment (MVP):** reach extraction / clear level door → infection cleared. Antidote item / hideout facility still TODO.
+- If bar hits 100% before treatment → death (“INFECTION TOOK HOLD!”).
 
 ### Lore: virus has weakened
 

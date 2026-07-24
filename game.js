@@ -59,6 +59,22 @@ const CONFIG = {
         }
     },
 
+    // Phase 6 — make limb sim visible / felt
+    LIMB_VIS: {
+        LIMP_ORIGIN_AMP: 0.1,
+        LIMP_BOB_HZ: 5,
+        ARM_SWAY_AMP: 0.1,
+        ARM_SWAY_HZ: 2.2,
+        BLEED_DROP_INTERVAL_MS: 200,
+        HUD_FLASH_MS: 380,
+        BLOOD_MAX: 100,
+        BLOOD_DRAIN_MINOR: 1,
+        BLOOD_DRAIN_MAJOR: 2,
+        BLOOD_REGEN_PER_SEC: 3,
+        INFECTION_FILL_MS: 90000,
+        INFECTION_SOURCES: ['walker', 'leaper', 'spitter', 'exploder', 'boss', 'necromancer']
+    },
+
     BLEED: {
         MINOR_INTERVAL_MS: 3000,
         MINOR_DAMAGE: 1,
@@ -1253,9 +1269,35 @@ function limbHasBreak(limbHp, limbId) {
     return limbHp && limbHp[limbId] && Array.isArray(limbHp[limbId].effects) && limbHp[limbId].effects.includes('break');
 }
 
+function limbHasBleedEffect(limbHp, effectId) {
+    if (!limbHp) return false;
+    return Object.keys(limbHp).some(id => {
+        const e = limbHp[id] && limbHp[id].effects;
+        return Array.isArray(e) && e.includes(effectId);
+    });
+}
+
+function hasAnyBleed(limbHp) {
+    return limbHasBleedEffect(limbHp, 'minor_bleed') || limbHasBleedEffect(limbHp, 'major_bleed');
+}
+
+/** Ensure blood/infection fields exist on loaded/legacy saves. */
+function ensureLimbVisStats(stats) {
+    if (!stats) return stats;
+    const maxB = (CONFIG.LIMB_VIS && CONFIG.LIMB_VIS.BLOOD_MAX) || 100;
+    if (stats.maxBlood == null || stats.maxBlood <= 0) stats.maxBlood = maxB;
+    if (stats.blood == null || stats.blood < 0) stats.blood = stats.maxBlood;
+    if (stats.infection == null || stats.infection < 0) stats.infection = 0;
+    if (stats.infection > 100) stats.infection = 100;
+    return stats;
+}
+
 const DEFAULT_STATS = { 
     hp: 190, maxHp: 190, stamina: 100, maxStamina: 100, scrap: 0,
     limbHp: getDefaultLimbHp(),
+    blood: 100,
+    maxBlood: 100,
+    infection: 0, // 0–100; fills after zombie bite; cleared on extraction
     credits: 0,
     materials: 0,
     grenades: 0,
@@ -1733,6 +1775,17 @@ class SoundManager {
     heartbeat() {
         this.playTone(70, 'sine', 0.09, 0.28);
         setTimeout(() => this.playTone(55, 'sine', 0.08, 0.22), 130);
+    }
+
+    limpFootstep() {
+        const pitch = 70 + Math.random() * 30;
+        this.playFilteredNoise(0.07, 0.18, pitch * 8, 'lowpass');
+        this.playTone(pitch, 'sine', 0.04, 0.12);
+    }
+
+    infectionWarn() {
+        this.playTone(180, 'sawtooth', 0.12, 0.2);
+        this.playTone(140, 'sine', 0.15, 0.25);
     }
     
     // ==================== MOVEMENT SOUNDS ====================
@@ -3116,6 +3169,7 @@ function checkUpgrades(persistent) {
 // Generate starting stats with permanent upgrades applied
 function getStartingStats(persistent) {
     const stats = JSON.parse(JSON.stringify(DEFAULT_STATS));
+    ensureLimbVisStats(stats);
     
 if (!stats.backpack || !Array.isArray(stats.backpack.items)) {
         stats.backpack = getDefaultBackpack();
@@ -9901,7 +9955,12 @@ class GameScene extends Phaser.Scene {
         Object.keys(this.playerStats.limbHp).forEach(limbId => {
             if (!Array.isArray(this.playerStats.limbHp[limbId].effects)) this.playerStats.limbHp[limbId].effects = [];
         });
+        ensureLimbVisStats(this.playerStats);
         this.lastBleedTick = { minor: {}, major: {} };
+        this.limbHudFlash = null;
+        this._lastBleedDrop = 0;
+        this._limpPhase = 0;
+        this._infectionWarned = (this.playerStats.infection || 0) > 0;
         // Test limb statuses: set to false when done testing trauma/bleed/break items
         const APPLY_TEST_LIMB_STATUSES = false;
         // Set true to test "both arms broken" (door delay, 1 damage per shot/grenade/loot, recovery damage). Broken = break status; arms black (0 HP) from damage separately.
@@ -10840,11 +10899,12 @@ class GameScene extends Phaser.Scene {
             }
             this.isReloading = true;
             sfx.reload();
-            this.showFloatingText(this.player.x, this.player.y - 40, "RELOADING...", 0xffff00);
             let reloadTime = Math.floor((wpnConfig.RELOAD_TIME || 1000) * (1 - (this.swiftReloadBonus || 0)));
             const limbHpRel = this.playerStats.limbHp;
+            const slowReload = (limbHpRel && (limbHasBreak(limbHpRel, 'leftArm') || limbHasBreak(limbHpRel, 'rightArm'))) || this.hasOneArmBlacked();
             if (limbHpRel && (limbHasBreak(limbHpRel, 'leftArm') || limbHasBreak(limbHpRel, 'rightArm'))) reloadTime += 600;
             if (this.hasOneArmBlacked()) reloadTime += 600;
+            this.showFloatingText(this.player.x, this.player.y - 40, slowReload ? "SLOW RELOAD..." : "RELOADING...", slowReload ? 0xffaa00 : 0xffff00);
             this.reloadTimer = this.time.delayedCall(reloadTime, () => {
                 if (equipped) placeMagInRigPocketBackpackOrGround(this, this.playerStats, equipped);
                 setEquippedMag(this.playerStats, weapon, null);
@@ -10876,11 +10936,12 @@ class GameScene extends Phaser.Scene {
         }
         this.isReloading = true;
         sfx.reload();
-        this.showFloatingText(this.player.x, this.player.y - 40, "RELOADING...", 0xffff00);
         let reloadTime = Math.floor(wpnConfig.RELOAD_TIME * (1 - (this.swiftReloadBonus || 0)));
         const limbHpRel = this.playerStats.limbHp;
+        const slowReload = (limbHpRel && (limbHasBreak(limbHpRel, 'leftArm') || limbHasBreak(limbHpRel, 'rightArm'))) || this.hasOneArmBlacked();
         if (limbHpRel && (limbHasBreak(limbHpRel, 'leftArm') || limbHasBreak(limbHpRel, 'rightArm'))) reloadTime += 600;
         if (this.hasOneArmBlacked()) reloadTime += 600;
+        this.showFloatingText(this.player.x, this.player.y - 40, slowReload ? "SLOW RELOAD..." : "RELOADING...", slowReload ? 0xffaa00 : 0xffff00);
         this.reloadTimer = this.time.delayedCall(reloadTime, () => {
             const needed = effectiveMagSize - this.playerStats.magazines[weapon];
             const toLoad = Math.min(needed, getReserveAmmoCount(this.playerStats, weapon));
@@ -17048,10 +17109,18 @@ const pos = findSpace(backpack, 3, 2);
 
         if (this.isPaused) return;
 
-        // Face aim direction (Kenney sprites face +X / right)
+        // Face aim direction (Kenney sprites face +X / right) + broken-arm sway
         if (this.player && this.player.active && !this.isInventoryOpen) {
             const aim = this.input.activePointer;
-            this.player.setRotation(Phaser.Math.Angle.Between(this.player.x, this.player.y, aim.worldX, aim.worldY));
+            let rot = Phaser.Math.Angle.Between(this.player.x, this.player.y, aim.worldX, aim.worldY);
+            const limbHpAim = this.playerStats.limbHp;
+            const armBroken = limbHpAim && (limbHasBreak(limbHpAim, 'leftArm') || limbHasBreak(limbHpAim, 'rightArm'));
+            if (armBroken) {
+                const amp = (CONFIG.LIMB_VIS && CONFIG.LIMB_VIS.ARM_SWAY_AMP) || 0.1;
+                const hz = (CONFIG.LIMB_VIS && CONFIG.LIMB_VIS.ARM_SWAY_HZ) || 2.2;
+                rot += Math.sin(time * 0.001 * hz * Math.PI * 2) * amp;
+            }
+            this.player.setRotation(rot);
         }
 
         // Full auto: while holding fire with SMG/rifle, keep firing at rate of fire
@@ -17060,6 +17129,8 @@ const pos = findSpace(backpack, 3, 2);
         }
 
         this.processBleedTick();
+        this.processBloodAndInfection(time, delta);
+        this.updateLimbVisFeel(time, delta);
         this.drawUI();
         this.drawVignette();
         this.drawLaserSight();
@@ -17371,10 +17442,12 @@ const pos = findSpace(backpack, 3, 2);
                 this.player.setVelocity((vx / len) * speed, (vy / len) * speed);
                 if (!this.silentFootsteps && !this.isCrouching) {
                     const isRunning = wasSprintBeforeBreak && !oneLegBlacked;
-                    const stepInterval = 250 / (isRunning ? 1.5 : 1);
+                    const isLimping = oneLegBlacked || oneLegBroken;
+                    const stepInterval = isLimping ? 420 : (250 / (isRunning ? 1.5 : 1));
                     if (this.time.now - (this.lastPlayerFootstepTime || 0) >= stepInterval) {
                         this.lastPlayerFootstepTime = this.time.now;
-                        sfx.footstep(this.time.now, isRunning);
+                        if (isLimping) sfx.limpFootstep();
+                        else sfx.footstep(this.time.now, isRunning);
                         this.onPlayerFootstep(this.player.x, this.player.y);
                         const damagePerStepWalk = 1, damagePerStepSprint = 3;
                         if (limbHp) {
@@ -17739,6 +17812,13 @@ const pos = findSpace(backpack, 3, 2);
         this.damageLog.push(entry);
         const maxEntries = (CONFIG.UI && CONFIG.UI.DAMAGE_LOG_MAX_ENTRIES != null) ? CONFIG.UI.DAMAGE_LOG_MAX_ENTRIES : 12;
         if (this.damageLog.length > maxEntries) this.damageLog.shift();
+        // Teach limbs: flash the hit body part on the HUD silhouette
+        if (entry && !entry.mitigated && entry.limbId && entry.limbId !== 'hp' && this.time) {
+            this.limbHudFlash = {
+                limbId: entry.limbId,
+                until: this.time.now + ((CONFIG.LIMB_VIS && CONFIG.LIMB_VIS.HUD_FLASH_MS) || 380)
+            };
+        }
     }
 
     hitPlayer(damage, fromX = null, fromY = null, options = {}) {
@@ -17931,6 +18011,15 @@ const pos = findSpace(backpack, 3, 2);
                 this.time.delayedCall(100, () => { if (this.player.active) this.player.clearTint(); });
                 this.time.delayedCall(CONFIG.PLAYER.INVULN_TIME, () => this.player.setAlpha(1));
             }
+
+            // Bite / zombie contact → infection (not guns, not bleed ticks)
+            if (!fromBleed && !armPenalty && damageSource !== 'bullet') {
+                const et = options.enemyType
+                    || (options.meleeAttacker && options.meleeAttacker.enemyType)
+                    || (options.fromPin ? 'leaper' : null)
+                    || (damageSource === 'acid' ? 'spitter' : null);
+                if (et) this.applyBiteInfection(et);
+            }
         }
 
         this.checkDeathConditions();
@@ -18038,12 +18127,16 @@ const pos = findSpace(backpack, 3, 2);
     processBleedTick() {
         const limbHp = this.playerStats.limbHp;
         if (!limbHp) return;
+        ensureLimbVisStats(this.playerStats);
         const now = this.time.now;
         const cfg = CONFIG.BLEED || {};
+        const vis = CONFIG.LIMB_VIS || {};
         const minorInterval = cfg.MINOR_INTERVAL_MS != null ? cfg.MINOR_INTERVAL_MS : 3000;
         const majorInterval = cfg.MAJOR_INTERVAL_MS != null ? cfg.MAJOR_INTERVAL_MS : 1500;
         const minorDmg = cfg.MINOR_DAMAGE != null ? cfg.MINOR_DAMAGE : 1;
         const majorDmg = cfg.MAJOR_DAMAGE != null ? cfg.MAJOR_DAMAGE : 1;
+        const bloodDrainMinor = vis.BLOOD_DRAIN_MINOR != null ? vis.BLOOD_DRAIN_MINOR : 1;
+        const bloodDrainMajor = vis.BLOOD_DRAIN_MAJOR != null ? vis.BLOOD_DRAIN_MAJOR : 2;
 
         Object.keys(limbHp).forEach(limbId => {
             const limb = limbHp[limbId];
@@ -18055,6 +18148,7 @@ const pos = findSpace(backpack, 3, 2);
                 if (now - this.lastBleedTick.minor[limbId] >= minorInterval) {
                     this.lastBleedTick.minor[limbId] = now;
                     this.hitPlayer(minorDmg, null, null, { targetLimbId: limbId, fromBleed: true });
+                    this.playerStats.blood = Math.max(0, (this.playerStats.blood || 0) - bloodDrainMinor);
                     if ((limbHp[limbId].hp || 0) <= 0) {
                         const idx = limbHp[limbId].effects.indexOf('minor_bleed');
                         if (idx !== -1) limbHp[limbId].effects.splice(idx, 1);
@@ -18070,9 +18164,106 @@ const pos = findSpace(backpack, 3, 2);
                     if (damageTargetId && limbHp[damageTargetId] && (limbHp[damageTargetId].hp || 0) > 0) {
                         this.hitPlayer(majorDmg, null, null, { targetLimbId: damageTargetId, fromBleed: true });
                     }
+                    this.playerStats.blood = Math.max(0, (this.playerStats.blood || 0) - bloodDrainMajor);
                 }
             }
         });
+
+        if ((this.playerStats.blood || 0) <= 0) {
+            this.showFloatingText(this.player.x, this.player.y - 50, "BLED OUT!", 0xaa0000);
+            this.handlePlayerDeath();
+        }
+    }
+
+    /** Blood regen when dry; infection fill after bite; death at 100%. */
+    processBloodAndInfection(time, delta) {
+        ensureLimbVisStats(this.playerStats);
+        const vis = CONFIG.LIMB_VIS || {};
+        const dt = delta / 1000;
+
+        if (!hasAnyBleed(this.playerStats.limbHp)) {
+            const regen = vis.BLOOD_REGEN_PER_SEC != null ? vis.BLOOD_REGEN_PER_SEC : 3;
+            this.playerStats.blood = Math.min(
+                this.playerStats.maxBlood,
+                (this.playerStats.blood || 0) + regen * dt
+            );
+        }
+
+        let infection = this.playerStats.infection || 0;
+        if (infection > 0 && infection < 100) {
+            const fillMs = vis.INFECTION_FILL_MS || 90000;
+            infection = Math.min(100, infection + (100 / fillMs) * delta);
+            this.playerStats.infection = infection;
+            if (infection >= 100) {
+                this.showFloatingText(this.player.x, this.player.y - 50, "INFECTION TOOK HOLD!", 0x66ff44);
+                this.handlePlayerDeath();
+            }
+        }
+    }
+
+    /** Limp bob + blood droplet trail while moving/bleeding. */
+    updateLimbVisFeel(time, delta) {
+        if (!this.player || !this.player.active) return;
+        const limbHp = this.playerStats.limbHp;
+        const vis = CONFIG.LIMB_VIS || {};
+        const leftLegBlacked = limbHp && limbHp.leftLeg && (limbHp.leftLeg.hp || 0) === 0;
+        const rightLegBlacked = limbHp && limbHp.rightLeg && (limbHp.rightLeg.hp || 0) === 0;
+        const oneLegBlacked = (leftLegBlacked && !rightLegBlacked) || (!leftLegBlacked && rightLegBlacked);
+        const legBroken = (id) => limbHp && limbHp[id] && Array.isArray(limbHp[id].effects) && limbHp[id].effects.includes('break');
+        const isLimping = oneLegBlacked || legBroken('leftLeg') || legBroken('rightLeg');
+        const moving = this.player.body && (Math.abs(this.player.body.velocity.x) + Math.abs(this.player.body.velocity.y) > 8);
+
+        if (isLimping && moving) {
+            this._limpPhase = (this._limpPhase || 0) + delta * 0.001 * ((vis.LIMP_BOB_HZ || 5) * Math.PI * 2);
+            const amp = vis.LIMP_ORIGIN_AMP != null ? vis.LIMP_ORIGIN_AMP : 0.1;
+            this.player.setOrigin(0.5, 0.5 + Math.sin(this._limpPhase) * amp);
+        } else {
+            this.player.setOrigin(0.5, 0.5);
+        }
+
+        if (hasAnyBleed(limbHp) && moving) {
+            const interval = vis.BLEED_DROP_INTERVAL_MS || 200;
+            if (time - (this._lastBleedDrop || 0) >= interval) {
+                this._lastBleedDrop = time;
+                this.spawnBloodDrop(this.player.x, this.player.y);
+            }
+        }
+    }
+
+    spawnBloodDrop(x, y) {
+        const drop = this.add.circle(
+            x + (Math.random() - 0.5) * 10,
+            y + 8 + Math.random() * 6,
+            2 + Math.random() * 2,
+            0x880000,
+            0.85
+        ).setDepth(3);
+        this.tweens.add({
+            targets: drop,
+            alpha: 0.15,
+            scale: 1.6,
+            duration: 2200,
+            onComplete: () => drop.destroy()
+        });
+    }
+
+    clearInfection(showMsg = false) {
+        if ((this.playerStats.infection || 0) > 0 && showMsg) {
+            this.showFloatingText(400, 260, "INFECTION CLEARED", 0x88ff88);
+        }
+        this.playerStats.infection = 0;
+        this._infectionWarned = false;
+    }
+
+    applyBiteInfection(enemyType) {
+        const sources = (CONFIG.LIMB_VIS && CONFIG.LIMB_VIS.INFECTION_SOURCES) || [];
+        if (!enemyType || !sources.includes(enemyType)) return;
+        ensureLimbVisStats(this.playerStats);
+        if ((this.playerStats.infection || 0) > 0) return;
+        this.playerStats.infection = 1;
+        this._infectionWarned = true;
+        sfx.infectionWarn();
+        this.showFloatingText(this.player.x, this.player.y - 55, "BITTEN — INFECTION!", 0x88ff44);
     }
 
     applyBodyPenaltyDamage() {
@@ -18278,6 +18469,11 @@ const pos = findSpace(backpack, 3, 2);
         this.isTransitioning = true;
         this.cleanupTimerEvents();
         this.physics.pause();
+
+        // Surviving to extract clears infection (same rule as beacon extract)
+        this.clearInfection(true);
+        ensureLimbVisStats(this.playerStats);
+        this.playerStats.blood = Math.min(this.playerStats.maxBlood, (this.playerStats.blood || 0) + 25);
         
         sfx.levelComplete();
         sfx.doorOpen();
@@ -18519,6 +18715,11 @@ const pos = findSpace(backpack, 3, 2);
             this.showFloatingText(400, 280, `UPGRADE: ${u.name}!`, 0xffaa00);
         });
         
+        // Extraction clears infection (virus has weakened — DESIGN.md)
+        this.clearInfection(true);
+        ensureLimbVisStats(this.playerStats);
+        this.playerStats.blood = this.playerStats.maxBlood;
+
         savePersistent(this.persistent);
         localStorage.setItem(CONFIG.SAVE_KEY, JSON.stringify(this.playerStats));
         this.time.delayedCall(CONFIG.TIMINGS.DEATH_RESTART, () => {
@@ -18892,10 +19093,46 @@ const pos = findSpace(backpack, 3, 2);
         this.bossBar.fillRect(202, 52, 396 * (hp / max), 16);
     }
 
+    /** Compact body silhouette — flashes the hit limb so combat teaches the system. */
+    drawLimbHudFigure() {
+        const g = this.uiGraphics;
+        if (!g || !this.playerStats.limbHp) return;
+        const cx = 755, cy = 95;
+        const flash = this.limbHudFlash && this.time.now < this.limbHudFlash.until
+            ? this.limbHudFlash.limbId
+            : null;
+        const parts = [
+            { id: 'head', x: cx, y: cy - 28, w: 12, h: 12 },
+            { id: 'chest', x: cx, y: cy - 10, w: 18, h: 14 },
+            { id: 'abdomen', x: cx, y: cy + 6, w: 16, h: 10 },
+            { id: 'crotch', x: cx, y: cy + 18, w: 12, h: 8 },
+            { id: 'leftArm', x: cx - 16, y: cy - 8, w: 8, h: 18 },
+            { id: 'rightArm', x: cx + 16, y: cy - 8, w: 8, h: 18 },
+            { id: 'leftLeg', x: cx - 7, y: cy + 32, w: 8, h: 18 },
+            { id: 'rightLeg', x: cx + 7, y: cy + 32, w: 8, h: 18 }
+        ];
+        parts.forEach(p => {
+            const limb = this.playerStats.limbHp[p.id];
+            const maxH = (limb && limb.maxHp) || 1;
+            const pct = Math.max(0, Math.min(1, ((limb && limb.hp) || 0) / maxH));
+            let color = pct <= 0 ? 0x222222 : (pct >= 0.5 ? 0x2a8a2a : (pct >= 0.35 ? 0xaa6622 : 0x882222));
+            const effects = (limb && Array.isArray(limb.effects)) ? limb.effects : [];
+            if (effects.includes('major_bleed')) color = 0xcc0000;
+            else if (effects.includes('minor_bleed')) color = 0xaa3333;
+            else if (effects.includes('break')) color = 0xccaa22;
+            if (flash === p.id) color = 0xffffff;
+            g.fillStyle(color, flash === p.id ? 1 : 0.9);
+            g.fillRect(p.x - p.w / 2, p.y - p.h / 2, p.w, p.h);
+            g.lineStyle(1, 0x888888, 0.8);
+            g.strokeRect(p.x - p.w / 2, p.y - p.h / 2, p.w, p.h);
+        });
+    }
+
     drawUI() {
         if (!this.uiGraphics) return;
         const ui = CONFIG.UI;
         this.uiGraphics.clear();
+        ensureLimbVisStats(this.playerStats);
 
         // HP Bar
         this.uiGraphics.fillStyle(0x000000, 0.5);
@@ -18908,6 +19145,31 @@ const pos = findSpace(backpack, 3, 2);
         this.uiGraphics.fillRect(10, 40, ui.STAMINA_BAR_WIDTH + 4, ui.STAMINA_BAR_HEIGHT + 4);
         this.uiGraphics.fillStyle(0x0088ff, 1);
         this.uiGraphics.fillRect(12, 42, ui.STAMINA_BAR_WIDTH * (this.playerStats.stamina / this.playerStats.maxStamina), ui.STAMINA_BAR_HEIGHT);
+
+        // Blood bar (right of HP) — bleed pool separate from limb HP
+        const bloodW = 120, bloodH = 10;
+        const bloodPct = (this.playerStats.blood || 0) / (this.playerStats.maxBlood || 100);
+        this.uiGraphics.fillStyle(0x000000, 0.5);
+        this.uiGraphics.fillRect(220, 10, bloodW + 4, bloodH + 4);
+        this.uiGraphics.fillStyle(0x990022, 1);
+        this.uiGraphics.fillRect(222, 12, bloodW * bloodPct, bloodH);
+
+        // Infection bar (right of stamina) — only when bitten
+        const infection = this.playerStats.infection || 0;
+        if (infection > 0) {
+            const infW = 120, infH = 10;
+            this.uiGraphics.fillStyle(0x000000, 0.5);
+            this.uiGraphics.fillRect(220, 34, infW + 4, infH + 4);
+            this.uiGraphics.fillStyle(0x44cc44, 1);
+            this.uiGraphics.fillRect(222, 36, infW * (infection / 100), infH);
+            if (infection > 70) {
+                const pulse = 0.4 + Math.sin(this.time.now / 180) * 0.4;
+                this.uiGraphics.lineStyle(2, 0x88ff44, pulse);
+                this.uiGraphics.strokeRect(220, 34, infW + 4, infH + 4);
+            }
+        }
+
+        this.drawLimbHudFigure();
 
         // Ammo display: mag weapons = rounds/max or "-"; shotgun/crossbow = mag/max (reserve)
         const weapon = this.playerStats.currentWeapon;

@@ -77,11 +77,11 @@ Content is sufficient (7 levels, 7 enemy types, full meta). What separates "prot
 ## Phase 6 — Make the limb sim VISIBLE (the differentiator) *(1–2 sessions)*
 
 The depth exists but is invisible outside the combat log. Make it felt:
-- [ ] Blacked leg → limp (speed penalty already exists? make it *animated/audible*)
-- [ ] Broken arm → weapon sway / slower reload animation cue
-- [ ] Bleeding → blood-droplet trail on the floor behind the player
-- [ ] Blood bar + infection system from DESIGN.md brainstorm (bite → infection timer vs extraction = core Tarkov-style tension; lore already written)
-- [ ] On-hit limb flash on the HUD body figure so hits teach the system passively
+- [x] Blacked leg → limp (speed penalty already existed; added limp bob + limp footstep SFX)
+- [x] Broken arm → weapon sway / slower reload animation cue (`ARM_SWAY_*`, "SLOW RELOAD...")
+- [x] Bleeding → blood-droplet trail on the floor behind the player
+- [x] Blood bar + infection system from DESIGN.md brainstorm (bite → ~90s infection vs extraction clear; blood drains on bleed ticks)
+- [x] On-hit limb flash on the HUD body figure so hits teach the system passively (top-right silhouette)
 
 ## Phase 7 — Retention loop polish *(after playtest feedback)*
 
