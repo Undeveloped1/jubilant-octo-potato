@@ -58,6 +58,8 @@ Current: single 18,900-line `game.js` (GameScene ~7,200 lines, HideoutScene ~4,7
 - [x] Add Vitest; write tests for `inventory.js` as it's extracted. Bug history is dominated by inventory edge cases (mag placement priority, pocket `_spansFrom`, stash drops) — exactly what unit tests prevent recurring
 - [x] Each extraction is one commit; game must boot after every commit
 
+**Phase 3 result (Jul 24):** Module-level win only. `game.js` is still ~16.8k lines (HideoutScene ~5k, GameScene ~10k). Data/helpers peeled; scenes and inventory UI boundaries are still wrong — see Phase 8.
+
 ## Phase 4 — Save durability *(one evening, agent)*
 
 - [ ] Add `version` field to the persistent save schema
@@ -95,25 +97,75 @@ The depth exists but is invisible outside the combat log. Make it felt:
 - [x] Hideout Med Bay (cure + blood refill for scrap)
 - [ ] Super-infection / hero station (deferred to a later sprint)
 
+## Phase 8 — Simplify at four altitudes *(post–Phase 3 review, Jul 24 2026)*
+
+Goal: make the *software* better, not just prettier. Review the codebase at four altitudes; prefer fixing wrong abstractions over renaming inside god functions.
+
+**Status after Phase 3**
+
+| Altitude | Status |
+|----------|--------|
+| Line | Barely touched — duplication remains |
+| Function | Barely touched — inventory still a mega-closure |
+| Module | Partial win — config / inventory / persistence / audio peeled |
+| Architecture | Still wrong — god file + prototype-shared inventory + leaky persistence |
+
+### Architecture *(highest leverage — do first)*
+
+The inventory system is not “one module used two places.” Hideout piggybacks on raid UI via `GameScene.prototype.renderInventoryPanel.call(this)` + `_invIsHideout`, then adds a second ~1.3k-line stash layer. Persistence is half-extracted (`persistence.js` exists but run saves still hit `localStorage` directly ~80+ times in `game.js`).
+
+- [ ] Extract **shared inventory UI + medical apply** used by both GameScene and HideoutScene — kill `_invIsHideout` / prototype piggyback
+- [ ] Route **all** save I/O through `persistence.js` (no raw `localStorage.setItem(CONFIG.SAVE_KEY, …)` in scenes)
+- [ ] Split HideoutScene / GameScene into feature-sized modules only *after* the two items above (otherwise you just move the god object)
+
+```
+Better shape:  Raid / Hub scenes → shared InvUI → inventory domain (already in inventory.js)
+```
+
+### Module *(continue peeling, after architecture fixes)*
+
+- [ ] Limb combat / outcome helpers out of `game.js` into something like `src/combat.js` (or keep with config if tiny)
+- [ ] Challenges / achievements / upgrades out of free functions in `game.js`
+- [ ] Enemy / Bullet / pools into `src/entities.js` (or similar) when touching combat anyway
+- [ ] Hideout feature slices (trader, facilities, mission map, skills) as separate modules once inventory boundary is clean
+
+### Function
+
+- [ ] Collapse `renderInventoryPanel` mega-closure into named handlers (after shared InvUI extract)
+- [ ] Reduce `_invIsHideout` / drag-source branching; one code path per action
+- [ ] Deduplicate settings / export / god-mode between MainMenuScene and HideoutScene
+
+### Line
+
+- [ ] Merge duplicate limb med-drop blocks (~10809 vs ~12106 in `game.js`) into one helper
+- [ ] Remove duplicated save-field migration patches (Hideout create / GameScene create / `persistence.loadPersistent`)
+- [ ] Delete obvious dead code when found during the above — no drive-by rewrites
+
+**Rules for Phase 8:** no rewrite, no TypeScript, no engine change; each slice boots; prefer architecture fixes over cosmetic cleanup inside the 4k-line inventory panel.
+
 ---
 
-## Sprint status — Jul 23, 2026 (end of day)
+## Sprint status — Jul 24, 2026
 
-**Shipped this revival sprint:** Phases 0–2 (tech), 3 (module peels + Vitest), 5–6, 7, infection treatment loop.  
-**Your only open item tonight:** send `PLAYTEST.md` link to friends.  
-**Parked (not tonight):** Phase 4 save migrations, super-infection.
+**Shipped:** Phases 0–3 (tech + Vite peels), 5–7, infection treatment.  
+**Open (Paul):** playtest handoff (`PLAYTEST.md`); set Pages source to **GitHub Actions**.  
+**Next agent work (pick):** Phase 4 (save versioning) and/or Phase 8 architecture (shared inventory UI + persistence authority).  
+**Parked:** super-infection / hero station.
 
 ---
 
 ## Explicitly NOT doing
 
-- No engine change, no rewrite, no TypeScript migration (revisit only if Phase 3 goes smoothly and appetite exists)
+- No engine change, no rewrite, no TypeScript migration (revisit only if appetite exists after Phase 8)
 - No new meta-progression systems (classes/skills/challenges are done enough)
 - No multiplayer
 - No new levels/enemies until the feel + visibility passes land
+- No “prettify only” refactors that leave `_invIsHideout` / dual inventory UI in place
 
 ## Order of attack
 
-**0 → 1(step 2 crunch) → 2 → playtest → re-rank the rest.** Phases 3–4 can interleave anytime (agent work, low risk). Phases 5–6 after playtest data says which matters more.
+**0 → 1 → 2 → playtest → re-rank.**  
+**Maintainability track:** Phase 3 (done) → **Phase 8 architecture first** (shared InvUI + persistence) → Phase 4 save ladder (pairs well with persistence authority) → module/function/line cleanup.  
+Phases 5–7 content/juice already shipped; don’t block playtest on Phase 8.
 
-*Created Jul 23, 2026 — from project review after GitHub remote setup. Companion docs: ROADMAP.md (historical), HANDOVER.md (session state), DESIGN.md (design brainstorms).*
+*Created Jul 23, 2026 — from project review after GitHub remote setup. Phase 8 added Jul 24, 2026 from four-altitude simplify review. Companion docs: ROADMAP.md (historical), HANDOVER.md (session state), DESIGN.md (design brainstorms).*
