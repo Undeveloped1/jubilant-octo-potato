@@ -32,6 +32,11 @@ const CONFIG = {
         LIGHT_RADIUS: 60,
         FLASHLIGHT_RANGE: 300,
         FLASHLIGHT_ANGLE: 0.5,
+        // DK2 pass 1: directional ambient cone (wall-occluded), tunable
+        AMBIENT_CONE_RANGE: 140,
+        AMBIENT_CONE_HALF_ANGLE: 0.6,
+        // DK2 pass 2: explored-memory fog — dim layer alpha for seen-but-unlit area
+        MEMORY_FOG_ALPHA: 0.65,
         // Dodge roll settings
         DODGE_SPEED: 400,
         DODGE_DURATION: 200,

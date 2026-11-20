@@ -104,6 +104,7 @@ import {
   resetRunStats,
 } from './persistence.js';
 import { sfx } from './audio.js';
+import { computeLightPolygons, isRevealedByLight } from './visibility.js';
 import {
   sumLimbHp,
   sumLimbMaxHp,
@@ -1662,7 +1663,7 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
         if (!this.active || this.isCorpse || !this.body) return;
         if (this.healthBar) {
             this.healthBar.setPosition(this.x, this.y);
-            this.healthBar.setVisible(this.hp > 0 && this.revealedByFlashlight === true);
+            this.healthBar.setVisible(this.hp > 0 && this.revealedByLight === true);
         }
 
         const cfg = this.config;
@@ -1740,7 +1741,7 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
                     this.alertExclamation = this.scene.add.text(this.x, this.y - 35, '!', { fontSize: '28px', fill: '#ff0000', fontStyle: 'bold' }).setOrigin(0.5).setDepth(100);
                 }
                 this.alertExclamation.setPosition(this.x, this.y - 35);
-                this.alertExclamation.setVisible(this.revealedByFlashlight === true);
+                this.alertExclamation.setVisible(this.revealedByLight === true);
             } else if (this.alertExclamation) {
                 this.alertExclamation.setVisible(false);
             }
@@ -1914,7 +1915,7 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
                     this.alertExclamation = this.scene.add.text(this.x, this.y - 35, '!', { fontSize: '28px', fill: '#ff0000', fontStyle: 'bold' }).setOrigin(0.5).setDepth(100);
                 }
                 this.alertExclamation.setPosition(this.x, this.y - 35);
-                this.alertExclamation.setVisible(this.revealedByFlashlight === true);
+                this.alertExclamation.setVisible(this.revealedByLight === true);
             } else if (this.alertExclamation) {
                 this.alertExclamation.setVisible(false);
             }
@@ -2229,7 +2230,7 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
                     this.alertExclamation = this.scene.add.text(this.x, this.y - 35, '!', { fontSize: '28px', fill: '#ff0000', fontStyle: 'bold' }).setOrigin(0.5).setDepth(100);
                 }
                 this.alertExclamation.setPosition(this.x, this.y - 35);
-                this.alertExclamation.setVisible(this.revealedByFlashlight === true);
+                this.alertExclamation.setVisible(this.revealedByLight === true);
             } else if (this.alertExclamation) {
                 this.alertExclamation.setVisible(false);
             }
@@ -7821,6 +7822,10 @@ class GameScene extends Phaser.Scene {
         this.riskDoorIcon = null;
         this.inRiskRoom = false;
         this.isTransitioningRoom = false; // Prevent transition re-entry
+        // DK2 pass 2 Feature A (fix pass 1): explored-memory fog state (per-room fogRT
+        // lives on roomGrid.rooms[i]; activeFogRT is the one currently visible).
+        this.activeFogRT = null;
+        this.riskFogRT = null;
         this.keySpawned = false; // Reset key tracking for new level
         this.mapSpawned = false; // Reset map tracking for new level
         this.hasMap = false;     // Map pickup is per-level only
@@ -8142,8 +8147,20 @@ class GameScene extends Phaser.Scene {
         this.lightShape = this.make.graphics({ x: 0, y: 0, add: false });
         const mask = this.lightShape.createGeometryMask();
         mask.setInvertAlpha(true);
-        this.darkness = this.add.rectangle(400, 300, 800, 600, 0x000000, 0.96).setDepth(90);
+        // DK2 pass 2 Feature A (fix pass 1): two-layer explored-memory composite.
+        // darkness = seen-dim layer (outside current light -> MEMORY_FOG_ALPHA black);
+        // per-room fogRT = unseen layer: 96% black fill with the light permanently
+        // ERASED wherever it has ever hit (explored memory). Centered (400,300), depth 89.
+        // Lit: clear. Seen-unlit: 65% black. Unseen: ~98.6% black.
+        this.darkness = this.add.rectangle(400, 300, 800, 600, 0x000000, CONFIG.PLAYER.MEMORY_FOG_ALPHA).setDepth(90);
         this.darkness.setMask(mask);
+        if (this.roomGrid) {
+            // Start room was marked visited in generateRoomGrid; give it its fog RT now.
+            this.applyRoomFog(this.roomGrid.rooms[this.roomGrid.currentRoom]);
+        }
+        // Legacy single-room fallback has no per-room memory: no fogRT is created.
+        // DK2 pass 2 Feature C: fading last-known enemy markers (above fog, below HUD).
+        this.lastKnownGraphics = this.add.graphics().setDepth(96);
         this.headsetRingGraphics = this.add.graphics().setDepth(91).setVisible(false);  // ring at 0.85 when headset equipped
         this.headsetSoundOutlines = this.add.graphics().setDepth(92).setVisible(false);  // blue outlines for enemies in sound radius
         this.nvgLayer = this.add.rectangle(400, 300, 800, 600, 0x00ff00, 0.2).setDepth(95).setVisible(false);
@@ -8245,6 +8262,13 @@ class GameScene extends Phaser.Scene {
         if (this.leaperVisionGraphics) {
             this.leaperVisionGraphics.destroy();
             this.leaperVisionGraphics = null;
+        }
+        // DK2 pass 2 (fix pass 1): free explored-memory fog RTs (per-room + risk)
+        // and the last-known marker layer so GPU memory doesn't leak across levels.
+        this.destroySeenMemory();
+        if (this.lastKnownGraphics) {
+            this.lastKnownGraphics.destroy();
+            this.lastKnownGraphics = null;
         }
         if (this.uiGraphics) {
             this.uiGraphics.destroy();
@@ -9562,6 +9586,46 @@ class GameScene extends Phaser.Scene {
         return grid;
     }
     
+    // DK2 pass 2 Feature A (fix pass 1): per-room explored-memory fog helpers.
+    // The fog RT IS the unseen overlay: filled 96% black once, then the light is
+    // permanently ERASED from it each frame (erase accumulates = explored memory).
+    // Centered at (400,300) like the rectangle it replaces — RenderTexture origin
+    // is 0.5, so a (0,0) RT would render off-screen (the pass-2 BitmapMask blocker).
+    ensureRoomFogRT(room) {
+        if (!room) return null;
+        if (!room.fogRT) {
+            room.fogRT = this.add.renderTexture(400, 300, 800, 600).setDepth(89);
+            room.fogRT.fill(0x000000, 0.96);
+            room.fogRT.setVisible(false);
+        }
+        return room.fogRT;
+    }
+
+    // Make rt the single visible fog overlay (hides the previously-active one).
+    setActiveFog(rt) {
+        if (!rt) return;
+        if (this.activeFogRT && this.activeFogRT !== rt) this.activeFogRT.setVisible(false);
+        this.activeFogRT = rt;
+        rt.setVisible(!this.nvgOn);
+    }
+
+    // Swap the visible fog overlay to this room's fogRT (create + fill if new).
+    applyRoomFog(room) {
+        this.setActiveFog(this.ensureRoomFogRT(room));
+    }
+
+    // DK2 pass 2 Feature A (fix pass 1): free all fog RenderTextures (level change /
+    // shutdown) so GPU memory doesn't accumulate across levels.
+    destroySeenMemory() {
+        if (this.roomGrid && this.roomGrid.rooms) {
+            for (const room of this.roomGrid.rooms) {
+                if (room.fogRT) { room.fogRT.destroy(); room.fogRT = null; }
+            }
+        }
+        if (this.riskFogRT) { this.riskFogRT.destroy(); this.riskFogRT = null; }
+        this.activeFogRT = null;
+    }
+
     setupRoom(roomData) {
         // Clear existing room elements (walls, floor)
         if (this.roomFloor) this.roomFloor.destroy();
@@ -9714,6 +9778,9 @@ class GameScene extends Phaser.Scene {
         
         // Update minimap
         this.updateMinimap();
+        // DK2 pass 2 Feature A (fix pass 1): swap the fog overlay to this room's memory
+        // (covers level start, room transitions, and risk-room exit restore).
+        this.applyRoomFog(roomData);
     }
 
     /** Create a crate with consistent depth/visibility so it always renders above floor. */
@@ -10239,6 +10306,13 @@ class GameScene extends Phaser.Scene {
             
             // Mark that we're in risk room mode
             this.inRiskRoom = true;
+            // DK2 pass 2 Feature A (fix pass 1): risk room gets its own fog RT + swap.
+            if (!this.riskFogRT) {
+                this.riskFogRT = this.add.renderTexture(400, 300, 800, 600).setDepth(89);
+                this.riskFogRT.fill(0x000000, 0.96);
+                this.riskFogRT.setVisible(false);
+            }
+            this.setActiveFog(this.riskFogRT);
             
             // Invisible main door placeholder
             this.door = this.physics.add.staticSprite(-100, -100, 'door');
@@ -10403,6 +10477,7 @@ class GameScene extends Phaser.Scene {
             if (this.door) { this.door.destroy(); this.door = null; }
             
             // Restore the original room (risk room was cleared, so no risk door will appear)
+            // DK2 pass 2 Feature A (fix pass 1): setupRoom re-applies this room's fog (exit swap).
             this.setupRoom(currentRoom);
             // Restore unlooted crates, bodies, and dropped items so sprites and collision are back
             this.restoreCratesFromState(currentRoom);
@@ -10451,14 +10526,16 @@ class GameScene extends Phaser.Scene {
         
         // Draw rooms
         rooms.forEach((room, idx) => {
+            // DK2 pass 2 Feature B: visited-only minimap — unvisited rooms (incl.
+            // an unvisited exit) are not drawn at all; no gray placeholder squares.
+            if (!room.visited) return;
             const x = this.minimapX - mapWidth + this.minimapPadding + room.col * (this.minimapRoomSize + this.minimapPadding);
             const y = this.minimapY - mapHeight + this.minimapPadding + room.row * (this.minimapRoomSize + this.minimapPadding);
             
             // Room color based on state (slightly transparent)
-            let color = 0x333333; // Unvisited
-            if (room.visited && !room.cleared) color = 0x666666; // Visited but not cleared
+            let color = 0x666666; // Visited but not cleared
             if (room.cleared) color = 0x00aa00; // Cleared
-            if (room.isExit) color = room.cleared ? 0x00ff00 : 0xffff00; // Exit
+            if (room.isExit) color = room.cleared ? 0x00ff00 : 0xffff00; // Exit (visited only)
             if (idx === currentRoom) color = 0x00aaff; // Current room
             
             this.minimapGraphics.fillStyle(color, 0.7);
@@ -10470,17 +10547,23 @@ class GameScene extends Phaser.Scene {
                 this.minimapGraphics.fillCircle(x + this.minimapRoomSize - 4, y + 4, 3);
             }
             
-            // Draw connections
+            // Draw connections — DK2 pass 2 Feature B: only when BOTH endpoints visited
             this.minimapGraphics.lineStyle(2, 0x888888, 0.5);
             if (room.connections.east !== null) {
-                this.minimapGraphics.moveTo(x + this.minimapRoomSize, y + this.minimapRoomSize / 2);
-                this.minimapGraphics.lineTo(x + this.minimapRoomSize + this.minimapPadding, y + this.minimapRoomSize / 2);
-                this.minimapGraphics.strokePath();
+                const eastRoom = rooms[room.connections.east];
+                if (eastRoom && eastRoom.visited) {
+                    this.minimapGraphics.moveTo(x + this.minimapRoomSize, y + this.minimapRoomSize / 2);
+                    this.minimapGraphics.lineTo(x + this.minimapRoomSize + this.minimapPadding, y + this.minimapRoomSize / 2);
+                    this.minimapGraphics.strokePath();
+                }
             }
             if (room.connections.south !== null) {
-                this.minimapGraphics.moveTo(x + this.minimapRoomSize / 2, y + this.minimapRoomSize);
-                this.minimapGraphics.lineTo(x + this.minimapRoomSize / 2, y + this.minimapRoomSize + this.minimapPadding);
-                this.minimapGraphics.strokePath();
+                const southRoom = rooms[room.connections.south];
+                if (southRoom && southRoom.visited) {
+                    this.minimapGraphics.moveTo(x + this.minimapRoomSize / 2, y + this.minimapRoomSize);
+                    this.minimapGraphics.lineTo(x + this.minimapRoomSize / 2, y + this.minimapRoomSize + this.minimapPadding);
+                    this.minimapGraphics.strokePath();
+                }
             }
         });
     }
@@ -11129,10 +11212,15 @@ class GameScene extends Phaser.Scene {
                 this.nvgOn = !this.nvgOn;
                 if (this.nvgOn) {
                     this.darkness.setVisible(false);
+                    // DK2 pass 2 Feature A (fix pass 1): NVG hides BOTH fog layers.
+                    if (this.activeFogRT) this.activeFogRT.setVisible(false);
+                    if (this.riskFogRT) this.riskFogRT.setVisible(false);
                     this.nvgLayer.setVisible(true);
                     this.cameras.main.setBackgroundColor(0x002200);
                 } else {
                     this.darkness.setVisible(true);
+                    // DK2 pass 2 Feature A (fix pass 1): restore the active fog layer.
+                    if (this.activeFogRT) this.activeFogRT.setVisible(true);
                     this.nvgLayer.setVisible(false);
                     this.cameras.main.setBackgroundColor(0x000000);
                 }
@@ -11189,25 +11277,68 @@ class GameScene extends Phaser.Scene {
         this.drawUI();
         this.drawVignette();
         this.drawLaserSight();
-        this.enemies.getChildren().forEach(e => { e.revealedByFlashlight = false; });
-        if (this.playerStats.hasFlashlight && this.flashlightOn) {
-            const flashRange = this.hasNoGoodArms() ? CONFIG.PLAYER.FLASHLIGHT_RANGE * 0.4 : CONFIG.PLAYER.FLASHLIGHT_RANGE;
-            const angle = Phaser.Math.Angle.Between(this.player.x, this.player.y, this.input.activePointer.x, this.input.activePointer.y);
+        // DK2 pass 2: build center-based wall rects + aim angle once per frame,
+        // shared by the enemy reveal predicate (below) and the light polygon block.
+        const lightWalls = [];
+        if (this.walls && this.walls.getChildren) {
+            for (const wall of this.walls.getChildren()) {
+                if (!wall.body || !wall.body.width || !wall.body.height) continue;
+                lightWalls.push({
+                    x: wall.body.x + wall.body.width / 2,
+                    y: wall.body.y + wall.body.height / 2,
+                    w: wall.body.width,
+                    h: wall.body.height
+                });
+            }
+        }
+        const lightAimAngle = Phaser.Math.Angle.Between(this.player.x, this.player.y, this.input.activePointer.x, this.input.activePointer.y);
+
+        this.enemies.getChildren().forEach(e => { e.revealedByLight = false; });
+        // DK2 pass 2 Feature C: reveal via flashlight cone OR ambient cone OR
+        // ambient circle, all gated by line of sight (pure predicate). Sets
+        // e.revealedByLight (ANY light source — read by sprite gating + HP-bar/alert
+        // UI). Ambient reveal is visual only — the walker HUNT alert stays
+        // flashlight-only below (it computes its own flashlight check).
+        const revealFlashRange = this.hasNoGoodArms() ? CONFIG.PLAYER.FLASHLIGHT_RANGE * 0.4 : CONFIG.PLAYER.FLASHLIGHT_RANGE;
+        this.enemies.getChildren().forEach(e => {
+            if (!e.active) return;
+            const revealed = isRevealedByLight(e.x, e.y, this.player.x, this.player.y, lightAimAngle, lightWalls, {
+                ambientRadius: CONFIG.PLAYER.LIGHT_RADIUS,
+                ambientConeRange: CONFIG.PLAYER.AMBIENT_CONE_RANGE,
+                ambientConeHalfAngle: CONFIG.PLAYER.AMBIENT_CONE_HALF_ANGLE,
+                hasFlashlight: this.playerStats.hasFlashlight,
+                flashlightOn: this.flashlightOn,
+                flashRange: revealFlashRange,
+                flashHalfAngle: CONFIG.PLAYER.FLASHLIGHT_ANGLE,
+            });
+            // Last-known marker: capture position on reveal -> hide transition;
+            // expire it immediately when the enemy is revealed again.
+            if (e._wasRevealed === true && !revealed) {
+                e.lastKnown = { x: e.x, y: e.y, t: time };
+            }
+            if (revealed) e.lastKnown = null;
+            e._wasRevealed = revealed;
+            e.revealedByLight = revealed;
+        });
+        this.enemies.getChildren().forEach(e => e.update(time, delta));
+        // DK2 pass 2 Feature C: hide active enemies that are not currently revealed.
+        // Inactive enemies (corpses) keep the visibility set by becomeCorpse().
+        this.enemies.getChildren().forEach(e => {
+            if (!e.active) return;
+            e.setVisible(e.revealedByLight === true);
+        });
+        // DK2 pass 2 Feature C: fading last-known markers — hollow amber circles,
+        // alpha 1 -> 0 over 3000ms, cleared each frame.
+        if (this.lastKnownGraphics) {
+            this.lastKnownGraphics.clear();
             this.enemies.getChildren().forEach(e => {
-                if (!e.active) return;
-                const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, e.x, e.y);
-                if (dist > flashRange) return;
-                if (!this.hasLineOfSight(this.player.x, this.player.y, e.x, e.y)) return;
-                const angleToEnemy = Phaser.Math.Angle.Between(this.player.x, this.player.y, e.x, e.y);
-                let diff = angleToEnemy - angle;
-                while (diff > Math.PI) diff -= 2 * Math.PI;
-                while (diff < -Math.PI) diff += 2 * Math.PI;
-                if (Math.abs(diff) <= CONFIG.PLAYER.FLASHLIGHT_ANGLE) {
-                    e.revealedByFlashlight = true;
-                }
+                if (!e.active || !e.lastKnown) return;
+                const elapsed = time - e.lastKnown.t;
+                if (elapsed >= 3000) { e.lastKnown = null; return; }
+                this.lastKnownGraphics.lineStyle(2, 0xffcc66, 1 - elapsed / 3000);
+                this.lastKnownGraphics.strokeCircle(e.lastKnown.x, e.lastKnown.y, 14);
             });
         }
-        this.enemies.getChildren().forEach(e => e.update(time, delta));
 
         // Walker vs bandit melee: apply by distance (overlap same-group can be unreliable when bodies push)
         const walkerVsBanditCooldown = 350;
@@ -11316,8 +11447,21 @@ class GameScene extends Phaser.Scene {
             const armor = this.playerStats.armor || {};
             const headsetEquipped = (armor.head && armor.head.itemId === 'headset') || (armor.ears && armor.ears.itemId === 'headset');
             const baseRadius = CONFIG.PLAYER.LIGHT_RADIUS;
+            // DK2 pass 1: wall-occluded light polygons. lightWalls + lightAimAngle
+            // are built once per frame above (DK2 pass 2) and shared with the reveal predicate.
+            const lightPolys = computeLightPolygons(this.player.x, this.player.y, lightAimAngle, lightWalls, {
+                ambientRadius: baseRadius,
+                ambientConeRange: CONFIG.PLAYER.AMBIENT_CONE_RANGE,
+                ambientConeHalfAngle: CONFIG.PLAYER.AMBIENT_CONE_HALF_ANGLE,
+                hasFlashlight: this.playerStats.hasFlashlight,
+                flashlightOn: this.flashlightOn,
+                flashRange: this.hasNoGoodArms() ? CONFIG.PLAYER.FLASHLIGHT_RANGE * 0.4 : CONFIG.PLAYER.FLASHLIGHT_RANGE,
+                flashHalfAngle: CONFIG.PLAYER.FLASHLIGHT_ANGLE,
+                bounds: { x: 0, y: 0, w: 800, h: 600 }
+            });
             this.lightShape.fillStyle(0xffffff, 1);
-            this.lightShape.fillCircle(this.player.x, this.player.y, baseRadius);
+            this.lightShape.fillPoints(lightPolys.ambientCircle, true);
+            this.lightShape.fillPoints(lightPolys.ambientCone, true);
             // Headset: sound-oriented — no alpha ring; blue outlines for enemies in sound radius (similar to leaper gunshot hearing, doubled so you see them before they jump)
             if (headsetEquipped) {
                 const soundRadius = (CONFIG.ENEMIES.LEAPER && CONFIG.ENEMIES.LEAPER.SOUND_RADIUS) ? CONFIG.ENEMIES.LEAPER.SOUND_RADIUS * 2 : baseRadius * 4;  // 360 or 240
@@ -11339,17 +11483,16 @@ class GameScene extends Phaser.Scene {
             }
             if (this.playerStats.hasFlashlight && this.flashlightOn) {
                 const flashRange = this.hasNoGoodArms() ? CONFIG.PLAYER.FLASHLIGHT_RANGE * 0.4 : CONFIG.PLAYER.FLASHLIGHT_RANGE;
-                const angle = Phaser.Math.Angle.Between(this.player.x, this.player.y, this.input.activePointer.x, this.input.activePointer.y);
+                // DK2 pass 2 (F4): reuse the shared lightAimAngle (no second Angle.Between).
                 this.lightShape.fillStyle(0xffffff);
-                this.lightShape.slice(this.player.x, this.player.y, flashRange, angle - CONFIG.PLAYER.FLASHLIGHT_ANGLE, angle + CONFIG.PLAYER.FLASHLIGHT_ANGLE);
-                this.lightShape.fill();
+                this.lightShape.fillPoints(lightPolys.flashlight, true);
                 this.enemies.getChildren().forEach(e => {
                     if (!e.active) return;
                     const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, e.x, e.y);
                     if (dist > flashRange) return;
                     if (!this.hasLineOfSight(this.player.x, this.player.y, e.x, e.y)) return;
                     const angleToEnemy = Phaser.Math.Angle.Between(this.player.x, this.player.y, e.x, e.y);
-                    let diff = angleToEnemy - angle;
+                    let diff = angleToEnemy - lightAimAngle;
                     while (diff > Math.PI) diff -= 2 * Math.PI;
                     while (diff < -Math.PI) diff += 2 * Math.PI;
                     if (Math.abs(diff) > CONFIG.PLAYER.FLASHLIGHT_ANGLE) return;
@@ -11363,6 +11506,15 @@ class GameScene extends Phaser.Scene {
                     }
                 });
             }
+            // DK2 pass 2 Feature A (fix pass 1): permanently ERASE the current light
+            // from the active fog RT (explored memory). Erase accumulates — fog is
+            // removed wherever light has ever hit and never restored.
+            const fogRT = this.inRiskRoom
+                ? this.riskFogRT
+                : (this.roomGrid && this.roomGrid.rooms[this.roomGrid.currentRoom]
+                    ? this.roomGrid.rooms[this.roomGrid.currentRoom].fogRT
+                    : null);
+            if (fogRT) fogRT.erase(this.lightShape);
         }
 
         // Auto-recover if pinned enemy dies
@@ -13585,5 +13737,14 @@ const config = {
 };
 
 const game = new Phaser.Game(config);
+// DK2 pass 2 (F3): dev/test hook only on local dev or an explicit ?smoke run —
+// never exposed on a production host. Verifier smokes on 127.0.0.1, so it stays.
+if (typeof window !== 'undefined' && (
+    window.location.hostname === 'localhost' ||
+    window.location.hostname === '127.0.0.1' ||
+    new URLSearchParams(window.location.search).has('smoke')
+)) {
+    window.game = game; // dev/test hook: scene access for smoke tests
+}
 // Block browser right-click on the entire document (menus + in-game) so right-click can be used for game actions
 document.addEventListener('contextmenu', function (e) { e.preventDefault(); }, true);
